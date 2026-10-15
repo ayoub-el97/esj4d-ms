@@ -42,3 +42,13 @@ export function currentMonth(): string {
 export function isISODate(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && isValid(parseISO(value));
 }
+
+export function isMonth(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+}
+
+/** "2026-10" -> { from: "2026-10-01", to: "2026-10-31" } */
+export function monthRange(mois: string): { from: string; to: string } {
+  const [y, m] = mois.split("-").map(Number);
+  return { from: `${mois}-01`, to: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) };
+}

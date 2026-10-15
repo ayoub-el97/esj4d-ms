@@ -87,11 +87,11 @@ export async function savePermissions(_prev: ActionResult | null, formData: Form
 
   const rows: { role: AppRole; module: AppModule; can_view: boolean; can_edit: boolean }[] = [];
   for (const role of ROLES) {
-    for (const module of MODULES) {
+    for (const mod of MODULES) {
       if (role === "admin") continue; // l'admin a toujours tous les droits
-      const canEdit = formData.get(`edit:${role}:${module}`) === "on";
-      const canView = canEdit || formData.get(`view:${role}:${module}`) === "on";
-      rows.push({ role, module, can_view: canView, can_edit: canEdit });
+      const canEdit = formData.get(`edit:${role}:${mod}`) === "on";
+      const canView = canEdit || formData.get(`view:${role}:${mod}`) === "on";
+      rows.push({ role, module: mod, can_view: canView, can_edit: canEdit });
     }
   }
 
