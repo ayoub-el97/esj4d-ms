@@ -77,7 +77,8 @@ as $$
          coalesce(a.adj, 0),
          round(m.months * cfg.rate, 1) - coalesce(t.taken, 0) + coalesce(a.adj, 0),
          m.months
-    from m, cfg
+    from m
+    cross join cfg
     left join t on t.employee_id = m.employee_id
     left join a on a.employee_id = m.employee_id;
 $$;

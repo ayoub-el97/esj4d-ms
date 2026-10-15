@@ -197,16 +197,21 @@ end;
 $$;
 
 -- Horodatage automatique created_by / updated_at / updated_by
+-- Générique : fonctionne quelle que soit la table (les colonnes absentes sont ignorées)
 create or replace function public.set_audit_columns()
 returns trigger
 language plpgsql
 as $$
+declare
+  j   jsonb := to_jsonb(new);
+  uid jsonb := coalesce(to_jsonb(auth.uid()), 'null'::jsonb);
 begin
-  if tg_op = 'INSERT' then
-    if to_jsonb(new) ? 'created_by' and new.created_by is null then new.created_by := auth.uid(); end if;
+  if tg_op = 'INSERT' and j ? 'created_by' and j -> 'created_by' = 'null'::jsonb then
+    j := jsonb_set(j, '{created_by}', uid);
   end if;
-  if to_jsonb(new) ? 'updated_at' then new.updated_at := now(); end if;
-  if to_jsonb(new) ? 'updated_by' then new.updated_by := auth.uid(); end if;
+  if j ? 'updated_at' then j := jsonb_set(j, '{updated_at}', to_jsonb(now())); end if;
+  if j ? 'updated_by' then j := jsonb_set(j, '{updated_by}', uid); end if;
+  new := jsonb_populate_record(new, j);
   return new;
 end;
 $$;
@@ -848,7 +853,8 @@ as $$
          coalesce(a.adj, 0),
          round(m.months * cfg.rate, 1) - coalesce(t.taken, 0) + coalesce(a.adj, 0),
          m.months
-    from m, cfg
+    from m
+    cross join cfg
     left join t on t.employee_id = m.employee_id
     left join a on a.employee_id = m.employee_id;
 $$;
