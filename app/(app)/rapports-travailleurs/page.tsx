@@ -36,8 +36,8 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
   const period = t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) });
 
   const totals = rows.reduce(
-    (a, r) => ({ worked: a.worked + r.worked_days, rest: a.rest + r.rest_days_worked, ot: a.ot + r.overtime_total, abs: a.abs + r.absences + r.sick_days, accrued: a.accrued + r.leave_accrued, leave: a.leave + r.leave_days, leaveLeft: a.leaveLeft + r.leave_balance, recup: a.recup + r.recovery_days, owed: a.owed + r.recovery_balance, hol: a.hol + r.holidays_worked }),
-    { worked: 0, rest: 0, ot: 0, abs: 0, leave: 0, recup: 0, owed: 0, hol: 0, accrued: 0, leaveLeft: 0 },
+    (a, r) => ({ worked: a.worked + r.worked_days, rest: a.rest + r.rest_days_worked, ot: a.ot + r.overtime_total, abs: a.abs + r.absences + r.sick_days, accrued: a.accrued + r.leave_accrued, leave: a.leave + r.leave_days, leaveLeft: a.leaveLeft + r.leave_balance, recup: a.recup + r.recovery_days, owed: a.owed + r.recovery_balance, hol: a.hol + r.holidays_worked, pay: a.pay + r.holiday_pay_days }),
+    { worked: 0, rest: 0, ot: 0, abs: 0, leave: 0, recup: 0, owed: 0, hol: 0, pay: 0, accrued: 0, leaveLeft: 0 },
   );
   const pdfParams: Record<string, string> = { from, to };
   for (const k of ["categorie", "employe", "poste", "equipe", "q"] as const) if (sp[k]) pdfParams[k] = sp[k]!;
@@ -114,7 +114,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
         </div>
       </form>
 
-      <p className="mb-2 text-xs text-muted-foreground">{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé.")} {t("Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.")}</p>
+      <p className="mb-2 text-xs text-muted-foreground">{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé + Férié non travaillé.")} {t("Férié travaillé : compte double, 1 jour à récupérer demandé avant la fin du mois, sinon à payer.")} {t("Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.")}</p>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>
@@ -130,6 +130,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
               <TableHead className="text-end">{t("Total HS")}</TableHead>
               <TableHead className="text-end">{t("Absences")}</TableHead>
               <TableHead className="text-end">{t("Fériés travaillés")}</TableHead>
+              <TableHead className="text-end" title={t("Fériés travaillés dont la récupération n'a pas été demandée avant la fin du mois : à ajouter au salaire")}>{t("Fériés à payer")}</TableHead>
               <TableHead className="text-end" title={t("Congés acquis à la fin de la période (1,5 jour par mois complet de service)")}>{t("Total congés")}</TableHead>
               <TableHead className="text-end">{t("Congés pris")}</TableHead>
               <TableHead className="text-end" title={t("Congés acquis − congés pris + corrections, à la fin de la période")}>{t("Congé restant")}</TableHead>
@@ -166,6 +167,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
                   {r.absences + r.sick_days}
                 </TableCell>
                 <TableCell className="text-end">{r.holidays_worked}</TableCell>
+                <TableCell className={`text-end ${r.holiday_pay_days > 0 ? "font-medium text-orange-700" : ""}`}>{r.holiday_pay_days}</TableCell>
                 <TableCell className="text-end">{r.leave_accrued}</TableCell>
                 <TableCell className="text-end">{r.leave_days}</TableCell>
                 <TableCell className={`text-end ${r.leave_balance < 0 ? "font-medium text-destructive" : "font-medium"}`}>{r.leave_balance}</TableCell>
@@ -183,6 +185,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
                 <TableCell className="text-end">{totals.ot}</TableCell>
                 <TableCell className="text-end">{totals.abs}</TableCell>
                 <TableCell className="text-end">{totals.hol}</TableCell>
+                <TableCell className="text-end">{totals.pay}</TableCell>
                 <TableCell className="text-end">{totals.accrued}</TableCell>
                 <TableCell className="text-end">{totals.leave}</TableCell>
                 <TableCell className="text-end">{totals.leaveLeft}</TableCell>

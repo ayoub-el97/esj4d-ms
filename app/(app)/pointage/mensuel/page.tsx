@@ -102,7 +102,7 @@ export default async function MensuelPage({ searchParams }: { searchParams: Prom
         </Table>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {t("Jours travaillés = Présent + Jour de repos travaillé. Jour doublé : jour de repos travaillé ou deux services le même jour (règle modifiable dans Paramètres › Réglages).")}
+        {t("Jours travaillés = Présent + Jour de repos travaillé + Férié non travaillé (journée normale). Jour doublé : jour férié travaillé, jour de repos travaillé ou deux services le même jour.")}
       </p>
 
       <ModuleButtons pdfSlot={<PdfExportButton kind="pointage-mensuel" params={{ mois: month, ...(team ? { equipe: team } : {}) }} />} historyHref="/pointage/historique" />

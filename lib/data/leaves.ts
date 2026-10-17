@@ -1,4 +1,6 @@
 import "server-only";
+import { todayISO } from "@/lib/dates";
+import type { AvailableCredit, CreditKind, CreditState } from "@/lib/recovery-credit";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, type Employee } from "@/lib/data/employees";
 import type { LeaveStatus } from "@/lib/module-types";
@@ -206,7 +208,17 @@ export async function getRecoveryBalances(from: string | null, to: string, f: Ba
     .sort((a, b) => a.order_number - b.order_number);
 }
 
-export type RecoveryCredit = { employee_id: string; worked_rest_date: string; used_by_request: string | null; request_status: LeaveStatus | null };
+export type RecoveryCredit = {
+  employee_id: string;
+  worked_rest_date: string;
+  used_by_request: string | null;
+  request_status: LeaveStatus | null;
+  /** repos : jour de repos travaillé ; ferie : jour férié travaillé (à demander avant la fin du mois) */
+  kind: CreditKind;
+  holiday_label: string | null;
+  expires_on: string | null;
+  state: CreditState;
+};
 
 /** Crédits de récupération (un par jour de repos travaillé), avec la demande qui les utilise éventuellement. */
 export async function getRecoveryCredits(employeeId?: string, to?: string): Promise<RecoveryCredit[]> {
@@ -216,14 +228,24 @@ export async function getRecoveryCredits(employeeId?: string, to?: string): Prom
   return ((data ?? []) as RecoveryCredit[]).filter((c) => !employeeId || c.employee_id === employeeId).sort((a, b) => b.worked_rest_date.localeCompare(a.worked_rest_date));
 }
 
-/** Crédits encore disponibles par employé (non liés à une demande en attente ou acceptée). */
-export async function getAvailableCredits(): Promise<Record<string, string[]>> {
-  const credits = await getRecoveryCredits();
-  const result: Record<string, string[]> = {};
+/** Crédits encore utilisables par employé : ni demandés, ni fériés passés « à payer ». */
+export async function getAvailableCredits(): Promise<Record<string, AvailableCredit[]>> {
+  const credits = await getRecoveryCredits(undefined, todayISO());
+  const result: Record<string, AvailableCredit[]> = {};
   for (const c of credits) {
-    if (c.used_by_request) continue;
-    (result[c.employee_id] ??= []).push(c.worked_rest_date);
+    if (c.state !== "disponible") continue;
+    (result[c.employee_id] ??= []).push({ date: c.worked_rest_date, kind: c.kind, label: c.holiday_label, expires_on: c.expires_on });
   }
+  return result;
+}
+
+/** Fériés travaillés « à payer » (non demandés avant la fin du mois) par employé, sur une période. */
+export async function getHolidayPayDue(from: string, to: string): Promise<Map<string, number>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("recovery_credits", { p_from: from, p_to: to });
+  if (error) throw new Error(error.message);
+  const result = new Map<string, number>();
+  for (const c of (data ?? []) as RecoveryCredit[]) if (c.state === "a_payer") result.set(c.employee_id, (result.get(c.employee_id) ?? 0) + 1);
   return result;
 }
 

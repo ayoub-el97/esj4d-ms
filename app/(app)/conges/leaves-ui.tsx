@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { Check, RotateCcw, X } from "lucide-react";
 import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest } from "@/lib/actions/leaves";
 import { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
-import { formatDateFr, todayISO } from "@/lib/dates";
+import { todayISO } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
+import { creditLabel, type AvailableCredit } from "@/lib/recovery-credit";
 import type { ActionResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,7 +108,7 @@ export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Op
 // ---------------------------------------------------------------------------
 // Nouvelle demande récupération
 // ---------------------------------------------------------------------------
-export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { employees: Option[]; credits: Record<string, string[]>; defaultEmployee?: string }) {
+export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { employees: Option[]; credits: Record<string, AvailableCredit[]>; defaultEmployee?: string }) {
   const { t } = useT();
   const [state, action] = useActionState(createRecoveryRequest, null);
   const [employee, setEmployee] = useState(defaultEmployee ?? "");
@@ -119,7 +120,7 @@ export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { e
     <Card>
       <CardHeader>
         <CardTitle>{t("Nouvelle demande récupération")}</CardTitle>
-        <CardDescription>{t("Chaque jour de repos travaillé pointé donne 1 jour de récupération. Seuls les crédits non encore utilisés sont proposés.")}</CardDescription>
+        <CardDescription>{t("Chaque jour de repos travaillé ou jour férié travaillé donne 1 jour de récupération. Un férié doit être demandé avant la fin de son mois, sinon il est payé avec le salaire.")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action} className="space-y-3">
@@ -150,12 +151,12 @@ export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { e
             <Input id="rec_request_date" name="request_date" type="date" defaultValue={todayISO()} required />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="worked_rest_date">{t("Jour de repos travaillé (crédit)")}</Label>
+            <Label htmlFor="worked_rest_date">{t("Jour travaillé (crédit)")}</Label>
             <NativeSelect id="worked_rest_date" name="worked_rest_date" value={workedDate} required disabled={!employee} onChange={(e) => setWorkedDate(e.target.value)}>
               <option value="">{t("— Choisir —")}</option>
-              {available.map((d) => (
-                <option key={d} value={d}>
-                  {formatDateFr(d)}
+              {available.map((c) => (
+                <option key={c.date} value={c.date}>
+                  {creditLabel(c, t)}
                 </option>
               ))}
             </NativeSelect>

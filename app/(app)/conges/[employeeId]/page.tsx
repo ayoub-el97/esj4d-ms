@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { employeeName, getEmployee } from "@/lib/data/employees";
 import { getLeaveBalances, getLeaveDetail, getLeaveRequests, getRecoveryBalances, getRecoveryDetail, getRecoveryRequests } from "@/lib/data/leaves";
-import { LEAVE_STATUS_LABELS } from "@/lib/module-types";
 import { formatDateFr, formatDateTimeFr, isISODate, todayISO } from "@/lib/dates";
+import { CREDIT_STATE_LABELS, creditLabel } from "@/lib/recovery-credit";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import type { TFunction } from "@/lib/i18n/config";
 import { ModuleHeader } from "@/components/module-header";
@@ -129,7 +129,7 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("Repos travaillé le")}</TableHead>
+                  <TableHead>{t("Jour travaillé")}</TableHead>
                   <TableHead>{t("Utilisation")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -143,8 +143,8 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
                 )}
                 {recoveryDetail.credits.map((c) => (
                   <TableRow key={c.worked_rest_date}>
-                    <TableCell>{formatDateFr(c.worked_rest_date)}</TableCell>
-                    <TableCell className="text-xs">{c.request_status ? t("Demande {status}", { status: t(LEAVE_STATUS_LABELS[c.request_status]).toLowerCase() }) : <span className="text-muted-foreground">{t("Disponible")}</span>}</TableCell>
+                    <TableCell className="text-sm">{creditLabel({ date: c.worked_rest_date, kind: c.kind, label: c.holiday_label, expires_on: c.expires_on }, t, c.state === "disponible")}</TableCell>
+                    <TableCell className={c.state === "a_payer" ? "text-xs font-medium text-orange-700" : "text-xs"}>{t(CREDIT_STATE_LABELS[c.state])}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

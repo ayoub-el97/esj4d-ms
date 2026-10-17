@@ -8,6 +8,7 @@ import { formatDateFr } from "@/lib/dates";
 import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
+import { CREDIT_STATE_LABELS, creditLabel } from "@/lib/recovery-credit";
 
 export function LeaveBalancesPdf({ company, asOf, filterLabel, rows, generatedBy }: { company: string; asOf: string; filterLabel: string; rows: LeaveBalance[]; generatedBy: string }) {
   const { t } = usePdf();
@@ -15,7 +16,7 @@ export function LeaveBalancesPdf({ company, asOf, filterLabel, rows, generatedBy
     { key: "nb", label: "NB", width: 5, align: "center" },
     { key: "mat", label: "Matricule", width: 9 },
     { key: "nom", label: "Nom et prénom", width: 21 },
-    { key: "eq", label: "Équipe", width: 10 },
+    { key: "eq", label: "Équipe", width: 9 },
     { key: "poste", label: "Poste", width: 9 },
     { key: "entree", label: "Date d'entrée", width: 10 },
     { key: "acq", label: "Acquis", width: 8, align: "right" },
@@ -52,7 +53,7 @@ export function RecoveryBalancesPdf({ company, subtitle, rows, generatedBy }: { 
     { key: "nb", label: "NB", width: 5, align: "center" },
     { key: "mat", label: "Matricule", width: 9 },
     { key: "nom", label: "Nom et prénom", width: 22 },
-    { key: "eq", label: "Équipe", width: 10 },
+    { key: "eq", label: "Équipe", width: 9 },
     { key: "poste", label: "Poste", width: 9 },
     { key: "rt", label: "Repos travaillés", width: 10, align: "right" },
     { key: "acq", label: "Récup. acquise", width: 10, align: "right" },
@@ -205,7 +206,7 @@ export function EmployeeLeavePdf({
       <Text style={[styles.section, { fontSize: 9 }]}>{t("Crédits de récupération")}</Text>
       <Text style={styles.small}>
         {credits.length
-          ? credits.map((c) => `${formatDateFr(c.worked_rest_date)} (${c.request_status ? t(LEAVE_STATUS_LABELS[c.request_status]) : t("Disponible")})`).join(" · ")
+          ? credits.map((c) => `${creditLabel({ date: c.worked_rest_date, kind: c.kind, label: c.holiday_label, expires_on: c.expires_on }, t, false)} (${t(CREDIT_STATE_LABELS[c.state])})`).join(" · ")
           : t("Aucun crédit.")}
       </Text>
       <Text style={[styles.section, { fontSize: 9 }]}>{t("Jours de récupération pris")}</Text>
@@ -230,14 +231,15 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
   const columns: Column[] = [
     { key: "nb", label: "NB", width: 5, align: "center" },
     { key: "mat", label: "Matricule", width: 9 },
-    { key: "nom", label: "Nom et prénom", width: 15 },
-    { key: "eq", label: "Équipe", width: 10 },
+    { key: "nom", label: "Nom et prénom", width: 13 },
+    { key: "eq", label: "Équipe", width: 9 },
     { key: "poste", label: "Poste", width: 7 },
     { key: "trav", label: "Jours travaillés", width: 7, align: "right" },
     { key: "rt", label: "Repos travaillés", width: 7, align: "right" },
     { key: "hs", label: "Total HS", width: 5, align: "right" },
     { key: "abs", label: "Absences", width: 6, align: "right" },
     { key: "fe", label: "Fériés trav.", width: 5, align: "right" },
+    { key: "fp", label: "Fériés à payer", width: 3, align: "right" },
     { key: "ta", label: "Total congés", width: 6, align: "right" },
     { key: "cg", label: "Congés pris", width: 5, align: "right" },
     { key: "cr", label: "Congé restant", width: 6, align: "right" },
@@ -267,6 +269,7 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
             rp: String(r.recovery_days),
             rr: String(r.recovery_balance),
             fe: String(r.holidays_worked),
+            fp: String(r.holiday_pay_days),
           })),
           {
             nb: "",
@@ -284,10 +287,11 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
             rp: String(sum("recovery_days")),
             rr: String(sum("recovery_balance")),
             fe: String(sum("holidays_worked")),
+            fp: String(sum("holiday_pay_days")),
           },
         ]}
       />
-      <Text style={[styles.small, { marginTop: 6 }]}>{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé.")} {t("Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.")}</Text>
+      <Text style={[styles.small, { marginTop: 6 }]}>{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé + Férié non travaillé.")} {t("Férié travaillé : compte double, 1 jour à récupérer demandé avant la fin du mois, sinon à payer.")} {t("Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.")}</Text>
     </PdfDocument>
   );
 }

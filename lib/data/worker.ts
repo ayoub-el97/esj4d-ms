@@ -1,4 +1,5 @@
 import "server-only";
+import { getHolidayPayDue } from "@/lib/data/leaves";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployee, getEmployees, type Employee } from "@/lib/data/employees";
 import { getAttendanceHistory, getAttendanceSummary, type HistoryRow } from "@/lib/data/attendance";
@@ -38,6 +39,8 @@ export type WorkerPeriodRow = {
   /** Congé restant à la fin de la période (acquis − pris + corrections) */
   leave_balance: number;
   holidays_worked: number;
+  /** Fériés travaillés non demandés avant la fin du mois : à payer avec le salaire */
+  holiday_pay_days: number;
 };
 
 /** Nombre de jours pris par employé, calculé par la fonction centrale days_taken (aucun double comptage). */
@@ -53,13 +56,14 @@ async function takenByEmployee(kind: "conge" | "recuperation", from: string, to:
 export async function getWorkersPeriodReport(from: string, to: string, f: WorkersFilters): Promise<WorkerPeriodRow[]> {
   const team = f.categorie === "collecte" || f.categorie === "nettoiement" ? (f.categorie as TeamType) : undefined;
   const supabase = await createClient();
-  const [summary, employees, leaveTaken, recoveryTaken, recoveryBalances, leaveBalances] = await Promise.all([
+  const [summary, employees, leaveTaken, recoveryTaken, recoveryBalances, leaveBalances, holidayPay] = await Promise.all([
     getAttendanceSummary(from, to, team),
     getEmployees(),
     takenByEmployee("conge", from, to),
     takenByEmployee("recuperation", from, to),
     supabase.rpc("recovery_balances", { p_from: from, p_to: to }),
     supabase.rpc("leave_balances", { p_as_of: to }),
+    getHolidayPayDue(from, to),
   ]);
   if (recoveryBalances.error) throw new Error(recoveryBalances.error.message);
   if (leaveBalances.error) throw new Error(leaveBalances.error.message);
@@ -98,6 +102,7 @@ export async function getWorkersPeriodReport(from: string, to: string, f: Worker
         leave_accrued: leaveByEmployee.get(e.id)?.accrued ?? 0,
         leave_balance: leaveByEmployee.get(e.id)?.balance ?? 0,
         holidays_worked: s?.holidays_worked ?? 0,
+        holiday_pay_days: holidayPay.get(e.id) ?? 0,
       };
     })
     .sort((a, b) => a.order_number - b.order_number);

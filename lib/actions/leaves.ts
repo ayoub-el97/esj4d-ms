@@ -71,13 +71,13 @@ const recoverySchema = z
   .object({
     employee_id: z.string().uuid("Choisissez un employé."),
     request_date: z.string().date("Date de la demande invalide."),
-    worked_rest_date: z.string().date("Choisissez le jour de repos travaillé."),
+    worked_rest_date: z.string().date("Choisissez le jour travaillé (repos ou férié)."),
     recovery_date: z.string().date("Date de récupération invalide."),
-    requested_days: z.coerce.number().positive().max(1, "Un jour de repos travaillé donne au plus 1 jour de récupération."),
+    requested_days: z.coerce.number().positive().max(1, "Un jour travaillé (repos ou férié) donne au plus 1 jour de récupération."),
     comment: z.string().max(500).default(""),
     status: statusSchema.default("en_attente"),
   })
-  .refine((d) => d.recovery_date > d.worked_rest_date, { message: "La récupération doit être postérieure au jour de repos travaillé.", path: ["recovery_date"] });
+  .refine((d) => d.recovery_date > d.worked_rest_date, { message: "La récupération doit être postérieure au jour travaillé.", path: ["recovery_date"] });
 
 export async function createRecoveryRequest(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
@@ -117,7 +117,8 @@ export async function decideRecoveryRequest(id: string, status: string, note = "
 }
 
 function recoveryError(message: string): string {
-  if (message.includes("CREDIT_INVALIDE")) return "Aucun jour de repos travaillé pointé à cette date pour cet employé.";
+  if (message.includes("CREDIT_INVALIDE")) return "Aucun jour de repos ou jour férié travaillé pointé à cette date pour cet employé.";
+  if (message.includes("FERIE_HORS_DELAI")) return "La récupération d'un jour férié travaillé doit être demandée avant la fin du mois du férié. Passé ce délai, le jour est payé avec le salaire.";
   if (message.includes("recovery_requests_credit_uniq") || message.includes("duplicate key")) return "Ce jour de repos travaillé est déjà utilisé par une autre demande.";
   return friendlyError(message);
 }

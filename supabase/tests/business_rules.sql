@@ -310,6 +310,55 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 15. Jours fériés : travaillé = compte double + récupération à demander avant la
+--     fin du mois, sinon à payer ; férié non travaillé = journée normale sans heures
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  e uuid; f uuid;
+  h_old date := (date_trunc('month', current_date) - interval '1 month')::date + 9;  -- férié du mois dernier
+  h_now date := current_date;                                                       -- férié de ce mois
+  month_end date := (date_trunc('month', current_date) + interval '1 month - 1 day')::date;
+  r record;
+begin
+  select id into e from public.employees where matricule = 'B004';
+  select id into f from public.employees where matricule = 'B005';
+  insert into public.holidays (date, label) values (h_old, 'Férié test A'), (h_now, 'Férié test B') on conflict (date) do nothing;
+  insert into public.attendance (activity_date, employee_id, status, time_in, time_out, position, team_type) values
+    (h_old, e, 'present', '07:00', '14:00', 'balayeur', 'nettoiement'),
+    (h_now, e, 'present', '07:00', '14:00', 'balayeur', 'nettoiement'),
+    (h_now, f, 'ferie',   '07:00', '14:00', 'balayeur', 'nettoiement')
+  on conflict (activity_date, employee_id, shift) do update set status = excluded.status, time_in = excluded.time_in, time_out = excluded.time_out;
+
+  -- Crédits : le férié du mois dernier non demandé est à payer, celui de ce mois est disponible
+  select * into r from public.recovery_credits(null, current_date) c where c.employee_id = e and c.worked_rest_date = h_old;
+  assert r.kind = 'ferie' and r.state = 'a_payer', format('férié non demandé à temps : attendu a_payer, obtenu %s/%s', r.kind, r.state);
+  select * into r from public.recovery_credits(null, current_date) c where c.employee_id = e and c.worked_rest_date = h_now;
+  assert r.state = 'disponible' and r.expires_on = month_end, 'férié de ce mois : disponible jusqu''à la fin du mois';
+  -- Le solde à récupérer exclut le férié à payer
+  assert (select credits_total from public.recovery_balances(null, current_date) where employee_id = e)
+       = (select count(*) from public.recovery_credits(null, current_date) c where c.employee_id = e and c.state <> 'a_payer'), 'solde : férié à payer exclu';
+
+  -- Demande hors délai refusée, demande dans le mois acceptée
+  begin
+    insert into public.recovery_requests (employee_id, request_date, worked_rest_date, recovery_date) values (e, current_date, h_old, current_date + 1);
+    raise exception 'ÉCHEC : récupération d''un férié demandée après la fin du mois acceptée';
+  exception when others then
+    if sqlerrm not like '%FERIE_HORS_DELAI%' then raise; end if;
+  end;
+  insert into public.recovery_requests (employee_id, request_date, worked_rest_date, recovery_date) values (e, current_date, h_now, current_date + 1);
+  assert (select state from public.recovery_credits(null, current_date) c where c.employee_id = e and c.worked_rest_date = h_now) = 'demande', 'férié demandé dans le mois';
+
+  -- Comptage : férié travaillé compté double, férié non travaillé = journée normale sans heures
+  select * into r from public.attendance_summary(h_now, h_now) s where s.employee_id = e;
+  assert r.holidays_worked = 1 and r.double_days = 1 and r.worked_days = 1, 'férié travaillé : compte double';
+  select * into r from public.attendance_summary(h_now, h_now) s where s.employee_id = f;
+  assert r.worked_days = 1, 'férié non travaillé : compté comme journée normale';
+  assert (select time_in is null and time_out is null from public.attendance where employee_id = f and activity_date = h_now), 'férié non travaillé : heures effacées';
+  raise notice 'OK 15 jours fériés : double, récupération avant fin de mois, sinon à payer ; férié non travaillé sans heures';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);
