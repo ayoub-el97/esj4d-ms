@@ -230,15 +230,17 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
   const columns: Column[] = [
     { key: "nb", label: "NB", width: 5, align: "center" },
     { key: "mat", label: "Matricule", width: 9 },
-    { key: "nom", label: "Nom et prénom", width: 20 },
-    { key: "eq", label: "Équipe", width: 14 },
-    { key: "poste", label: "Poste", width: 9 },
-    { key: "trav", label: "Jours travaillés", width: 9, align: "right" },
-    { key: "rt", label: "Repos travaillés", width: 9, align: "right" },
-    { key: "hs", label: "Total HS", width: 7, align: "right" },
+    { key: "nom", label: "Nom et prénom", width: 17 },
+    { key: "eq", label: "Équipe", width: 11 },
+    { key: "poste", label: "Poste", width: 8 },
+    { key: "trav", label: "Jours travaillés", width: 8, align: "right" },
+    { key: "rt", label: "Repos travaillés", width: 8, align: "right" },
+    { key: "hs", label: "Total HS", width: 6, align: "right" },
     { key: "abs", label: "Absences", width: 6, align: "right" },
-    { key: "cg", label: "Congés", width: 6, align: "right" },
     { key: "fe", label: "Fériés trav.", width: 6, align: "right" },
+    { key: "cg", label: "Congés pris", width: 6, align: "right" },
+    { key: "rp", label: "Récupérations prises", width: 6, align: "right" },
+    { key: "rr", label: "Récupération restante", width: 5, align: "right" },
   ];
   const sum = (k: keyof WorkerPeriodRow) => rows.reduce((s, r) => s + Number(r[k]), 0);
   return (
@@ -258,6 +260,8 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
             hs: String(r.overtime_total),
             abs: String(r.absences + r.sick_days),
             cg: String(r.leave_days),
+            rp: String(r.recovery_days),
+            rr: String(r.recovery_balance),
             fe: String(r.holidays_worked),
           })),
           {
@@ -271,11 +275,13 @@ export function WorkersPeriodPdf({ company, subtitle, rows, generatedBy }: { com
             hs: String(sum("overtime_total")),
             abs: String(sum("absences") + sum("sick_days")),
             cg: String(sum("leave_days")),
+            rp: String(sum("recovery_days")),
+            rr: String(sum("recovery_balance")),
             fe: String(sum("holidays_worked")),
           },
         ]}
       />
-      <Text style={[styles.small, { marginTop: 6 }]}>{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé.")}</Text>
+      <Text style={[styles.small, { marginTop: 6 }]}>{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé.")} {t("Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.")}</Text>
     </PdfDocument>
   );
 }

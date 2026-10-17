@@ -63,9 +63,9 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                 ["Heures sup.", report.summary.overtime],
                 ["Absences", report.summary.absent],
                 ["Maladie", report.summary.sick],
-                ["Congé", report.summary.leave],
-                ["Récupération", report.summary.recovery],
-                ["Repos", report.summary.rest],
+                ["Congés pris", report.summary.leave],
+                ["Récupérations prises", report.summary.recovery],
+                ["Récupération restante", report.summary.recoveryBalance],
               ] as const
             ).map(([label, value]) => (
               <Card key={label}>

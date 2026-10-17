@@ -801,4 +801,8 @@ export const en: Messages = {
   "— Non défini —": "— Not set —",
   "— Renfort, ne remplace personne —": "— Extra, replaces nobody —",
   "— Sans équipe —": "— No crew —",
+  "Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.": "Leave taken and days off in lieu taken: recorded days, or an accepted request for a past day with no attendance. Time off in lieu remaining: rest days worked not yet given back.",
+  "Jours de repos travaillés pas encore récupérés, à la fin de la période": "Rest days worked not yet given back, at the end of the period",
+  "Récupération restante": "Time off in lieu remaining",
+  "Récupérations prises": "Days off in lieu taken",
 };

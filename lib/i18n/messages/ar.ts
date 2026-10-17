@@ -801,4 +801,8 @@ export const ar: Messages = {
   "— Non défini —": "— غير محدد —",
   "— Renfort, ne remplace personne —": "— تعزيز، لا يعوّض أحداً —",
   "— Sans équipe —": "— بدون فرقة —",
+  "Congés pris et récupérations prises : jours pointés, ou demande acceptée pour un jour passé non pointé. Récupération restante : repos travaillés pas encore récupérés.": "العطل والأيام التعويضية المستهلكة: أيام مسجلة في الحضور، أو طلب مقبول ليوم ماضٍ غير مسجل. الأيام التعويضية المتبقية: أيام راحة مشتغلة لم تُعوَّض بعد.",
+  "Jours de repos travaillés pas encore récupérés, à la fin de la période": "أيام راحة مشتغلة لم تُعوَّض بعد، في نهاية الفترة",
+  "Récupération restante": "الأيام التعويضية المتبقية",
+  "Récupérations prises": "الأيام التعويضية المستهلكة",
 };

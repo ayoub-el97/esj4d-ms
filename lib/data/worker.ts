@@ -27,20 +27,43 @@ export type WorkerPeriodRow = {
   overtime_total: number;
   absences: number;
   sick_days: number;
+  /** Jours de congé dont l'employé a bénéficié sur la période (même règle que le solde de congés) */
   leave_days: number;
+  /** Jours de récupération pris sur la période (repos travaillé rendu) */
   recovery_days: number;
+  /** Jours de récupération encore dus à la fin de la période */
+  recovery_balance: number;
   holidays_worked: number;
 };
 
+/** Nombre de jours pris par employé, calculé par la fonction centrale days_taken (aucun double comptage). */
+async function takenByEmployee(kind: "conge" | "recuperation", from: string, to: string): Promise<Map<string, number>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("days_taken", { p_kind: kind, p_from: from, p_to: to });
+  if (error) throw new Error(error.message);
+  const counts = new Map<string, number>();
+  for (const d of (data ?? []) as { employee_id: string }[]) counts.set(d.employee_id, (counts.get(d.employee_id) ?? 0) + 1);
+  return counts;
+}
+
 export async function getWorkersPeriodReport(from: string, to: string, f: WorkersFilters): Promise<WorkerPeriodRow[]> {
   const team = f.categorie === "collecte" || f.categorie === "nettoiement" ? (f.categorie as TeamType) : undefined;
-  const [summary, employees] = await Promise.all([getAttendanceSummary(from, to, team), getEmployees()]);
+  const supabase = await createClient();
+  const [summary, employees, leaveTaken, recoveryTaken, recoveryBalances] = await Promise.all([
+    getAttendanceSummary(from, to, team),
+    getEmployees(),
+    takenByEmployee("conge", from, to),
+    takenByEmployee("recuperation", from, to),
+    supabase.rpc("recovery_balances", { p_from: from, p_to: to }),
+  ]);
+  if (recoveryBalances.error) throw new Error(recoveryBalances.error.message);
+  const balanceByEmployee = new Map(((recoveryBalances.data ?? []) as { employee_id: string; balance: number }[]).map((b) => [b.employee_id, Number(b.balance)]));
   const byEmployee = new Map(summary.map((s) => [s.employee_id, s]));
   const names = new Map(employees.map((e) => [e.id, employeeName(e)]));
   const q = (f.q ?? "").toLowerCase();
 
   return employees
-    .filter((e) => e.is_active || byEmployee.has(e.id))
+    .filter((e) => e.is_active || byEmployee.has(e.id) || leaveTaken.has(e.id) || recoveryTaken.has(e.id))
     .filter((e) => !team || e.team_type === team)
     .filter((e) => !f.employe || e.id === f.employe)
     .filter((e) => !f.poste || e.position === f.poste)
@@ -62,8 +85,9 @@ export async function getWorkersPeriodReport(from: string, to: string, f: Worker
         overtime_total: s?.overtime_total ?? 0,
         absences: s?.absences ?? 0,
         sick_days: s?.sick_days ?? 0,
-        leave_days: s?.leave_days ?? 0,
-        recovery_days: s?.recovery_days ?? 0,
+        leave_days: leaveTaken.get(e.id) ?? 0,
+        recovery_days: recoveryTaken.get(e.id) ?? 0,
+        recovery_balance: balanceByEmployee.get(e.id) ?? 0,
         holidays_worked: s?.holidays_worked ?? 0,
       };
     })
@@ -77,7 +101,7 @@ export type WorkerReport = {
   from: string;
   to: string;
   attendance: HistoryRow[];
-  summary: { worked: number; restWorked: number; absent: number; sick: number; leave: number; recovery: number; rest: number; overtime: number };
+  summary: { worked: number; restWorked: number; absent: number; sick: number; leave: number; recovery: number; recoveryBalance: number; overtime: number };
   leaves: LeaveRequest[];
   cleaningPlaces: CleaningPlace[];
   collections: CollectionReportFull[];
@@ -102,7 +126,7 @@ export async function getWorkerReport(employeeId: string, from: string, to: stri
   ]);
 
   // Même calcul centralisé que le rapport global (un jour n'est compté qu'une fois)
-  const s = (await getAttendanceSummary(from, to)).find((r) => r.employee_id === employeeId);
+  const s = (await getWorkersPeriodReport(from, to, { employe: employeeId }))[0];
   const summary = {
     worked: s?.worked_days ?? 0,
     restWorked: s?.rest_days_worked ?? 0,
@@ -110,7 +134,7 @@ export async function getWorkerReport(employeeId: string, from: string, to: stri
     sick: s?.sick_days ?? 0,
     leave: s?.leave_days ?? 0,
     recovery: s?.recovery_days ?? 0,
-    rest: s?.rest_days ?? 0,
+    recoveryBalance: s?.recovery_balance ?? 0,
     overtime: s?.overtime_total ?? 0,
   };
 

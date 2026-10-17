@@ -178,6 +178,18 @@ begin
   raise notice 'OK 10 en attente / refusée sans effet ; acceptée et pointée : une seule déduction';
 end $$;
 
+-- Exemple du rapport travailleurs : samedi travaillé puis récupéré une semaine plus tard
+do $$
+declare worked integer; taken integer; owed numeric;
+begin
+  select rest_days_worked into worked from public.attendance_summary('2026-10-01', '2026-10-31') where employee_id = (select b1 from ids);
+  select count(*) into taken from public.days_taken('recuperation', '2026-10-01', '2026-10-31') where employee_id = (select b1 from ids);
+  select balance into owed from public.recovery_balances('2026-10-01', '2026-10-31') where employee_id = (select b1 from ids);
+  assert worked = 1 and taken = 1 and owed = 0, format('repos travaillés %s, récupérés %s, restant %s (attendu 1, 1, 0)', worked, taken, owed);
+  assert (select balance from public.recovery_balances('2026-10-01', '2026-10-20') where employee_id = (select b1 from ids)) = 1, 'avant la récupération, 1 jour doit rester dû';
+  raise notice 'OK 10c rapport travailleurs : 1 repos travaillé, 1 récupéré, 0 restant (1 dû avant la récupération)';
+end $$;
+
 -- Congé : demande en attente ou refusée sans effet sur le solde
 insert into public.leave_requests (employee_id, start_date, end_date, requested_days, status)
 select b2, '2026-10-12', '2026-10-13', 2, 'en_attente' from ids;
