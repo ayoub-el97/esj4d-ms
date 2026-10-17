@@ -30,7 +30,7 @@ export const MODULE_LABELS: Record<AppModule, string> = {
   rapport_journalier: "Rapport journalier",
   rapport_mensuel: "Rapport mensuel",
   rapport_camions: "Rapport camions",
-  conges: "Congés",
+  conges: "Congé / Récupération",
   avertissements: "Avertissements",
   programme: "Programme de travail",
   dechet_vert: "Déchet vert",
@@ -75,15 +75,20 @@ export const POSITION_LABELS: Record<Position, string> = {
   balayeur: "Balayeur",
 };
 
-export type AttendanceStatus = "present" | "repos" | "ferie" | "absent" | "absent_maladie" | "conge";
+export type AttendanceStatus = "present" | "repos_travaille" | "absent" | "absent_maladie" | "conge" | "recuperation" | "repos" | "ferie";
+/** Ordre d'affichage des statuts dans la feuille de présence */
 export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   present: "Présent",
-  repos: "Repos",
-  ferie: "Jour férié",
+  repos_travaille: "Jour de repos travaillé",
   absent: "Absent",
   absent_maladie: "Absent maladie",
   conge: "Congé",
+  recuperation: "Récupération",
+  repos: "Repos",
+  ferie: "Jour férié",
 };
+/** Statuts où l'employé a travaillé (heures, HS) */
+export const WORKED_STATUSES: AttendanceStatus[] = ["present", "repos_travaille"];
 export const ATTENDANCE_STATUSES = Object.keys(ATTENDANCE_STATUS_LABELS) as AttendanceStatus[];
 
 export const WEEKDAY_LABELS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];

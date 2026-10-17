@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { assertModule } from "@/lib/auth";
+import { assertModule, friendlyError } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
 
@@ -31,9 +32,12 @@ const employeeSchema = z
     chauffeur_id: d.position === "rippeur" ? d.chauffeur_id : null,
   }));
 
+const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
+
 export async function saveEmployee(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("employes", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
 
   const parsed = employeeSchema.safeParse({
     id: formData.get("id") ?? undefined,
@@ -48,31 +52,30 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
   });
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
   const { id, ...values } = parsed.data;
   const supabase = await createClient();
-
-  if (id) {
-    const { error } = await supabase.from("employees").update(values).eq("id", id);
-    if (error) return { ok: false, error: friendlyDbError(error.message) };
-  } else {
-    const { error } = await supabase.from("employees").insert(values);
-    if (error) return { ok: false, error: friendlyDbError(error.message) };
-  }
+  const { error } = id ? await supabase.from("employees").update(values).eq("id", id) : await supabase.from("employees").insert(values);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
 
   revalidatePath("/employes");
-  redirect(`/employes?ok=${id ? "modifie" : "cree"}`);
+  revalidatePath("/profil");
+  const returnTo = String(formData.get("return_to") ?? "");
+  const base = RETURN_TARGETS.includes(returnTo) ? returnTo : "/employes";
+  redirect(`${base}${base.includes("?") ? "&" : "?"}ok=${id ? "modifie" : "cree"}`);
 }
 
 export async function setEmployeeActive(id: string, isActive: boolean): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("employes", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
   const supabase = await createClient();
   const { error } = await supabase.from("employees").update({ is_active: isActive }).eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
   revalidatePath("/employes");
-  return { ok: true, message: isActive ? "Employé réactivé." : "Employé désactivé." };
+  revalidatePath("/profil");
+  return { ok: true, message: isActive ? t("Employé réactivé.") : t("Employé désactivé.") };
 }
 
 // ---------------------------------------------------------------------------
@@ -86,8 +89,9 @@ const truckSchema = z.object({
 });
 
 export async function saveTruck(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("employes", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
 
   const parsed = truckSchema.safeParse({
     id: formData.get("id") ?? undefined,
@@ -95,31 +99,29 @@ export async function saveTruck(_prev: ActionResult | null, formData: FormData):
     brand: formData.get("brand") ?? "",
     is_active: formData.get("is_active") !== "off",
   });
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
   const { id, ...values } = parsed.data;
   const supabase = await createClient();
-  const { error } = id
-    ? await supabase.from("trucks").update(values).eq("id", id)
-    : await supabase.from("trucks").insert(values);
-  if (error) return { ok: false, error: friendlyDbError(error.message) };
+  const { error } = id ? await supabase.from("trucks").update(values).eq("id", id) : await supabase.from("trucks").insert(values);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
 
   revalidatePath("/employes/camions");
-  return { ok: true, message: id ? "Camion modifié." : "Camion ajouté." };
+  return { ok: true, message: id ? t("Camion modifié.") : t("Camion ajouté.") };
 }
 
 export async function setTruckActive(id: string, isActive: boolean): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("employes", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
   const supabase = await createClient();
   const { error } = await supabase.from("trucks").update({ is_active: isActive }).eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
   revalidatePath("/employes/camions");
-  return { ok: true, message: isActive ? "Camion réactivé." : "Camion désactivé." };
+  return { ok: true, message: isActive ? t("Camion réactivé.") : t("Camion désactivé.") };
 }
 
 function friendlyDbError(message: string): string {
   if (message.includes("duplicate key") && message.includes("matricule")) return "Ce matricule existe déjà.";
-  if (message.includes("row-level security")) return "Accès refusé par la sécurité de la base de données.";
-  return message;
+  return friendlyError(message);
 }

@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Calculator, Pencil, Plus, Trash2 } from "lucide-react";
 import { computeCleaningSummary, deleteCleaningSummaryRow, saveCleaningSummaryRow } from "@/lib/actions/reports";
 import type { CleaningSummaryRow } from "@/lib/data/reports";
+import { useT } from "@/lib/i18n/client";
+import type { ActionResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +28,7 @@ const FIELDS: { key: keyof CleaningSummaryRow; label: string }[] = [
 ];
 
 export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows: CleaningSummaryRow[]; canEdit: boolean }) {
+  const { t } = useT();
   const router = useRouter();
   const [editing, setEditing] = useState<CleaningSummaryRow | "new" | null>(null);
   const [pending, start] = useTransition();
@@ -33,7 +36,7 @@ export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows:
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <CardTitle>Nettoiement — tableau récapitulatif</CardTitle>
+        <CardTitle>{t("Nettoiement — tableau récapitulatif")}</CardTitle>
         {canEdit && (
           <div className="flex gap-2">
             <Button
@@ -50,10 +53,10 @@ export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows:
                 })
               }
             >
-              <Calculator /> Calculer depuis le pointage
+              <Calculator /> {t("Calculer depuis le pointage")}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setEditing("new")}>
-              <Plus /> Ajouter une ligne
+              <Plus /> {t("Ajouter une ligne")}
             </Button>
           </div>
         )}
@@ -62,11 +65,11 @@ export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows:
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Zone / effectif</TableHead>
-              <TableHead>Durée de travail</TableHead>
+              <TableHead>{t("Zone / effectif")}</TableHead>
+              <TableHead>{t("Durée de travail")}</TableHead>
               {FIELDS.map((f) => (
-                <TableHead key={f.key} className="text-right">
-                  {f.label}
+                <TableHead key={f.key} className="text-end">
+                  {t(f.label)}
                 </TableHead>
               ))}
               {canEdit && <TableHead />}
@@ -76,28 +79,28 @@ export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows:
             {rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={11} className="text-center text-muted-foreground">
-                  Aucune ligne. Utilisez « Calculer depuis le pointage » ou ajoutez une ligne.
+                  {t("Aucune ligne. Utilisez « Calculer depuis le pointage » ou ajoutez une ligne.")}
                 </TableCell>
               </TableRow>
             )}
             {rows.map((r) => (
               <TableRow key={r.id}>
-                <TableCell className="font-medium">{r.zone || "—"}</TableCell>
+                <TableCell className="font-medium">{r.zone === "Total pointage" ? t("Total pointage") : r.zone || "—"}</TableCell>
                 <TableCell>{r.work_duration}</TableCell>
                 {FIELDS.map((f) => (
-                  <TableCell key={f.key} className="text-right">
+                  <TableCell key={f.key} className="text-end">
                     {String(r[f.key])}
                   </TableCell>
                 ))}
                 {canEdit && (
                   <TableCell className="whitespace-nowrap">
-                    <Button variant="ghost" size="icon-xs" onClick={() => setEditing(r)} aria-label="Modifier">
+                    <Button variant="ghost" size="icon-xs" onClick={() => setEditing(r)} aria-label={t("Modifier")}>
                       <Pencil />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label="Supprimer"
+                      aria-label={t("Supprimer")}
                       disabled={pending}
                       onClick={() =>
                         start(async () => {
@@ -125,8 +128,9 @@ export function CleaningSummaryUI({ date, rows, canEdit }: { date: string; rows:
 }
 
 function SummaryRowDialog({ date, row, onClose }: { date: string; row: CleaningSummaryRow | null; onClose: () => void }) {
+  const { t } = useT();
   const router = useRouter();
-  const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveCleaningSummaryRow>> | null, fd: FormData) => {
+  const [state, action] = useActionState(async (prev: ActionResult | null, fd: FormData) => {
     const r = await saveCleaningSummaryRow(prev, fd);
     if (r.ok) {
       toast.success(r.message);
@@ -140,7 +144,7 @@ function SummaryRowDialog({ date, row, onClose }: { date: string; row: CleaningS
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{row ? "Modifier la ligne" : "Nouvelle ligne"}</DialogTitle>
+          <DialogTitle>{row ? t("Modifier la ligne") : t("Nouvelle ligne")}</DialogTitle>
         </DialogHeader>
         <form action={action} className="space-y-3">
           <input type="hidden" name="id" value={row?.id ?? ""} />
@@ -148,25 +152,25 @@ function SummaryRowDialog({ date, row, onClose }: { date: string; row: CleaningS
           <ActionMessage state={state} />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="zone">Zone / effectif</Label>
-              <Input id="zone" name="zone" defaultValue={row?.zone ?? ""} placeholder="Ex. Zone Nord" />
+              <Label htmlFor="zone">{t("Zone / effectif")}</Label>
+              <Input id="zone" name="zone" defaultValue={row?.zone ?? ""} placeholder={t("Ex. Zone Nord")} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="work_duration">Durée de travail</Label>
-              <Input id="work_duration" name="work_duration" defaultValue={row?.work_duration ?? ""} placeholder="Ex. 8h" />
+              <Label htmlFor="work_duration">{t("Durée de travail")}</Label>
+              <Input id="work_duration" name="work_duration" defaultValue={row?.work_duration ?? ""} placeholder={t("Ex. 8h")} />
             </div>
             {FIELDS.map((f) => (
               <div key={f.key} className="space-y-1">
-                <Label htmlFor={f.key}>{f.label}</Label>
+                <Label htmlFor={f.key}>{t(f.label)}</Label>
                 <Input id={f.key} name={f.key} type="number" min="0" defaultValue={row ? String(row[f.key]) : "0"} />
               </div>
             ))}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Annuler
+              {t("Annuler")}
             </Button>
-            <SubmitButton>Enregistrer</SubmitButton>
+            <SubmitButton>{t("Enregistrer")}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

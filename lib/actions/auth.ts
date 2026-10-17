@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 import type { ActionResult } from "@/lib/types";
 
 const loginSchema = z.object({
@@ -11,18 +12,19 @@ const loginSchema = z.object({
 });
 
 export async function signIn(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Saisie invalide." };
+    return { ok: false, error: t(parsed.error.issues[0]?.message ?? "Saisie invalide.") };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) {
-    return { ok: false, error: "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe." };
+    return { ok: false, error: t("Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe.") };
   }
   redirect("/");
 }

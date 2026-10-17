@@ -1,6 +1,7 @@
+import { redirect } from "next/navigation";
 import { Search } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { getT, pageTitle } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTimeFr } from "@/lib/dates";
 import { ModuleHeader } from "@/components/module-header";
@@ -12,7 +13,7 @@ import { NativeSelect } from "@/components/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export const metadata = { title: "Journal d'audit" };
+export const generateMetadata = pageTitle("Journal d'audit");
 
 const TABLE_LABELS: Record<string, string> = {
   profiles: "Comptes",
@@ -20,6 +21,7 @@ const TABLE_LABELS: Record<string, string> = {
   role_permissions: "Permissions",
   trucks: "Camions",
   employees: "Employés",
+  team_leads: "Chefs d'équipe",
   work_days: "Journées",
   attendance: "Pointage",
   photos: "Photos",
@@ -40,7 +42,7 @@ const ACTION_LABELS: Record<string, string> = { INSERT: "Création", UPDATE: "Mo
 type AuditRow = { id: number; table_name: string; record_id: string; action: string; old_data: Record<string, unknown> | null; new_data: Record<string, unknown> | null; user_email: string | null; created_at: string };
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<{ table?: string; action?: string; from?: string; to?: string; q?: string }> }) {
-  const user = await getCurrentUser();
+  const [user, t] = await Promise.all([getCurrentUser(), getT()]);
   if (user.role !== "admin") redirect("/?error=acces_refuse");
   const sp = await searchParams;
   const supabase = await createClient();
@@ -55,43 +57,43 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
   return (
     <div>
-      <ModuleHeader title="Journal d'audit" subtitle="Qui a créé, modifié ou supprimé quoi, et quand (300 dernières entrées)" backHref="/parametres" />
+      <ModuleHeader title={t("Journal d'audit")} subtitle={t("Qui a créé, modifié ou supprimé quoi, et quand (300 dernières entrées)")} backHref="/parametres" />
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-5">
         <div className="space-y-1">
-          <Label htmlFor="table">Donnée</Label>
+          <Label htmlFor="table">{t("Donnée")}</Label>
           <NativeSelect id="table" name="table" defaultValue={sp.table ?? ""}>
-            <option value="">Toutes</option>
+            <option value="">{t("Toutes")}</option>
             {Object.entries(TABLE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>
-                {v}
+                {t(v)}
               </option>
             ))}
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="action">Action</Label>
+          <Label htmlFor="action">{t("Action")}</Label>
           <NativeSelect id="action" name="action" defaultValue={sp.action ?? ""}>
-            <option value="">Toutes</option>
+            <option value="">{t("Toutes")}</option>
             {Object.entries(ACTION_LABELS).map(([k, v]) => (
               <option key={k} value={k}>
-                {v}
+                {t(v)}
               </option>
             ))}
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="from">Du</Label>
+          <Label htmlFor="from">{t("Du")}</Label>
           <Input id="from" name="from" type="date" defaultValue={sp.from} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="to">Au</Label>
+          <Label htmlFor="to">{t("Au")}</Label>
           <Input id="to" name="to" type="date" defaultValue={sp.to} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="q">Utilisateur (e-mail)</Label>
+          <Label htmlFor="q">{t("Utilisateur (e-mail)")}</Label>
           <div className="flex gap-2">
-            <Input id="q" name="q" defaultValue={sp.q} />
-            <Button type="submit" size="icon" aria-label="Filtrer">
+            <Input id="q" name="q" defaultValue={sp.q} dir="ltr" />
+            <Button type="submit" size="icon" aria-label={t("Filtrer")}>
               <Search />
             </Button>
           </div>
@@ -101,32 +103,32 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date / heure</TableHead>
-              <TableHead>Utilisateur</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Donnée</TableHead>
-              <TableHead>Enregistrement</TableHead>
-              <TableHead>Détail</TableHead>
+              <TableHead>{t("Date / heure")}</TableHead>
+              <TableHead>{t("Utilisateur")}</TableHead>
+              <TableHead>{t("Action")}</TableHead>
+              <TableHead>{t("Donnée")}</TableHead>
+              <TableHead>{t("Enregistrement")}</TableHead>
+              <TableHead>{t("Détail")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  Aucune entrée.
+                  {t("Aucune entrée.")}
                 </TableCell>
               </TableRow>
             )}
             {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="whitespace-nowrap">{formatDateTimeFr(r.created_at)}</TableCell>
-                <TableCell>{r.user_email ?? "système"}</TableCell>
+                <TableCell dir="ltr">{r.user_email ?? t("système")}</TableCell>
                 <TableCell>
-                  <Badge variant={r.action === "DELETE" ? "destructive" : r.action === "INSERT" ? "default" : "secondary"}>{ACTION_LABELS[r.action] ?? r.action}</Badge>
+                  <Badge variant={r.action === "DELETE" ? "destructive" : r.action === "INSERT" ? "default" : "secondary"}>{t(ACTION_LABELS[r.action] ?? r.action)}</Badge>
                 </TableCell>
-                <TableCell>{TABLE_LABELS[r.table_name] ?? r.table_name}</TableCell>
+                <TableCell>{t(TABLE_LABELS[r.table_name] ?? r.table_name)}</TableCell>
                 <TableCell className="font-mono text-xs">{r.record_id.slice(0, 10)}</TableCell>
-                <TableCell className="max-w-md truncate text-xs text-muted-foreground" title={JSON.stringify(r.new_data ?? r.old_data)}>
+                <TableCell className="max-w-md truncate text-xs text-muted-foreground" dir="ltr" title={JSON.stringify(r.new_data ?? r.old_data)}>
                   {summarize(r)}
                 </TableCell>
               </TableRow>

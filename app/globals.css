@@ -91,6 +91,11 @@
   }
 }
 
+/* Arabe : police adaptée */
+html[dir="rtl"] body {
+  font-family: var(--font-arabic), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Impression : masquer la navigation */
 @media print {
   header,

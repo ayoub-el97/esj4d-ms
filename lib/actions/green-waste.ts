@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { deletePhotosOfEntity } from "@/lib/actions/photos";
 import type { ActionResult } from "@/lib/types";
@@ -16,31 +17,33 @@ const schema = z.object({
 });
 
 export async function saveGreenWaste(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("dechet_vert", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
   const parsed = schema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const { id, ...values } = parsed.data;
   const supabase = await createClient();
   if (id) {
     const { error } = await supabase.from("green_waste_entries").update(values).eq("id", id);
-    if (error) return { ok: false, error: friendlyError(error.message) };
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
     revalidatePath("/dechet-vert");
-    return { ok: true, message: "Entrée enregistrée." };
+    return { ok: true, message: t("Entrée enregistrée.") };
   }
   const { data, error } = await supabase.from("green_waste_entries").insert(values).select("id").single();
-  if (error) return { ok: false, error: friendlyError(error.message) };
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/dechet-vert");
   redirect(`/dechet-vert/${data.id}`);
 }
 
 export async function deleteGreenWaste(id: string): Promise<ActionResult> {
+  const t = await getT();
   const auth = await assertModule("dechet_vert", "edit");
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
   const supabase = await createClient();
   const { data: row } = await supabase.from("green_waste_entries").select("activity_date").eq("id", id).maybeSingle();
   const { error } = await supabase.from("green_waste_entries").delete().eq("id", id);
-  if (error) return { ok: false, error: friendlyError(error.message) };
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
   await deletePhotosOfEntity("green_waste", id);
   revalidatePath("/dechet-vert");
   redirect(`/dechet-vert?date=${row?.activity_date ?? ""}`);

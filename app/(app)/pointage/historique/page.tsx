@@ -4,6 +4,7 @@ import { requireModule } from "@/lib/auth";
 import { getAttendanceHistory } from "@/lib/data/attendance";
 import { getEmployees, employeeName } from "@/lib/data/employees";
 import { formatDateFr, formatDateTimeFr } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
 import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus, type Position, type TeamType } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -15,32 +16,32 @@ import { NativeSelect } from "@/components/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
-export const metadata = { title: "Historique du pointage" };
+export const generateMetadata = pageTitle("Historique du pointage");
 
 type SP = { from?: string; to?: string; employee?: string; team?: string; position?: string; status?: string };
 
 export default async function HistoriquePage({ searchParams }: { searchParams: Promise<SP> }) {
-  await requireModule("pointage");
+  const [, t] = await Promise.all([requireModule("pointage"), getT()]);
   const sp = await searchParams;
   const [rows, employees] = await Promise.all([getAttendanceHistory(sp), getEmployees()]);
 
   return (
     <div>
-      <ModuleHeader title="Historique du pointage" subtitle={`${rows.length} ligne(s)`} backHref="/pointage" />
+      <ModuleHeader title={t("Historique du pointage")} subtitle={t("{count} ligne(s)", { count: rows.length })} backHref="/pointage" />
 
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
         <div className="space-y-1">
-          <Label htmlFor="from">Du</Label>
+          <Label htmlFor="from">{t("Du")}</Label>
           <Input id="from" name="from" type="date" defaultValue={sp.from} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="to">Au</Label>
+          <Label htmlFor="to">{t("Au")}</Label>
           <Input id="to" name="to" type="date" defaultValue={sp.to} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="employee">Employé</Label>
+          <Label htmlFor="employee">{t("Employé")}</Label>
           <NativeSelect id="employee" name="employee" defaultValue={sp.employee ?? ""}>
-            <option value="">Tous</option>
+            <option value="">{t("Tous")}</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
                 {employeeName(e)}
@@ -49,39 +50,39 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="team">Équipe</Label>
+          <Label htmlFor="team">{t("Équipe")}</Label>
           <NativeSelect id="team" name="team" defaultValue={sp.team ?? ""}>
-            <option value="">Toutes</option>
-            <option value="collecte">Collecte</option>
-            <option value="nettoiement">Nettoiement</option>
+            <option value="">{t("Toutes")}</option>
+            <option value="collecte">{t("Collecte")}</option>
+            <option value="nettoiement">{t("Nettoiement")}</option>
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="position">Poste</Label>
+          <Label htmlFor="position">{t("Poste")}</Label>
           <NativeSelect id="position" name="position" defaultValue={sp.position ?? ""}>
-            <option value="">Tous</option>
-            <option value="chauffeur">Chauffeur</option>
-            <option value="rippeur">Rippeur</option>
-            <option value="balayeur">Balayeur</option>
+            <option value="">{t("Tous")}</option>
+            <option value="chauffeur">{t("Chauffeur")}</option>
+            <option value="rippeur">{t("Rippeur")}</option>
+            <option value="balayeur">{t("Balayeur")}</option>
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="status">Statut</Label>
+          <Label htmlFor="status">{t("Statut")}</Label>
           <NativeSelect id="status" name="status" defaultValue={sp.status ?? ""}>
-            <option value="">Tous</option>
+            <option value="">{t("Tous")}</option>
             {ATTENDANCE_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {ATTENDANCE_STATUS_LABELS[s]}
+                {t(ATTENDANCE_STATUS_LABELS[s])}
               </option>
             ))}
           </NativeSelect>
         </div>
         <div className="flex items-end gap-2 sm:col-span-3 lg:col-span-6">
           <Button type="submit">
-            <Search /> Filtrer
+            <Search /> {t("Filtrer")}
           </Button>
           <LinkButton href="/pointage/historique" variant="outline">
-            Réinitialiser
+            {t("Réinitialiser")}
           </LinkButton>
         </div>
       </form>
@@ -90,24 +91,24 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date d&apos;activité</TableHead>
-              <TableHead>Équipe</TableHead>
-              <TableHead>NB</TableHead>
-              <TableHead>Nom</TableHead>
-              <TableHead>Poste</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead>Entrée</TableHead>
-              <TableHead>Sortie</TableHead>
-              <TableHead>HS</TableHead>
-              <TableHead>Observation</TableHead>
-              <TableHead>Dernière saisie</TableHead>
+              <TableHead>{t("Date d'activité")}</TableHead>
+              <TableHead>{t("Équipe")}</TableHead>
+              <TableHead>{t("NB")}</TableHead>
+              <TableHead>{t("Nom")}</TableHead>
+              <TableHead>{t("Poste")}</TableHead>
+              <TableHead>{t("Statut")}</TableHead>
+              <TableHead>{t("Entrée")}</TableHead>
+              <TableHead>{t("Sortie")}</TableHead>
+              <TableHead>{t("HS")}</TableHead>
+              <TableHead>{t("Observation")}</TableHead>
+              <TableHead>{t("Dernière saisie")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={11} className="text-center text-muted-foreground">
-                  Aucun pointage trouvé.
+                  {t("Aucun pointage trouvé.")}
                 </TableCell>
               </TableRow>
             )}
@@ -118,21 +119,25 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
                     {formatDateFr(r.activity_date)}
                   </Link>
                 </TableCell>
-                <TableCell>{TEAM_LABELS[r.team_type as TeamType]}</TableCell>
+                <TableCell>{t(TEAM_LABELS[r.team_type as TeamType])}</TableCell>
                 <TableCell>{r.order_number}</TableCell>
                 <TableCell>
                   {r.name}
-                  {r.shift > 1 && <Badge variant="outline" className="ml-1">service {r.shift}</Badge>}
+                  {r.shift > 1 && (
+                    <Badge variant="outline" className="ms-1">
+                      {t("service {n}", { n: r.shift })}
+                    </Badge>
+                  )}
                 </TableCell>
-                <TableCell>{POSITION_LABELS[r.position as Position]}</TableCell>
-                <TableCell>{ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus]}</TableCell>
+                <TableCell>{t(POSITION_LABELS[r.position as Position])}</TableCell>
+                <TableCell>{t(ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus])}</TableCell>
                 <TableCell>{r.time_in?.slice(0, 5) ?? ""}</TableCell>
                 <TableCell>{r.time_out?.slice(0, 5) ?? ""}</TableCell>
                 <TableCell>{Number(r.overtime_hours) || ""}</TableCell>
                 <TableCell className="max-w-48 truncate">{r.observation}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {formatDateTimeFr(r.updated_at)}
-                  {r.updated_by_email && <div>{r.updated_by_email}</div>}
+                  {r.updated_by_email && <div dir="ltr">{r.updated_by_email}</div>}
                 </TableCell>
               </TableRow>
             ))}

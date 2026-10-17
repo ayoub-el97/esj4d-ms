@@ -7,26 +7,15 @@ import { Copy, Plus, Save, Trash2, UserPlus } from "lucide-react";
 import { saveSheet } from "@/lib/actions/attendance";
 import type { EmployeeOption, SheetRow } from "@/lib/attendance-types";
 import { formatDateFr } from "@/lib/dates";
-import {
-  ATTENDANCE_STATUSES,
-  ATTENDANCE_STATUS_LABELS,
-  POSITION_LABELS,
-  WEEKDAY_SHORT,
-  type AttendanceStatus,
-  type TeamType,
-} from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
+import type { TFunction } from "@/lib/i18n/config";
+import { formatDateTimeFr } from "@/lib/dates";
+import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, type AttendanceStatus, type TeamType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -34,22 +23,31 @@ type Props = {
   team: TeamType;
   initialRows: SheetRow[];
   initialTeamLead: string;
+  /** Chefs d'équipe définis dans le profil de l'entreprise (suggestions) */
+  teamLeadOptions: string[];
   options: EmployeeOption[];
   canEdit: boolean;
   agency: string;
   company: string;
+  logo: string | null;
 };
 
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present: "",
+  repos_travaille: "bg-violet-50",
   repos: "bg-amber-50",
   ferie: "bg-sky-50",
   absent: "bg-red-50",
   absent_maladie: "bg-orange-50",
   conge: "bg-emerald-50",
+  recuperation: "bg-teal-50",
 };
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, options, canEdit, agency, company }: Props) {
+/** Heures et HS saisissables seulement pour un jour travaillé */
+const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
+
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo }: Props) {
+  const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
   const [teamLead, setTeamLead] = useState(initialTeamLead);
@@ -58,6 +56,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
   const [adding, setAdding] = useState<{ chauffeurId: string | null } | null>(null);
 
   const optionsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
+  const dow = new Date(`${date}T12:00:00`).getDay();
 
   const update = (idx: number, patch: Partial<SheetRow>) => {
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -70,10 +69,10 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
   const addShift = (idx: number) => {
     const base = rows[idx];
     const maxShift = Math.max(...rows.filter((r) => r.employee_id === base.employee_id).map((r) => r.shift));
-    if (maxShift >= 3) return toast.error("Maximum 3 services par jour.");
+    if (maxShift >= 3) return toast.error(t("Maximum 3 services par jour."));
     setRows((prev) => [
       ...prev.slice(0, idx + 1),
-      { ...base, id: null, shift: maxShift + 1, status: "present", time_in: "", time_out: "", overtime_hours: 0, observation: "" },
+      { ...base, id: null, shift: maxShift + 1, status: "present", time_in: "", time_out: "", overtime_hours: 0, observation: "", entered_at: null },
       ...prev.slice(idx + 1),
     ]);
     setDirty(true);
@@ -81,20 +80,20 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
   const addEmployee = (employeeId: string, replacingId: string | null, chauffeurId: string | null) => {
     const o = optionsById.get(employeeId);
     if (!o) return;
-    if (rows.some((r) => r.employee_id === employeeId && r.shift === 1)) {
-      return toast.error("Cet employé figure déjà sur la feuille.");
-    }
+    if (rows.some((r) => r.employee_id === employeeId && r.shift === 1)) return toast.error(t("Cet employé figure déjà sur la feuille."));
     setRows((prev) => [
       ...prev,
       {
         id: null,
         employee_id: o.id,
         shift: 1,
-        status: "present",
+        status: o.rest_day === dow ? "repos_travaille" : "present",
         time_in: "",
         time_out: "",
         overtime_hours: 0,
         observation: "",
+        entered_at: null,
+        planned: null,
         replacing_employee_id: replacingId,
         chauffeur_id: team === "collecte" && o.position !== "chauffeur" ? chauffeurId : null,
         position: team === "nettoiement" ? "balayeur" : o.position === "chauffeur" ? "chauffeur" : "rippeur",
@@ -122,20 +121,19 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
 
   // Regroupement : collecte = par chauffeur ; nettoiement = liste simple
   const groups = useMemo(() => {
-    if (team === "nettoiement") return [{ key: "all", title: null as string | null, chauffeurId: null as string | null, idx: rows.map((_, i) => i) }];
+    type Group = { key: string; title: string | null; chauffeurId: string | null; idx: number[] };
+    if (team === "nettoiement") return [{ key: "all", title: null, chauffeurId: null, idx: rows.map((_, i) => i) }] as Group[];
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<number>();
-    const result: { key: string; title: string | null; chauffeurId: string | null; idx: number[] }[] = chauffeurs.map((c) => {
-      const idx = rows
-        .map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1))
-        .filter((i) => i >= 0);
+    const result: Group[] = chauffeurs.map((c) => {
+      const idx = rows.map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1)).filter((i) => i >= 0);
       idx.forEach((i) => used.add(i));
-      return { key: c.employee_id, title: `Équipe ${c.name}`, chauffeurId: c.employee_id, idx };
+      return { key: c.employee_id, title: t("Équipe {name}", { name: c.name }), chauffeurId: c.employee_id, idx };
     });
     const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
-    if (rest.length) result.push({ key: "none", title: "Sans équipe affectée", chauffeurId: null, idx: rest });
+    if (rest.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: rest });
     return result;
-  }, [rows, team]);
+  }, [rows, team, t]);
 
   const counts = useMemo(() => {
     const c: Partial<Record<AttendanceStatus, number>> = {};
@@ -147,19 +145,39 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
     <div className="space-y-4">
       {/* En-tête de la feuille (logo, agence, chef d'équipe, date) */}
       <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center">
-        <div className="flex size-14 items-center justify-center rounded-lg bg-indigo-600 text-xl font-bold text-white">{company.slice(0, 1)}</div>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={company} className="size-14 rounded-lg object-contain" />
+        ) : (
+          <div className="flex size-14 items-center justify-center rounded-lg bg-indigo-600 text-xl font-bold text-white">{company.slice(0, 1)}</div>
+        )}
         <div className="text-sm">
-          <div className="text-muted-foreground">Agence</div>
+          <div className="text-muted-foreground">{t("Agence")}</div>
           <div className="font-medium">{agency}</div>
         </div>
         <div className="space-y-1">
           <Label htmlFor="team_lead" className="text-muted-foreground">
-            Chef d&apos;équipe
+            {t("Chef d'équipe")}
           </Label>
-          <Input id="team_lead" value={teamLead} disabled={!canEdit} onChange={(e) => { setTeamLead(e.target.value); setDirty(true); }} placeholder="Nom du chef d'équipe" />
+          <Input
+            id="team_lead"
+            list="team-lead-options"
+            value={teamLead}
+            disabled={!canEdit}
+            onChange={(e) => {
+              setTeamLead(e.target.value);
+              setDirty(true);
+            }}
+            placeholder={t("Nom du chef d'équipe")}
+          />
+          <datalist id="team-lead-options">
+            {teamLeadOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </div>
-        <div className="text-sm sm:text-right">
-          <div className="text-muted-foreground">Date</div>
+        <div className="text-sm sm:text-end">
+          <div className="text-muted-foreground">{t("Date")}</div>
           <div className="font-medium">{formatDateFr(date)}</div>
         </div>
       </div>
@@ -169,15 +187,16 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
         <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-2 py-2 text-left">NB</th>
-              <th className="px-2 py-2 text-left">Poste</th>
-              <th className="px-2 py-2 text-left">Nom et prénom</th>
-              <th className="px-2 py-2 text-left">Repos</th>
-              <th className="px-2 py-2 text-left">Statut / motif</th>
-              <th className="px-2 py-2 text-left">H. entrée</th>
-              <th className="px-2 py-2 text-left">H. sortie</th>
-              <th className="px-2 py-2 text-left">HS</th>
-              <th className="px-2 py-2 text-left">Observation</th>
+              <th className="px-2 py-2 text-start">{t("NB")}</th>
+              <th className="px-2 py-2 text-start">{t("Poste")}</th>
+              <th className="px-2 py-2 text-start">{t("Nom et prénom")}</th>
+              <th className="px-2 py-2 text-start">{t("Repos")}</th>
+              <th className="px-2 py-2 text-start">{t("Statut / motif")}</th>
+              <th className="px-2 py-2 text-start">{t("H. entrée")}</th>
+              <th className="px-2 py-2 text-start">{t("H. sortie")}</th>
+              <th className="px-2 py-2 text-start">{t("HS")}</th>
+              <th className="px-2 py-2 text-start">{t("Observation")}</th>
+              <th className="px-2 py-2 text-start">{t("Saisie")}</th>
               {canEdit && <th className="px-2 py-2" />}
             </tr>
           </thead>
@@ -185,6 +204,8 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
             {groups.map((g) => (
               <GroupRows
                 key={g.key}
+                t={t}
+                dow={dow}
                 title={g.title}
                 rows={rows}
                 idx={g.idx}
@@ -198,8 +219,8 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="p-6 text-center text-muted-foreground">
-                  Aucun employé actif dans cette équipe. Ajoutez des employés dans le module Employés.
+                <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                  {t("Aucun employé actif dans cette équipe. Ajoutez des employés dans le module Employés.")}
                 </td>
               </tr>
             )}
@@ -212,39 +233,33 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, options, c
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           {ATTENDANCE_STATUSES.filter((s) => counts[s]).map((s) => (
             <span key={s} className={cn("rounded-md border px-2 py-1", STATUS_COLORS[s])}>
-              {ATTENDANCE_STATUS_LABELS[s]} : <strong>{counts[s]}</strong>
+              {t(ATTENDANCE_STATUS_LABELS[s])} : <strong>{counts[s]}</strong>
             </span>
           ))}
-          <span className="rounded-md border px-2 py-1">Total : <strong>{rows.length}</strong></span>
+          <span className="rounded-md border px-2 py-1">
+            {t("Total")} : <strong>{rows.length}</strong>
+          </span>
         </div>
         {canEdit && (
-          <div className="ml-auto flex gap-2">
+          <div className="ms-auto flex gap-2">
             <Button variant="outline" onClick={() => setAdding({ chauffeurId: null })}>
-              <UserPlus /> {team === "collecte" ? "Ajouter un remplaçant / renfort" : "Ajouter un agent"}
+              <UserPlus /> {team === "collecte" ? t("Ajouter un remplaçant / renfort") : t("Ajouter un agent")}
             </Button>
             <Button onClick={save} disabled={pending || !dirty}>
-              <Save /> {pending ? "Enregistrement…" : "Enregistrer la feuille"}
+              <Save /> {pending ? t("Enregistrement…") : t("Enregistrer la feuille")}
             </Button>
           </div>
         )}
       </div>
 
-      {adding && (
-        <AddEmployeeDialog
-          date={date}
-          team={team}
-          options={options}
-          rows={rows}
-          defaultChauffeurId={adding.chauffeurId}
-          onClose={() => setAdding(null)}
-          onAdd={addEmployee}
-        />
-      )}
+      {adding && <AddEmployeeDialog date={date} team={team} options={options} rows={rows} defaultChauffeurId={adding.chauffeurId} onClose={() => setAdding(null)} onAdd={addEmployee} />}
     </div>
   );
 }
 
 function GroupRows({
+  t,
+  dow,
   title,
   rows,
   idx,
@@ -255,6 +270,8 @@ function GroupRows({
   onAddShift,
   onAddMember,
 }: {
+  t: TFunction;
+  dow: number;
   title: string | null;
   rows: SheetRow[];
   idx: number[];
@@ -269,11 +286,11 @@ function GroupRows({
     <>
       {title && (
         <tr className="bg-indigo-50/60">
-          <td colSpan={10} className="px-2 py-1.5 text-xs font-semibold text-indigo-900">
+          <td colSpan={11} className="px-2 py-1.5 text-xs font-semibold text-indigo-900">
             <span>{title}</span>
             {canEdit && onAddMember && (
-              <button type="button" onClick={onAddMember} className="ml-3 inline-flex items-center gap-1 text-indigo-700 hover:underline">
-                <Plus className="size-3" /> remplaçant
+              <button type="button" onClick={onAddMember} className="ms-3 inline-flex items-center gap-1 text-indigo-700 hover:underline">
+                <Plus className="size-3" /> {t("remplaçant")}
               </button>
             )}
           </td>
@@ -285,42 +302,60 @@ function GroupRows({
         return (
           <tr key={`${r.employee_id}-${r.shift}`} className={cn("border-t", STATUS_COLORS[r.status], r.is_extra && "italic")}>
             <td className="px-2 py-1 text-muted-foreground">{r.order_number || "—"}</td>
-            <td className="px-2 py-1">{POSITION_LABELS[r.position]}</td>
+            <td className="px-2 py-1">{t(POSITION_LABELS[r.position])}</td>
             <td className="px-2 py-1 font-medium">
               {r.name}
-              {r.shift > 1 && <span className="ml-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">service {r.shift}</span>}
-              {replacing && <div className="text-[11px] font-normal text-muted-foreground">remplace {replacing.name}</div>}
-              {r.is_extra && !replacing && <div className="text-[11px] font-normal text-muted-foreground">ajouté pour la journée</div>}
+              {r.shift > 1 && <span className="ms-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">{t("service {n}", { n: r.shift })}</span>}
+              {replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("remplace {name}", { name: replacing.name })}</div>}
+              {r.is_extra && !replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("ajouté pour la journée")}</div>}
             </td>
-            <td className="px-2 py-1 text-muted-foreground">{r.rest_day == null ? "—" : WEEKDAY_SHORT[r.rest_day]}</td>
+            <td className="px-2 py-1 text-muted-foreground">{r.rest_day == null ? "—" : t(WEEKDAY_SHORT[r.rest_day])}</td>
             <td className="px-2 py-1">
               <NativeSelect value={r.status} disabled={!canEdit} onChange={(e) => onUpdate(i, { status: e.target.value as AttendanceStatus })} className="min-w-32">
                 {ATTENDANCE_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {ATTENDANCE_STATUS_LABELS[s]}
+                    {t(ATTENDANCE_STATUS_LABELS[s])}
                   </option>
                 ))}
               </NativeSelect>
+              {r.status === "present" && r.rest_day === dow && r.shift === 1 && (
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  className="mt-0.5 block text-start text-[11px] text-violet-700 underline-offset-2 hover:underline"
+                  onClick={() => onUpdate(i, { status: "repos_travaille" })}
+                >
+                  {t("Jour de repos habituel : marquer « Jour de repos travaillé » ?")}
+                </button>
+              )}
+              {r.planned && r.status !== r.planned && (
+                <div className="mt-0.5 text-[11px] text-emerald-700">
+                  {r.planned === "conge" ? t("Congé accepté pour cette date") : t("Récupération acceptée pour cette date")}
+                </div>
+              )}
             </td>
             <td className="px-2 py-1">
-              <Input type="time" value={r.time_in} disabled={!canEdit || r.status !== "present"} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
+              <Input type="time" value={r.time_in} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
             </td>
             <td className="px-2 py-1">
-              <Input type="time" value={r.time_out} disabled={!canEdit || r.status !== "present"} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
+              <Input type="time" value={r.time_out} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
             </td>
             <td className="px-2 py-1">
-              <Input type="number" min={0} max={24} step={0.5} value={r.overtime_hours} disabled={!canEdit || r.status !== "present"} onChange={(e) => onUpdate(i, { overtime_hours: Number(e.target.value) })} className="w-20" />
+              <Input type="number" min={0} max={24} step={0.5} value={r.overtime_hours} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { overtime_hours: Number(e.target.value) })} className="w-20" />
             </td>
             <td className="px-2 py-1">
               <Input value={r.observation} disabled={!canEdit} onChange={(e) => onUpdate(i, { observation: e.target.value })} className="min-w-40" placeholder="—" />
             </td>
+            <td className="whitespace-nowrap px-2 py-1 text-[11px] text-muted-foreground" title={t("Date et heure de saisie (la date d'activité est celle de la feuille)")}>
+              {r.entered_at ? formatDateTimeFr(r.entered_at) : "—"}
+            </td>
             {canEdit && (
-              <td className="px-1 py-1 whitespace-nowrap">
-                <Button variant="ghost" size="icon-xs" title="Ajouter un 2e service (jour doublé)" onClick={() => onAddShift(i)}>
+              <td className="whitespace-nowrap px-1 py-1">
+                <Button variant="ghost" size="icon-xs" title={t("Ajouter un 2e service (jour doublé)")} onClick={() => onAddShift(i)}>
                   <Copy />
                 </Button>
                 {(r.is_extra || r.shift > 1) && (
-                  <Button variant="ghost" size="icon-xs" title="Retirer de la feuille" onClick={() => onRemove(i)}>
+                  <Button variant="ghost" size="icon-xs" title={t("Retirer de la feuille")} onClick={() => onRemove(i)}>
                     <Trash2 />
                   </Button>
                 )}
@@ -350,6 +385,7 @@ function AddEmployeeDialog({
   onClose: () => void;
   onAdd: (employeeId: string, replacingId: string | null, chauffeurId: string | null) => void;
 }) {
+  const { t } = useT();
   const present = new Set(rows.map((r) => r.employee_id));
   const candidates = options.filter((o) => !present.has(o.id));
   const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
@@ -363,26 +399,26 @@ function AddEmployeeDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{team === "collecte" ? "Ajouter un remplaçant / renfort" : "Ajouter un agent à la feuille"}</DialogTitle>
-          <DialogDescription>L&apos;agent est ajouté uniquement pour la journée du {formatDateFr(date)}.</DialogDescription>
+          <DialogTitle>{team === "collecte" ? t("Ajouter un remplaçant / renfort") : t("Ajouter un agent à la feuille")}</DialogTitle>
+          <DialogDescription>{t("L'agent est ajouté uniquement pour la journée du {date}.", { date: formatDateFr(date) })}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label>Employé</Label>
+            <Label>{t("Employé")}</Label>
             <NativeSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              {candidates.length === 0 && <option value="">Aucun employé disponible</option>}
+              {candidates.length === 0 && <option value="">{t("Aucun employé disponible")}</option>}
               {candidates.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.name} — {POSITION_LABELS[o.position]} ({o.team_type})
+                  {o.name} — {t(POSITION_LABELS[o.position])} ({t(TEAM_LABELS[o.team_type])})
                 </option>
               ))}
             </NativeSelect>
           </div>
           {team === "collecte" && (
             <div className="space-y-1">
-              <Label>Équipe (chauffeur)</Label>
+              <Label>{t("Équipe (chauffeur)")}</Label>
               <NativeSelect value={chauffeurId} onChange={(e) => setChauffeurId(e.target.value)}>
-                <option value="">— Sans équipe —</option>
+                <option value="">{t("— Sans équipe —")}</option>
                 {chauffeurs.map((c) => (
                   <option key={c.employee_id} value={c.employee_id}>
                     {c.name}
@@ -392,12 +428,12 @@ function AddEmployeeDialog({
             </div>
           )}
           <div className="space-y-1">
-            <Label>Remplace (agent en repos) — facultatif</Label>
+            <Label>{t("Remplace (agent en repos) — facultatif")}</Label>
             <NativeSelect value={replacingId} onChange={(e) => setReplacingId(e.target.value)}>
-              <option value="">— Renfort, ne remplace personne —</option>
+              <option value="">{t("— Renfort, ne remplace personne —")}</option>
               {teamMembers.map((r) => (
                 <option key={r.employee_id} value={r.employee_id}>
-                  {r.name} ({ATTENDANCE_STATUS_LABELS[r.status]})
+                  {r.name} ({t(ATTENDANCE_STATUS_LABELS[r.status])})
                 </option>
               ))}
             </NativeSelect>
@@ -405,10 +441,10 @@ function AddEmployeeDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Annuler
+            {t("Annuler")}
           </Button>
           <Button disabled={!employeeId} onClick={() => onAdd(employeeId, replacingId || null, chauffeurId || null)}>
-            Ajouter
+            {t("Ajouter")}
           </Button>
         </DialogFooter>
       </DialogContent>

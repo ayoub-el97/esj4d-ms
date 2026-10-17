@@ -5,14 +5,15 @@ import { getWorkDay } from "@/lib/data/attendance";
 import { getEmployees, getTrucks } from "@/lib/data/employees";
 import type { TruckDailyReport } from "@/lib/data/reports";
 import { formatDateLongFr } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { TruckReportForm } from "../truck-report-form";
 
-export const metadata = { title: "Ligne camion" };
+export const generateMetadata = pageTitle("Ligne camion");
 
 export default async function CamionReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireModule("rapport_camions");
+  const [user, { t, locale }] = await Promise.all([requireModule("rapport_camions"), getI18n()]);
   const { id } = await params;
   const supabase = await createClient();
   const { data: report } = await supabase.from("truck_daily_reports").select("*").eq("id", id).maybeSingle<TruckDailyReport>();
@@ -22,7 +23,7 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
 
   return (
     <div>
-      <ModuleHeader title="Ligne camion" subtitle={formatDateLongFr(report.activity_date)} backHref="/rapport-camions">
+      <ModuleHeader title={t("Ligne camion")} subtitle={formatDateLongFr(report.activity_date, locale)} backHref="/rapport-camions">
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
       <TruckReportForm report={report} defaultDate={report.activity_date} trucks={trucks} chauffeurs={collecte.filter((e) => e.position === "chauffeur")} canEdit={canEdit} />

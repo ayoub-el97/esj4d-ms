@@ -1,49 +1,41 @@
-import { CalendarRange, FileDown, History, Home } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarRange, History, Home } from "lucide-react";
 import { LinkButton } from "@/components/link-button";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Rangée de boutons standard d'un module :
  * Export PDF · Historique · Rapport mensuel · Accueil (maquette).
  * Chaque bouton n'apparaît que si son lien est fourni.
  */
-export function ModuleButtons({
+export async function ModuleButtons({
   pdfSlot,
   historyHref,
   monthlyHref,
   extra,
 }: {
-  /** Composant bouton d'export PDF (client) */
   pdfSlot?: React.ReactNode;
   historyHref?: string;
   monthlyHref?: string;
   extra?: React.ReactNode;
 }) {
+  const t = await getT();
   return (
     <div className="no-print mt-6 flex flex-wrap gap-2 border-t pt-4">
       {pdfSlot ?? null}
       {historyHref && (
         <LinkButton href={historyHref} variant="outline">
-          <History /> Historique
+          <History /> {t("Historique")}
         </LinkButton>
       )}
       {monthlyHref && (
         <LinkButton href={monthlyHref} variant="outline">
-          <CalendarRange /> Rapport mensuel
+          <CalendarRange /> {t("Rapport mensuel")}
         </LinkButton>
       )}
       {extra}
-      <LinkButton href="/" variant="secondary" className="ml-auto">
-        <Home /> Accueil
+      <LinkButton href="/" variant="secondary" className="ms-auto">
+        <Home /> {t("Accueil")}
       </LinkButton>
     </div>
-  );
-}
-
-export function PdfButtonPlaceholder() {
-  return (
-    <Button variant="outline" disabled title="Disponible prochainement">
-      <FileDown /> Export PDF
-    </Button>
   );
 }

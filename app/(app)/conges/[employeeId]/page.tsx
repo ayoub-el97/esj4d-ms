@@ -1,142 +1,229 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { employeeName, getEmployee } from "@/lib/data/employees";
-import { getLeaveAdjustments, getLeaveBalances, getLeaveRequests } from "@/lib/data/leaves";
-import { formatDateFr, formatDateTimeFr, todayISO } from "@/lib/dates";
+import { getLeaveBalances, getLeaveDetail, getLeaveRequests, getRecoveryBalances, getRecoveryDetail, getRecoveryRequests } from "@/lib/data/leaves";
+import { LEAVE_STATUS_LABELS } from "@/lib/module-types";
+import { formatDateFr, formatDateTimeFr, isISODate, todayISO } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
+import type { TFunction } from "@/lib/i18n/config";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
+import { DateField } from "@/components/date-field";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AdjustmentForm, LeaveRequestForm, RequestActions, StatusBadge } from "../leaves-ui";
+import { AdjustmentForm } from "../leaves-ui";
+import { LeaveRequestsTable, RecoveryRequestsTable } from "../tables";
 
-export const metadata = { title: "Congés de l'employé" };
+export const generateMetadata = pageTitle("Congé / Récupération de l'employé");
 
-export default async function EmployeeLeavesPage({ params }: { params: Promise<{ employeeId: string }> }) {
-  const user = await requireModule("conges");
+export default async function EmployeeLeavesPage({ params, searchParams }: { params: Promise<{ employeeId: string }>; searchParams: Promise<{ date?: string }> }) {
+  const [user, t] = await Promise.all([requireModule("conges"), getT()]);
   const { employeeId } = await params;
-  const today = todayISO();
-  const [employee, requests, balances, adjustments] = await Promise.all([
-    getEmployee(employeeId),
-    getLeaveRequests({ employee: employeeId }),
-    getLeaveBalances(today),
-    getLeaveAdjustments(employeeId),
-  ]);
+  const sp = await searchParams;
+  const asOf = isISODate(sp.date) ? sp.date : todayISO();
+  const employee = await getEmployee(employeeId);
   if (!employee) notFound();
-  const balance = balances.find((b) => b.employee_id === employeeId);
+
+  const [leaveBalances, recoveryBalances, leaveDetail, recoveryDetail, leaveRequests, recoveryRequests] = await Promise.all([
+    getLeaveBalances(asOf, { includeInactive: true }),
+    getRecoveryBalances(null, asOf, { includeInactive: true }),
+    getLeaveDetail(employeeId, asOf),
+    getRecoveryDetail(employeeId, asOf),
+    getLeaveRequests({ employee: employeeId }),
+    getRecoveryRequests({ employee: employeeId }),
+  ]);
+  const lb = leaveBalances.find((b) => b.employee_id === employeeId);
+  const rb = recoveryBalances.find((b) => b.employee_id === employeeId);
   const canEdit = user.permissions.conges.can_edit;
+  const isAdmin = user.role === "admin";
 
   return (
     <div>
-      <ModuleHeader title={`Congés — ${employeeName(employee)}`} subtitle={`NB ${employee.order_number} · embauche ${employee.hire_date ? formatDateFr(employee.hire_date) : "non renseignée"}`} backHref="/conges" />
+      <ModuleHeader
+        title={t("Congé / Récupération — {name}", { name: employeeName(employee) })}
+        subtitle={t("NB {nb} · {matricule} · date d'entrée {date}", { nb: employee.order_number, matricule: employee.matricule, date: employee.hire_date ? formatDateFr(employee.hire_date) : t("non renseignée") })}
+        backHref="/conges?section=solde-conges"
+      >
+        <Suspense>
+          <DateField value={asOf} label="Date de référence" />
+        </Suspense>
+      </ModuleHeader>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Congés acquis", balance?.accrued ?? 0],
-          ["Congés pris", balance?.taken ?? 0],
-          ["Ajustements", balance?.adjustments ?? 0],
-          ["Solde restant", balance?.balance ?? 0],
-        ].map(([label, value]) => (
-          <Card key={String(label)}>
-            <CardContent className="pt-4">
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="text-2xl font-semibold">{value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {!employee.hire_date && <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{t("Date d'entrée non renseignée : aucun congé n'est acquis. Renseignez-la dans la fiche employé.")}</p>}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Dates des congés</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
+      <h2 className="mb-2 text-lg font-semibold">{t("Congés")}</h2>
+      <Stats
+        t={t}
+        items={[
+          ["Mois complets de service", lb?.months ?? 0],
+          ["Congés acquis", lb?.accrued ?? 0],
+          ["Congés pris", lb?.taken ?? 0],
+          ["Corrections", lb?.adjustments ?? 0],
+          ["Solde restant", lb?.balance ?? 0],
+          ["Acceptés à venir", lb?.planned ?? 0],
+        ]}
+      />
+      <div className="mb-8 grid gap-6 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Détail des acquisitions")}</CardTitle>
+            <CardDescription>{t("Un crédit à chaque mois anniversaire de la date d'entrée.")}</CardDescription>
+          </CardHeader>
+          <CardContent className="max-h-80 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("Mois")}</TableHead>
+                  <TableHead>{t("Date du crédit")}</TableHead>
+                  <TableHead className="text-end">{t("Jours")}</TableHead>
+                  <TableHead className="text-end">{t("Cumul")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leaveDetail.schedule.length === 0 && (
                   <TableRow>
-                    <TableHead>Du</TableHead>
-                    <TableHead>Au</TableHead>
-                    <TableHead className="text-right">Jours</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Motif</TableHead>
-                    {canEdit && <TableHead />}
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      {t("Aucun mois complet de service à cette date.")}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {requests.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        Aucune demande.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {requests.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>{formatDateFr(r.start_date)}</TableCell>
-                      <TableCell>{formatDateFr(r.end_date)}</TableCell>
-                      <TableCell className="text-right">{r.days}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={r.status} />
-                      </TableCell>
-                      <TableCell className="max-w-48 truncate">{r.reason}</TableCell>
-                      {canEdit && (
-                        <TableCell>
-                          <RequestActions request={r} canEdit />
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Ajustements du solde</CardTitle>
-              <CardDescription>Chaque ajustement est daté, motivé et journalisé.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Jours</TableHead>
-                    <TableHead>Motif</TableHead>
+                )}
+                {leaveDetail.schedule.map((s) => (
+                  <TableRow key={s.month_index}>
+                    <TableCell>{s.month_index}</TableCell>
+                    <TableCell>{formatDateFr(s.credit_date)}</TableCell>
+                    <TableCell className="text-end">+{s.days}</TableCell>
+                    <TableCell className="text-end">{s.cumulative}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {adjustments.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        Aucun ajustement.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {adjustments.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell>{formatDateTimeFr(a.created_at)}</TableCell>
-                      <TableCell className="text-right">{a.days > 0 ? `+${a.days}` : a.days}</TableCell>
-                      <TableCell>{a.reason}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {user.role === "admin" && (
-                <div className="mt-4 border-t pt-4">
-                  <AdjustmentForm employeeId={employeeId} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {canEdit && <LeaveRequestForm employees={[{ id: employee.id, label: employeeName(employee) }]} defaultEmployee={employee.id} />}
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <DaysCard t={t} title={t("Jours de congé pris")} days={leaveDetail.taken} />
+        <AdjustmentsCard t={t} title={t("Corrections du solde de congés")} adjustments={leaveDetail.adjustments} form={isAdmin ? <AdjustmentForm employeeId={employeeId} kind="conge" /> : null} />
       </div>
+      <h3 className="mb-2 font-semibold">{t("Demandes de congé")}</h3>
+      <LeaveRequestsTable requests={leaveRequests} canEdit={canEdit} showEmployee={false} />
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="conges-historique" params={{ employee: employeeId }} />} historyHref="/conges/historique" />
+      <h2 className="mb-2 mt-10 text-lg font-semibold">{t("Récupération")}</h2>
+      <Stats
+        t={t}
+        items={[
+          ["Repos travaillés validés", rb?.credits_total ?? 0],
+          ["Récupération acquise", rb?.credits_total ?? 0],
+          ["Récupération prise", rb?.taken_total ?? 0],
+          ["Corrections", rb?.adjustments ?? 0],
+          ["Solde restant", rb?.balance ?? 0],
+          ["En attente", rb?.pending ?? 0],
+        ]}
+      />
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Crédits de récupération")}</CardTitle>
+            <CardDescription>{t("Un crédit par jour de repos travaillé pointé.")}</CardDescription>
+          </CardHeader>
+          <CardContent className="max-h-80 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("Repos travaillé le")}</TableHead>
+                  <TableHead>{t("Utilisation")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recoveryDetail.credits.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-muted-foreground">
+                      {t("Aucun crédit.")}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {recoveryDetail.credits.map((c) => (
+                  <TableRow key={c.worked_rest_date}>
+                    <TableCell>{formatDateFr(c.worked_rest_date)}</TableCell>
+                    <TableCell className="text-xs">{c.request_status ? t("Demande {status}", { status: t(LEAVE_STATUS_LABELS[c.request_status]).toLowerCase() }) : <span className="text-muted-foreground">{t("Disponible")}</span>}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <DaysCard t={t} title={t("Jours de récupération pris")} days={recoveryDetail.taken} />
+        <AdjustmentsCard t={t} title={t("Corrections du solde de récupération")} adjustments={recoveryDetail.adjustments} form={isAdmin ? <AdjustmentForm employeeId={employeeId} kind="recuperation" /> : null} />
+      </div>
+      <h3 className="mb-2 font-semibold">{t("Demandes de récupération")}</h3>
+      <RecoveryRequestsTable requests={recoveryRequests} canEdit={canEdit} showEmployee={false} />
+
+      <ModuleButtons pdfSlot={<PdfExportButton kind="conges-employe" params={{ employee: employeeId, date: asOf }} />} historyHref="/conges/historique" />
     </div>
+  );
+}
+
+function Stats({ t, items }: { t: TFunction; items: [string, number][] }) {
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map(([label, value]) => (
+        <Card key={label}>
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">{t(label)}</div>
+            <div className="text-2xl font-semibold">{value}</div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function DaysCard({ t, title, days }: { t: TFunction; title: string; days: { day: string; source: "pointage" | "demande" }[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{t("Source : pointage, ou demande acceptée pour un jour passé non pointé.")}</CardDescription>
+      </CardHeader>
+      <CardContent className="max-h-80 overflow-y-auto">
+        {days.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("Aucun jour pris.")}</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {days.map((d) => (
+              <li key={d.day} className="flex justify-between">
+                <span>{formatDateFr(d.day)}</span>
+                <span className="text-xs text-muted-foreground">{d.source === "pointage" ? t("Pointage") : t("Demande acceptée")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdjustmentsCard({ t, title, adjustments, form }: { t: TFunction; title: string; adjustments: { id: string; days: number; reason: string; created_at: string }[]; form: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{t("Réservé à l'administrateur, motif obligatoire, journalisé.")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {adjustments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("Aucune correction.")}</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {adjustments.map((a) => (
+              <li key={a.id}>
+                <span className="font-medium">{a.days > 0 ? `+${a.days}` : a.days}</span> — {a.reason}
+                <div className="text-xs text-muted-foreground">{formatDateTimeFr(a.created_at)}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {form && <div className="border-t pt-3">{form}</div>}
+      </CardContent>
+    </Card>
   );
 }

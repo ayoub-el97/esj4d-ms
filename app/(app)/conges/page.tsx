@@ -1,80 +1,289 @@
 import Link from "next/link";
+import { CalendarPlus, History, RotateCcw, Scale, Search, Timer } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName } from "@/lib/data/employees";
-import { getLeaveBalances, getLeaveRequests } from "@/lib/data/leaves";
-import { formatDateFr, todayISO } from "@/lib/dates";
+import { getAvailableCredits, getLeaveBalances, getLeaveRequests, getRecoveryBalances, getRecoveryRequests } from "@/lib/data/leaves";
+import { formatDateFr, isISODate, todayISO } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
+import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LinkButton } from "@/components/link-button";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/native-select";
 import { Badge } from "@/components/ui/badge";
-import { LeaveRequestForm, PendingRequests } from "./leaves-ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LeaveRequestForm, RecoveryRequestForm } from "./leaves-ui";
+import { LeaveRequestsTable, RecoveryRequestsTable } from "./tables";
 
-export const metadata = { title: "Congés" };
+export const generateMetadata = pageTitle("Congé / Récupération");
 
-export default async function CongesPage() {
-  const user = await requireModule("conges");
-  const today = todayISO();
-  const [employees, pending, balances] = await Promise.all([getEmployees({ onlyActive: true }), getLeaveRequests({ status: "en_attente" }), getLeaveBalances(today)]);
+type Section = "demande-conge" | "demande-recuperation" | "solde-conges" | "solde-recuperation";
+const SECTIONS: Section[] = ["demande-conge", "demande-recuperation", "solde-conges", "solde-recuperation"];
+type SP = { section?: string; q?: string; equipe?: string; date?: string; from?: string; to?: string };
+
+export default async function CongesPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const [user, t] = await Promise.all([requireModule("conges"), getT()]);
+  const sp = await searchParams;
+  const section: Section = SECTIONS.find((s) => s === sp.section) ?? "demande-conge";
   const canEdit = user.permissions.conges.can_edit;
-  const activeBalances = balances.filter((b) => b.is_active);
+
+  const tabs: { key: Section; label: string; icon: React.ReactNode }[] = [
+    { key: "demande-conge", label: t("Nouvelle demande congé"), icon: <CalendarPlus /> },
+    { key: "demande-recuperation", label: t("Nouvelle demande récupération"), icon: <RotateCcw /> },
+    { key: "solde-conges", label: t("Solde de congés"), icon: <Scale /> },
+    { key: "solde-recuperation", label: t("Solde de récupération"), icon: <Timer /> },
+  ];
 
   return (
     <div>
-      <ModuleHeader title="Congés" subtitle={`Soldes au ${formatDateFr(today)}`} />
+      <ModuleHeader title={t("Congé / Récupération")}>
+        <LinkButton href="/conges/historique" variant="outline" size="sm">
+          <History /> {t("Historique des congés")}
+        </LinkButton>
+        <LinkButton href="/conges/recuperation" variant="outline" size="sm">
+          <History /> {t("Historique des récupérations")}
+        </LinkButton>
+      </ModuleHeader>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-6">
-          <PendingRequests requests={pending} canEdit={canEdit} />
+      <nav className="mb-6 flex flex-wrap gap-2 border-b pb-3" aria-label={t("Sections")}>
+        {tabs.map((x) => (
+          <LinkButton key={x.key} href={`/conges?section=${x.key}`} variant={section === x.key ? "default" : "outline"}>
+            {x.icon} {x.label}
+          </LinkButton>
+        ))}
+      </nav>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Soldes de congés</CardTitle>
-              <CardDescription>Acquis = mois d&apos;ancienneté × taux (Paramètres › Réglages). Pris = demandes acceptées. Cliquez sur un nom pour l&apos;historique.</CardDescription>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>NB</TableHead>
-                    <TableHead>Nom et prénom</TableHead>
-                    <TableHead className="text-right">Mois</TableHead>
-                    <TableHead className="text-right">Acquis</TableHead>
-                    <TableHead className="text-right">Pris</TableHead>
-                    <TableHead className="text-right">Ajustements</TableHead>
-                    <TableHead className="text-right">Solde</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeBalances.map((b) => (
-                    <TableRow key={b.employee_id}>
-                      <TableCell>{b.order_number}</TableCell>
-                      <TableCell>
-                        <Link href={`/conges/${b.employee_id}`} className="font-medium hover:underline">
-                          {b.name}
-                        </Link>
-                        {!b.hire_date && <span className="ml-2 text-xs text-muted-foreground">(date d&apos;embauche manquante)</span>}
-                      </TableCell>
-                      <TableCell className="text-right">{b.months}</TableCell>
-                      <TableCell className="text-right">{b.accrued}</TableCell>
-                      <TableCell className="text-right">{b.taken}</TableCell>
-                      <TableCell className="text-right">{b.adjustments || ""}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={b.balance < 0 ? "destructive" : "secondary"}>{b.balance}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+      {section === "demande-conge" && <LeaveRequestSection canEdit={canEdit} />}
+      {section === "demande-recuperation" && <RecoveryRequestSection canEdit={canEdit} />}
+      {section === "solde-conges" && <LeaveBalanceSection sp={sp} />}
+      {section === "solde-recuperation" && <RecoveryBalanceSection sp={sp} />}
+
+      <ModuleButtons historyHref="/conges/historique" />
+    </div>
+  );
+}
+
+async function LeaveRequestSection({ canEdit }: { canEdit: boolean }) {
+  const [t, employees, pending, recent] = await Promise.all([getT(), getEmployees({ onlyActive: true }), getLeaveRequests({ status: "en_attente" }), getLeaveRequests({}, 15)]);
+  const recentDecided = recent.filter((r) => r.status !== "en_attente");
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="space-y-6">
+        <div>
+          <h2 className="mb-2 font-semibold">{t("Demandes de congé en attente ({count})", { count: pending.length })}</h2>
+          <LeaveRequestsTable requests={pending} canEdit={canEdit} />
         </div>
-
-        {canEdit && <LeaveRequestForm employees={employees.map((e) => ({ id: e.id, label: employeeName(e) }))} />}
+        <div>
+          <h2 className="mb-2 font-semibold">{t("Dernières décisions")}</h2>
+          <LeaveRequestsTable requests={recentDecided} canEdit={canEdit} />
+        </div>
       </div>
+      {canEdit && <LeaveRequestForm employees={employees.map((e) => ({ id: e.id, label: `${employeeName(e)} (${e.matricule})` }))} />}
+    </div>
+  );
+}
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="conges-soldes" params={{ date: today }} />} historyHref="/conges/historique" monthlyHref={`/conges/historique?mois=${today.slice(0, 7)}`} />
+async function RecoveryRequestSection({ canEdit }: { canEdit: boolean }) {
+  const [t, employees, pending, recent, credits] = await Promise.all([getT(), getEmployees({ onlyActive: true }), getRecoveryRequests({ status: "en_attente" }), getRecoveryRequests({}, 15), getAvailableCredits()]);
+  const recentDecided = recent.filter((r) => r.status !== "en_attente");
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="space-y-6">
+        <div>
+          <h2 className="mb-2 font-semibold">{t("Demandes de récupération en attente ({count})", { count: pending.length })}</h2>
+          <RecoveryRequestsTable requests={pending} canEdit={canEdit} />
+        </div>
+        <div>
+          <h2 className="mb-2 font-semibold">{t("Dernières décisions")}</h2>
+          <RecoveryRequestsTable requests={recentDecided} canEdit={canEdit} />
+        </div>
+      </div>
+      {canEdit && <RecoveryRequestForm employees={employees.map((e) => ({ id: e.id, label: `${employeeName(e)} (${e.matricule})` }))} credits={credits} />}
+    </div>
+  );
+}
+
+async function BalanceFilters({ section, sp, withPeriod }: { section: Section; sp: SP; withPeriod: boolean }) {
+  const t = await getT();
+  return (
+    <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-5">
+      <input type="hidden" name="section" value={section} />
+      <div className="space-y-1">
+        <Label htmlFor="q">{t("Recherche (nom ou matricule)")}</Label>
+        <Input id="q" name="q" defaultValue={sp.q} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="equipe">{t("Équipe")}</Label>
+        <NativeSelect id="equipe" name="equipe" defaultValue={sp.equipe ?? ""}>
+          <option value="">{t("Toutes")}</option>
+          <option value="collecte">{t("Collecte")}</option>
+          <option value="nettoiement">{t("Nettoiement")}</option>
+        </NativeSelect>
+      </div>
+      {withPeriod ? (
+        <>
+          <div className="space-y-1">
+            <Label htmlFor="from">{t("Du")}</Label>
+            <Input id="from" name="from" type="date" defaultValue={sp.from} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="to">{t("Au")}</Label>
+            <Input id="to" name="to" type="date" defaultValue={sp.to ?? todayISO()} />
+          </div>
+        </>
+      ) : (
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="date">{t("Date de référence")}</Label>
+          <Input id="date" name="date" type="date" defaultValue={sp.date ?? todayISO()} />
+        </div>
+      )}
+      <div className="flex items-end">
+        <Button type="submit">
+          <Search /> {t("Filtrer")}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+async function LeaveBalanceSection({ sp }: { sp: SP }) {
+  const t = await getT();
+  const asOf = isISODate(sp.date) ? sp.date : todayISO();
+  const rows = await getLeaveBalances(asOf, { team: sp.equipe, q: sp.q });
+  const pdfParams: Record<string, string> = { date: asOf };
+  if (sp.equipe) pdfParams.equipe = sp.equipe;
+  if (sp.q) pdfParams.q = sp.q;
+  return (
+    <div>
+      <BalanceFilters section="solde-conges" sp={sp} withPeriod={false} />
+      <p className="mb-2 text-xs text-muted-foreground">
+        {t("Solde = congés acquis − congés effectivement pris + corrections. Acquisition : 1,5 jour par mois complet de service, à chaque mois anniversaire de la date d'entrée (taux réglable).")}
+      </p>
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("NB")}</TableHead>
+              <TableHead>{t("Matricule")}</TableHead>
+              <TableHead>{t("Nom et prénom")}</TableHead>
+              <TableHead>{t("Équipe")}</TableHead>
+              <TableHead>{t("Poste")}</TableHead>
+              <TableHead>{t("Date d'entrée")}</TableHead>
+              <TableHead className="text-end">{t("Acquis au {date}", { date: formatDateFr(asOf) })}</TableHead>
+              <TableHead className="text-end">{t("Pris")}</TableHead>
+              <TableHead className="text-end">{t("Corrections")}</TableHead>
+              <TableHead className="text-end">{t("Solde restant")}</TableHead>
+              <TableHead className="text-end">{t("Acceptés à venir")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                  {t("Aucun employé ne correspond aux filtres.")}
+                </TableCell>
+              </TableRow>
+            )}
+            {rows.map((b) => (
+              <TableRow key={b.employee_id}>
+                <TableCell>{b.order_number}</TableCell>
+                <TableCell className="font-mono text-xs">{b.matricule}</TableCell>
+                <TableCell>
+                  <Link href={`/conges/${b.employee_id}?date=${asOf}`} className="font-medium hover:underline">
+                    {b.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{b.team_type ? t(TEAM_LABELS[b.team_type]) : ""}</TableCell>
+                <TableCell>{b.position ? t(POSITION_LABELS[b.position]) : ""}</TableCell>
+                <TableCell>{b.hire_date ? formatDateFr(b.hire_date) : <span className="text-destructive">{t("non renseignée")}</span>}</TableCell>
+                <TableCell className="text-end">{b.accrued}</TableCell>
+                <TableCell className="text-end">{b.taken}</TableCell>
+                <TableCell className="text-end">{b.adjustments || ""}</TableCell>
+                <TableCell className="text-end">
+                  <Badge variant={b.balance < 0 ? "destructive" : "secondary"}>{b.balance}</Badge>
+                </TableCell>
+                <TableCell className="text-end text-muted-foreground">{b.planned || ""}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="mt-3">
+        <PdfExportButton kind="conges-soldes" params={pdfParams} />
+      </div>
+    </div>
+  );
+}
+
+async function RecoveryBalanceSection({ sp }: { sp: SP }) {
+  const t = await getT();
+  const to = isISODate(sp.to) ? sp.to : todayISO();
+  const from = isISODate(sp.from) ? sp.from : null;
+  const rows = await getRecoveryBalances(from, to, { team: sp.equipe, q: sp.q });
+  const pdfParams: Record<string, string> = { to };
+  if (from) pdfParams.from = from;
+  if (sp.equipe) pdfParams.equipe = sp.equipe;
+  if (sp.q) pdfParams.q = sp.q;
+  return (
+    <div>
+      <BalanceFilters section="solde-recuperation" sp={sp} withPeriod />
+      <p className="mb-2 text-xs text-muted-foreground">
+        {t("Solde = jours de récupération acquis − jours effectivement pris + corrections, au {date}. Les colonnes « période » comptent les jours entre les dates choisies.", { date: formatDateFr(to) })}
+      </p>
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("NB")}</TableHead>
+              <TableHead>{t("Matricule")}</TableHead>
+              <TableHead>{t("Nom et prénom")}</TableHead>
+              <TableHead>{t("Équipe")}</TableHead>
+              <TableHead>{t("Poste")}</TableHead>
+              <TableHead className="text-end">{t("Repos travaillés (période)")}</TableHead>
+              <TableHead className="text-end">{t("Récupération acquise (période)")}</TableHead>
+              <TableHead className="text-end">{t("Récupération prise (période)")}</TableHead>
+              <TableHead className="text-end">{t("En attente")}</TableHead>
+              <TableHead className="text-end">{t("Solde restant")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center text-muted-foreground">
+                  {t("Aucun employé ne correspond aux filtres.")}
+                </TableCell>
+              </TableRow>
+            )}
+            {rows.map((b) => (
+              <TableRow key={b.employee_id}>
+                <TableCell>{b.order_number}</TableCell>
+                <TableCell className="font-mono text-xs">{b.matricule}</TableCell>
+                <TableCell>
+                  <Link href={`/conges/${b.employee_id}?date=${to}`} className="font-medium hover:underline">
+                    {b.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{b.team_type ? t(TEAM_LABELS[b.team_type]) : ""}</TableCell>
+                <TableCell>{b.position ? t(POSITION_LABELS[b.position]) : ""}</TableCell>
+                <TableCell className="text-end">{b.credits_period}</TableCell>
+                <TableCell className="text-end">{b.credits_period}</TableCell>
+                <TableCell className="text-end">{b.taken_period}</TableCell>
+                <TableCell className="text-end text-muted-foreground">{b.pending || ""}</TableCell>
+                <TableCell className="text-end">
+                  <Badge variant={b.balance < 0 ? "destructive" : "secondary"}>{b.balance}</Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="mt-3">
+        <PdfExportButton kind="recuperation-soldes" params={pdfParams} />
+      </div>
     </div>
   );
 }

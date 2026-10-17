@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addHoliday, deleteHoliday } from "@/lib/actions/admin";
 import { formatDateFr } from "@/lib/dates";
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 
 export function HolidaysUI({ holidays }: { holidays: { date: string; label: string }[] }) {
+  const { t } = useT();
   const [state, action] = useActionState(addHoliday, null);
   const [pending, start] = useTransition();
 
@@ -20,14 +22,14 @@ export function HolidaysUI({ holidays }: { holidays: { date: string; label: stri
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <Card>
         <CardHeader>
-          <CardTitle>Calendrier ({holidays.length})</CardTitle>
+          <CardTitle>{t("Calendrier ({count})", { count: holidays.length })}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Libellé</TableHead>
+                <TableHead>{t("Date")}</TableHead>
+                <TableHead>{t("Libellé")}</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -35,7 +37,7 @@ export function HolidaysUI({ holidays }: { holidays: { date: string; label: stri
               {holidays.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    Aucun jour férié enregistré.
+                    {t("Aucun jour férié enregistré.")}
                   </TableCell>
                 </TableRow>
               )}
@@ -55,7 +57,7 @@ export function HolidaysUI({ holidays }: { holidays: { date: string; label: stri
                           else toast.error(r.error);
                         })
                       }
-                      aria-label="Supprimer"
+                      aria-label={t("Supprimer")}
                     >
                       <Trash2 />
                     </Button>
@@ -69,20 +71,20 @@ export function HolidaysUI({ holidays }: { holidays: { date: string; label: stri
 
       <Card>
         <CardHeader>
-          <CardTitle>Ajouter un jour férié</CardTitle>
+          <CardTitle>{t("Ajouter un jour férié")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-3">
             <ActionMessage state={state} />
             <div className="space-y-1">
-              <Label htmlFor="date">Date</Label>
+              <Label htmlFor="date">{t("Date")}</Label>
               <Input id="date" name="date" type="date" required />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="label">Libellé</Label>
-              <Input id="label" name="label" placeholder="Ex. Fête du Travail" required />
+              <Label htmlFor="label">{t("Libellé")}</Label>
+              <Input id="label" name="label" placeholder={t("Ex. Fête du Travail")} required />
             </div>
-            <SubmitButton className="w-full">Ajouter</SubmitButton>
+            <SubmitButton className="w-full">{t("Ajouter")}</SubmitButton>
           </form>
         </CardContent>
       </Card>

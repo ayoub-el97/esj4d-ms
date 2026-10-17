@@ -82,13 +82,17 @@ export async function assertModule(
   return { user };
 }
 
-/** Traduit les erreurs levées par la base (triggers, RLS) en messages lisibles. */
+/**
+ * Traduit les erreurs levées par la base (triggers, RLS) en messages lisibles.
+ * Le résultat est une clé de traduction (texte français) : l'appelant le passe à t().
+ */
 export function friendlyError(message: string): string {
-  if (message.includes("JOURNEE_CLOTUREE")) return message.replace(/^.*JOURNEE_CLOTUREE:\s*/, "");
-  if (message.includes("ACCES_REFUSE")) return message.replace(/^.*ACCES_REFUSE:\s*/, "");
-  if (message.includes("JUSTIFICATION_REQUISE")) return message.replace(/^.*JUSTIFICATION_REQUISE:\s*/, "");
-  if (message.includes("JOURNEE_OUVERTE")) return message.replace(/^.*JOURNEE_OUVERTE:\s*/, "");
-  if (message.includes("DATE_INVALIDE")) return message.replace(/^.*DATE_INVALIDE:\s*/, "");
+  if (message.includes("JOURNEE_CLOTUREE")) return "Cette journée est clôturée : modification impossible.";
+  if (message.includes("ACCES_REFUSE") && message.includes("rouvrir")) return "Seul un administrateur peut rouvrir une journée.";
+  if (message.includes("ACCES_REFUSE")) return "Vous n'êtes pas autorisé à clôturer une journée.";
+  if (message.includes("JUSTIFICATION_REQUISE")) return "Indiquez le motif de la réouverture.";
+  if (message.includes("JOURNEE_OUVERTE")) return "Cette journée n'est pas clôturée.";
+  if (message.includes("DATE_INVALIDE")) return "Impossible de clôturer une journée future.";
   if (message.includes("row-level security")) return "Accès refusé par la sécurité de la base de données.";
   if (message.includes("duplicate key")) return "Doublon : cet enregistrement existe déjà.";
   return message;

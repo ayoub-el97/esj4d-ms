@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!hasPermission(user, built.module, "view")) return new Response("Accès refusé", { status: 403 });
 
   try {
-    const buffer = await renderPdf(built.element);
+    const buffer = await renderPdf(built);
     return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",

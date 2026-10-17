@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { KeyRound, UserCheck, UserX } from "lucide-react";
 import { createUser, resetUserPassword, setUserActive, updateUserRole } from "@/lib/actions/admin";
+import { useT } from "@/lib/i18n/client";
 import { ROLES, ROLE_LABELS, type ActionResult, type Profile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,15 +16,16 @@ import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 
 function notify(result: ActionResult) {
-  if (result.ok) toast.success(result.message ?? "Enregistré.");
+  if (result.ok) toast.success(result.message);
   else toast.error(result.error);
 }
 
 export function UsersTable({ users, currentUserId }: { users: Profile[]; currentUserId: string }) {
+  const { t } = useT();
   const [pending, start] = useTransition();
 
   const askPassword = (u: Profile) => {
-    const pwd = window.prompt(`Nouveau mot de passe pour ${u.email} (8 caractères minimum) :`);
+    const pwd = window.prompt(t("Nouveau mot de passe pour {email} (8 caractères minimum) :", { email: u.email }));
     if (!pwd) return;
     start(async () => notify(await resetUserPassword(u.id, pwd)));
   };
@@ -31,26 +33,26 @@ export function UsersTable({ users, currentUserId }: { users: Profile[]; current
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Utilisateurs ({users.length})</CardTitle>
+        <CardTitle>{t("Utilisateurs ({count})", { count: users.length })}</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Rôle</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("Nom")}</TableHead>
+              <TableHead>{t("E-mail")}</TableHead>
+              <TableHead>{t("Rôle")}</TableHead>
+              <TableHead>{t("Statut")}</TableHead>
+              <TableHead className="text-end">{t("Actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.map((u) => (
               <TableRow key={u.id} className={!u.is_active ? "opacity-60" : undefined}>
                 <TableCell className="font-medium">
-                  {u.full_name} {u.id === currentUserId && <Badge variant="outline">vous</Badge>}
+                  {u.full_name} {u.id === currentUserId && <Badge variant="outline">{t("vous")}</Badge>}
                 </TableCell>
-                <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                <TableCell className="text-muted-foreground" dir="ltr">{u.email}</TableCell>
                 <TableCell>
                   <NativeSelect
                     className="w-auto min-w-40"
@@ -60,16 +62,14 @@ export function UsersTable({ users, currentUserId }: { users: Profile[]; current
                   >
                     {ROLES.map((r) => (
                       <option key={r} value={r}>
-                        {ROLE_LABELS[r]}
+                        {t(ROLE_LABELS[r])}
                       </option>
                     ))}
                   </NativeSelect>
                 </TableCell>
-                <TableCell>
-                  {u.is_active ? <Badge>Actif</Badge> : <Badge variant="destructive">Désactivé</Badge>}
-                </TableCell>
-                <TableCell className="space-x-1 text-right whitespace-nowrap">
-                  <Button variant="outline" size="sm" disabled={pending} onClick={() => askPassword(u)} title="Réinitialiser le mot de passe">
+                <TableCell>{u.is_active ? <Badge>{t("Actif")}</Badge> : <Badge variant="destructive">{t("Désactivé")}</Badge>}</TableCell>
+                <TableCell className="space-x-1 whitespace-nowrap text-end">
+                  <Button variant="outline" size="sm" disabled={pending} onClick={() => askPassword(u)} title={t("Réinitialiser le mot de passe")}>
                     <KeyRound />
                   </Button>
                   {u.id !== currentUserId && (
@@ -78,7 +78,7 @@ export function UsersTable({ users, currentUserId }: { users: Profile[]; current
                       size="sm"
                       disabled={pending}
                       onClick={() => start(async () => notify(await setUserActive(u.id, !u.is_active)))}
-                      title={u.is_active ? "Désactiver" : "Réactiver"}
+                      title={u.is_active ? t("Désactiver") : t("Réactiver")}
                     >
                       {u.is_active ? <UserX /> : <UserCheck />}
                     </Button>
@@ -94,13 +94,14 @@ export function UsersTable({ users, currentUserId }: { users: Profile[]; current
 }
 
 export function CreateUserForm() {
+  const { t } = useT();
   const [state, action] = useActionState(createUser, null);
   const [key, setKey] = useState(0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nouveau compte</CardTitle>
+        <CardTitle>{t("Nouveau compte")}</CardTitle>
       </CardHeader>
       <CardContent>
         <form
@@ -113,29 +114,29 @@ export function CreateUserForm() {
         >
           <ActionMessage state={state} />
           <div className="space-y-1">
-            <Label htmlFor="full_name">Nom complet</Label>
+            <Label htmlFor="full_name">{t("Nom complet")}</Label>
             <Input id="full_name" name="full_name" required />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" name="email" type="email" required />
+            <Label htmlFor="email">{t("E-mail")}</Label>
+            <Input id="email" name="email" type="email" required dir="ltr" />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="role">Rôle</Label>
+            <Label htmlFor="role">{t("Rôle")}</Label>
             <NativeSelect id="role" name="role" defaultValue="lecture">
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
+                  {t(ROLE_LABELS[r])}
                 </option>
               ))}
             </NativeSelect>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="password">Mot de passe initial</Label>
-            <Input id="password" name="password" type="text" minLength={8} required />
-            <p className="text-xs text-muted-foreground">À communiquer à l&apos;utilisateur. 8 caractères minimum.</p>
+            <Label htmlFor="password">{t("Mot de passe initial")}</Label>
+            <Input id="password" name="password" type="text" minLength={8} required dir="ltr" />
+            <p className="text-xs text-muted-foreground">{t("À communiquer à l'utilisateur. 8 caractères minimum.")}</p>
           </div>
-          <SubmitButton className="w-full">Créer le compte</SubmitButton>
+          <SubmitButton className="w-full">{t("Créer le compte")}</SubmitButton>
         </form>
       </CardContent>
     </Card>

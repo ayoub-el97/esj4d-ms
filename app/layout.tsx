@@ -1,14 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Cairo, Geist } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/lib/i18n/client";
+import { LOCALE_DIR } from "@/lib/i18n/config";
+import { getLocale, getMessages, getT } from "@/lib/i18n/server";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+// Police arabe (Geist ne contient pas de glyphes arabes)
+const cairo = Cairo({ subsets: ["arabic", "latin"], variable: "--font-arabic" });
 
-export const metadata: Metadata = {
-  title: { default: "ESJ-4D — Gestion", template: "%s · ESJ-4D" },
-  description: "Système de gestion Collecte & Nettoiement",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: { default: t("ESJ-4D — Gestion"), template: "%s · ESJ-4D" },
+    description: t("Système de gestion Collecte & Nettoiement"),
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -16,12 +24,16 @@ export const viewport: Viewport = {
   themeColor: "#4f46e5",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const dir = LOCALE_DIR[locale];
   return (
-    <html lang="fr" className={`h-full antialiased font-sans ${geist.variable}`}>
+    <html lang={locale} dir={dir} className={`h-full antialiased font-sans ${geist.variable} ${cairo.variable}`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-        <Toaster position="top-center" richColors />
+        <I18nProvider locale={locale} messages={getMessages(locale)}>
+          {children}
+          <Toaster position="top-center" richColors dir={dir} />
+        </I18nProvider>
       </body>
     </html>
   );

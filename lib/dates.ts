@@ -1,31 +1,34 @@
-import { format, parseISO, isValid } from "date-fns";
-import { fr } from "date-fns/locale";
+import { format, parseISO, isValid, type Locale as DateFnsLocale } from "date-fns";
+import { arMA, enGB, fr } from "date-fns/locale";
+import type { Locale } from "@/lib/i18n/config";
 
-/** "2026-10-15" -> "15/10/2026" */
+const DATE_LOCALES: Record<Locale, DateFnsLocale> = { fr, en: enGB, ar: arMA };
+
+/** "2026-10-15" -> "15/10/2026" (format numérique, identique dans toutes les langues) */
 export function formatDateFr(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = parseISO(iso);
-  return isValid(d) ? format(d, "dd/MM/yyyy", { locale: fr }) : iso;
+  return isValid(d) ? format(d, "dd/MM/yyyy") : iso;
 }
 
-/** "2026-10-15" -> "jeudi 15 octobre 2026" */
-export function formatDateLongFr(iso: string | null | undefined): string {
+/** "2026-10-15" -> "jeudi 15 octobre 2026" / "Thursday 15 October 2026" / arabe */
+export function formatDateLongFr(iso: string | null | undefined, locale: Locale = "fr"): string {
   if (!iso) return "";
   const d = parseISO(iso);
-  return isValid(d) ? format(d, "EEEE d MMMM yyyy", { locale: fr }) : iso;
+  return isValid(d) ? format(d, "EEEE d MMMM yyyy", { locale: DATE_LOCALES[locale] }) : iso;
 }
 
-/** "2026-10" -> "octobre 2026" */
-export function formatMonthFr(ym: string): string {
+/** "2026-10" -> "octobre 2026" / "October 2026" / arabe */
+export function formatMonthFr(ym: string, locale: Locale = "fr"): string {
   const d = parseISO(`${ym}-01`);
-  return isValid(d) ? format(d, "MMMM yyyy", { locale: fr }) : ym;
+  return isValid(d) ? format(d, "MMMM yyyy", { locale: DATE_LOCALES[locale] }) : ym;
 }
 
 /** Horodatage de saisie : "15/10/2026 14:32" */
 export function formatDateTimeFr(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return isValid(d) ? format(d, "dd/MM/yyyy HH:mm", { locale: fr }) : iso;
+  return isValid(d) ? format(d, "dd/MM/yyyy HH:mm") : iso;
 }
 
 /** Date du jour au format ISO (yyyy-MM-dd), selon l'horloge locale du serveur/navigateur. */

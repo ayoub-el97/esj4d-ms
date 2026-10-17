@@ -2,27 +2,25 @@
 
 import { useActionState } from "react";
 import { savePermissions } from "@/lib/actions/admin";
+import { useT } from "@/lib/i18n/client";
 import { MODULES, MODULE_LABELS, ROLES, ROLE_LABELS } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 
-export function PermissionsForm({
-  perms,
-}: {
-  perms: Record<string, { can_view: boolean; can_edit: boolean }>;
-}) {
+export function PermissionsForm({ perms }: { perms: Record<string, { can_view: boolean; can_edit: boolean }> }) {
+  const { t } = useT();
   const [state, action] = useActionState(savePermissions, null);
   const roles = ROLES.filter((r) => r !== "admin");
+  const v = t("V");
+  const m = t("M");
 
   return (
     <form action={action}>
       <Card>
         <CardHeader>
-          <CardTitle>Droits par module</CardTitle>
-          <CardDescription>
-            <strong>V</strong> = consultation, <strong>M</strong> = modification. L&apos;administrateur a toujours tous les droits.
-          </CardDescription>
+          <CardTitle>{t("Droits par module")}</CardTitle>
+          <CardDescription>{t("V = consultation, M = modification. L'administrateur a toujours tous les droits.")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <ActionMessage state={state} />
@@ -30,29 +28,27 @@ export function PermissionsForm({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Module</TableHead>
+                  <TableHead>{t("Module")}</TableHead>
                   {roles.map((r) => (
                     <TableHead key={r} className="text-center">
-                      {ROLE_LABELS[r]}
-                      <div className="text-[10px] font-normal text-muted-foreground">V&nbsp;&nbsp;/&nbsp;&nbsp;M</div>
+                      {t(ROLE_LABELS[r])}
+                      <div className="text-[10px] font-normal text-muted-foreground">
+                        {v}&nbsp;&nbsp;/&nbsp;&nbsp;{m}
+                      </div>
                     </TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {MODULES.map((m) => (
-                  <TableRow key={m}>
-                    <TableCell className="font-medium">{MODULE_LABELS[m]}</TableCell>
+                {MODULES.map((mod) => (
+                  <TableRow key={mod}>
+                    <TableCell className="font-medium">{t(MODULE_LABELS[mod])}</TableCell>
                     {roles.map((r) => {
-                      const p = perms[`${r}:${m}`] ?? { can_view: false, can_edit: false };
+                      const p = perms[`${r}:${mod}`] ?? { can_view: false, can_edit: false };
                       return (
                         <TableCell key={r} className="text-center">
-                          <label className="mx-1 inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" name={`view:${r}:${m}`} defaultChecked={p.can_view} className="size-4 accent-indigo-600" />
-                          </label>
-                          <label className="mx-1 inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" name={`edit:${r}:${m}`} defaultChecked={p.can_edit} className="size-4 accent-indigo-600" />
-                          </label>
+                          <input type="checkbox" name={`view:${r}:${mod}`} defaultChecked={p.can_view} aria-label={`${v} ${t(ROLE_LABELS[r])}`} className="mx-1 size-4 accent-indigo-600" />
+                          <input type="checkbox" name={`edit:${r}:${mod}`} defaultChecked={p.can_edit} aria-label={`${m} ${t(ROLE_LABELS[r])}`} className="mx-1 size-4 accent-indigo-600" />
                         </TableCell>
                       );
                     })}
@@ -61,7 +57,7 @@ export function PermissionsForm({
               </TableBody>
             </Table>
           </div>
-          <SubmitButton>Enregistrer les permissions</SubmitButton>
+          <SubmitButton>{t("Enregistrer les permissions")}</SubmitButton>
         </CardContent>
       </Card>
     </form>

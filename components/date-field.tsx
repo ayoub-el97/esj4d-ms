@@ -3,10 +3,12 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Sélecteur de date (ou de mois) synchronisé avec l'URL (?date=… / ?mois=…).
  * Permet de consulter et saisir des journées précédentes.
+ * `label` est une clé de traduction (texte français).
  */
 export function DateField({
   value,
@@ -21,6 +23,7 @@ export function DateField({
   label?: string;
   max?: string;
 }) {
+  const { t } = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -28,7 +31,7 @@ export function DateField({
   return (
     <div className="flex items-center gap-2">
       <Label htmlFor={`date-${param}`} className="whitespace-nowrap text-sm">
-        {label}
+        {t(label)}
       </Label>
       <Input
         id={`date-${param}`}

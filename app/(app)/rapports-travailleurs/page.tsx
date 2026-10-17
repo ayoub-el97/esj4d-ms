@@ -2,251 +2,185 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName } from "@/lib/data/employees";
-import { getWorkerReport } from "@/lib/data/worker";
-import { currentMonth, formatDateFr, formatDateTimeFr, isISODate, monthRange } from "@/lib/dates";
-import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus } from "@/lib/types";
-import { LEAVE_STATUS_LABELS, TASK_STATUS_LABELS, WARNING_STATUS_LABELS } from "@/lib/module-types";
+import { getWorkersPeriodReport } from "@/lib/data/worker";
+import { currentMonth, formatDateFr, isISODate, isMonth, monthRange } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
+import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
+import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { PhotoGallery } from "@/components/photo-gallery";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableFooter, TableRow } from "@/components/ui/table";
 
-export const metadata = { title: "Rapports travailleurs" };
+export const generateMetadata = pageTitle("Rapports travailleurs");
 
-export default async function RapportsTravailleursPage({ searchParams }: { searchParams: Promise<{ employe?: string; from?: string; to?: string }> }) {
-  const user = await requireModule("rapports_travailleurs");
+type SP = { mois?: string; from?: string; to?: string; categorie?: string; employe?: string; poste?: string; equipe?: string; q?: string };
+
+/** Période choisie : du/au si renseignés, sinon le mois sélectionné (mois courant par défaut). */
+function resolvePeriod(sp: SP): { from: string; to: string; month: string | null } {
+  if (isISODate(sp.from) && isISODate(sp.to) && sp.from <= sp.to) return { from: sp.from, to: sp.to, month: null };
+  const month = isMonth(sp.mois) ? sp.mois : currentMonth();
+  return { ...monthRange(month), month };
+}
+
+export default async function RapportsTravailleursPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const [, t] = await Promise.all([requireModule("rapports_travailleurs"), getT()]);
   const sp = await searchParams;
-  const defaults = monthRange(currentMonth());
-  const from = isISODate(sp.from) ? sp.from : defaults.from;
-  const to = isISODate(sp.to) ? sp.to : defaults.to;
-  const employees = await getEmployees();
-  const report = sp.employe ? await getWorkerReport(sp.employe, from, to, user.permissions.avertissements.can_view) : null;
+  const { from, to, month } = resolvePeriod(sp);
+  const [rows, employees] = await Promise.all([getWorkersPeriodReport(from, to, sp), getEmployees()]);
+  const chauffeurs = employees.filter((e) => e.position === "chauffeur");
+  const period = t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) });
+
+  const totals = rows.reduce(
+    (a, r) => ({ worked: a.worked + r.worked_days, rest: a.rest + r.rest_days_worked, ot: a.ot + r.overtime_total, abs: a.abs + r.absences + r.sick_days, leave: a.leave + r.leave_days, hol: a.hol + r.holidays_worked }),
+    { worked: 0, rest: 0, ot: 0, abs: 0, leave: 0, hol: 0 },
+  );
+  const pdfParams: Record<string, string> = { from, to };
+  for (const k of ["categorie", "employe", "poste", "equipe", "q"] as const) if (sp[k]) pdfParams[k] = sp[k]!;
 
   return (
     <div>
-      <ModuleHeader title="Rapports travailleurs" subtitle={report ? `${employeeName(report.employee)} — du ${formatDateFr(from)} au ${formatDateFr(to)}` : "Choisissez un employé et une période"} />
+      <ModuleHeader title={t("Rapports travailleurs")} subtitle={t("Rapport des employés {period}", { period })} />
 
-      <form className="mb-6 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4">
+      <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 lg:grid-cols-5">
         <div className="space-y-1">
-          <Label htmlFor="employe">Employé</Label>
-          <NativeSelect id="employe" name="employe" defaultValue={sp.employe ?? ""} required>
-            <option value="">— Choisir —</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.order_number}. {employeeName(e)} ({POSITION_LABELS[e.position]})
+          <Label htmlFor="mois">{t("Mois")}</Label>
+          <Input id="mois" name="mois" type="month" defaultValue={month ?? ""} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="from">{t("ou du")}</Label>
+          <Input id="from" name="from" type="date" defaultValue={month ? "" : from} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="to">{t("au")}</Label>
+          <Input id="to" name="to" type="date" defaultValue={month ? "" : to} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="categorie">{t("Catégorie")}</Label>
+          <NativeSelect id="categorie" name="categorie" defaultValue={sp.categorie ?? ""}>
+            <option value="">{t("Toutes")}</option>
+            <option value="collecte">{t("Collecte")}</option>
+            <option value="nettoiement">{t("Nettoiement")}</option>
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="poste">{t("Poste")}</Label>
+          <NativeSelect id="poste" name="poste" defaultValue={sp.poste ?? ""}>
+            <option value="">{t("Tous")}</option>
+            <option value="chauffeur">{t("Chauffeur")}</option>
+            <option value="rippeur">{t("Rippeur")}</option>
+            <option value="balayeur">{t("Balayeur")}</option>
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="equipe">{t("Équipe (chauffeur)")}</Label>
+          <NativeSelect id="equipe" name="equipe" defaultValue={sp.equipe ?? ""}>
+            <option value="">{t("Toutes")}</option>
+            {chauffeurs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {t("Équipe {name}", { name: employeeName(c) })}
               </option>
             ))}
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="from">Du</Label>
-          <Input id="from" name="from" type="date" defaultValue={from} />
+          <Label htmlFor="employe">{t("Employé")}</Label>
+          <NativeSelect id="employe" name="employe" defaultValue={sp.employe ?? ""}>
+            <option value="">{t("Tous")}</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {employeeName(e)}
+              </option>
+            ))}
+          </NativeSelect>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="to">Au</Label>
-          <Input id="to" name="to" type="date" defaultValue={to} />
+        <div className="space-y-1 lg:col-span-2">
+          <Label htmlFor="q">{t("Recherche (nom ou matricule)")}</Label>
+          <Input id="q" name="q" defaultValue={sp.q} />
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <Button type="submit">
-            <Search /> Consulter
+            <Search /> {t("Afficher")}
           </Button>
+          <LinkButton href="/rapports-travailleurs" variant="outline">
+            {t("Mois courant")}
+          </LinkButton>
         </div>
       </form>
 
-      {report && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              ["Jours travaillés", report.summary.worked],
-              ["Absences", report.summary.absent],
-              ["Maladie", report.summary.sick],
-              ["Congé (pointage)", report.summary.leave],
-              ["Repos", report.summary.rest],
-              ["Heures sup.", report.summary.overtime],
-            ].map(([label, value]) => (
-              <Card key={String(label)}>
-                <CardContent className="pt-4">
-                  <div className="text-xs text-muted-foreground">{label}</div>
-                  <div className="text-2xl font-semibold">{value}</div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+      <p className="mb-2 text-xs text-muted-foreground">{t("Calculé depuis les pointages : une même journée n'est jamais comptée deux fois, même avec plusieurs services. Jours travaillés = Présent + Jour de repos travaillé.")}</p>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Fiche — {employeeName(report.employee)} · {POSITION_LABELS[report.employee.position]} · {TEAM_LABELS[report.employee.team_type]} · NB {report.employee.order_number} · matricule {report.employee.matricule}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <h3 className="mb-2 font-medium">Pointages ({report.attendance.length})</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Entrée</TableHead>
-                    <TableHead>Sortie</TableHead>
-                    <TableHead>HS</TableHead>
-                    <TableHead>Observation</TableHead>
-                    <TableHead>Saisi le</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.attendance.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        Aucun pointage sur la période.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {report.attendance.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell>
-                        <Link href={`/pointage/${a.team_type}?date=${a.activity_date}`} className="hover:underline">
-                          {formatDateFr(a.activity_date)}
-                        </Link>
-                        {a.shift > 1 && <Badge variant="outline" className="ml-1">service {a.shift}</Badge>}
-                      </TableCell>
-                      <TableCell>{ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus]}</TableCell>
-                      <TableCell>{a.time_in?.slice(0, 5)}</TableCell>
-                      <TableCell>{a.time_out?.slice(0, 5)}</TableCell>
-                      <TableCell>{Number(a.overtime_hours) || ""}</TableCell>
-                      <TableCell className="max-w-48 truncate">{a.observation}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatDateTimeFr(a.updated_at)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Congés ({report.leaves.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm">
-                {report.leaves.length === 0 ? (
-                  <p className="text-muted-foreground">Aucune demande sur la période.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {report.leaves.map((l) => (
-                      <li key={l.id} className="flex justify-between">
-                        <span>
-                          {formatDateFr(l.start_date)} → {formatDateFr(l.end_date)} ({l.days} j)
-                        </span>
-                        <Badge variant={l.status === "acceptee" ? "default" : l.status === "refusee" ? "destructive" : "secondary"}>{LEAVE_STATUS_LABELS[l.status]}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Lieux de travail ({report.cleaningPlaces.length + report.collections.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm">
-                {report.cleaningPlaces.length + report.collections.length === 0 ? (
-                  <p className="text-muted-foreground">Aucun rapport journalier sur la période.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {report.cleaningPlaces.map((c) => (
-                      <li key={c.id}>
-                        <Link href={`/rapport-journalier/nettoiement?date=${c.activity_date}`} className="hover:underline">
-                          {formatDateFr(c.activity_date)}
-                        </Link>{" "}
-                        — Nettoiement : {c.location || "lieu non précisé"} {c.comment && <span className="text-muted-foreground">({c.comment})</span>}
-                      </li>
-                    ))}
-                    {report.collections.map((c) => (
-                      <li key={c.id}>
-                        <Link href={`/rapport-journalier/collecte/${c.id}`} className="hover:underline">
-                          {formatDateFr(c.activity_date)}
-                        </Link>{" "}
-                        — Collecte camion {c.truck?.matricule} : {c.sectors || "secteurs non précisés"}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Interventions réalisées ({report.tasks.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm">
-                {report.tasks.length === 0 ? (
-                  <p className="text-muted-foreground">Aucune tâche sur la période.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {report.tasks.map((t) => (
-                      <li key={t.id} className="flex justify-between gap-2">
-                        <span>
-                          <Link href={`/programme/${t.id}`} className="hover:underline">
-                            {formatDateFr(t.planned_date)}
-                          </Link>{" "}
-                          — {t.location || t.description}
-                        </span>
-                        <Badge variant={t.status === "realisee" ? "default" : "secondary"}>{TASK_STATUS_LABELS[t.status]}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            {user.permissions.avertissements.can_view && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Avertissements ({report.warnings.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm">
-                  {report.warnings.length === 0 ? (
-                    <p className="text-muted-foreground">Aucun avertissement sur la période.</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {report.warnings.map((w) => (
-                        <li key={w.id} className="flex justify-between gap-2">
-                          <span>
-                            <Link href={`/avertissements/${w.id}`} className="hover:underline">
-                              {formatDateFr(w.incident_date)}
-                            </Link>{" "}
-                            — {w.description}
-                          </span>
-                          <Badge variant="outline">{WARNING_STATUS_LABELS[w.status]}</Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("NB")}</TableHead>
+              <TableHead>{t("Matricule")}</TableHead>
+              <TableHead>{t("Nom et prénom")}</TableHead>
+              <TableHead>{t("Équipe")}</TableHead>
+              <TableHead>{t("Poste")}</TableHead>
+              <TableHead className="text-end">{t("Jours travaillés")}</TableHead>
+              <TableHead className="text-end">{t("Repos travaillés")}</TableHead>
+              <TableHead className="text-end">{t("Total HS")}</TableHead>
+              <TableHead className="text-end">{t("Absences")}</TableHead>
+              <TableHead className="text-end">{t("Congés")}</TableHead>
+              <TableHead className="text-end">{t("Fériés travaillés")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                  {t("Aucun employé ne correspond aux filtres.")}
+                </TableCell>
+              </TableRow>
             )}
-          </div>
+            {rows.map((r) => (
+              <TableRow key={r.employee_id}>
+                <TableCell>{r.order_number}</TableCell>
+                <TableCell className="font-mono text-xs">{r.matricule}</TableCell>
+                <TableCell>
+                  <Link href={`/rapports-travailleurs/${r.employee_id}?from=${from}&to=${to}`} className="font-medium hover:underline">
+                    {r.name}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  {t(TEAM_LABELS[r.team_type])}
+                  {r.crew && <div className="text-xs text-muted-foreground">{t("Équipe {name}", { name: r.crew })}</div>}
+                </TableCell>
+                <TableCell>{t(POSITION_LABELS[r.position])}</TableCell>
+                <TableCell className="text-end font-medium">{r.worked_days}</TableCell>
+                <TableCell className="text-end">{r.rest_days_worked}</TableCell>
+                <TableCell className="text-end">{r.overtime_total}</TableCell>
+                <TableCell className="text-end" title={t("dont maladie : {n}", { n: r.sick_days })}>
+                  {r.absences + r.sick_days}
+                </TableCell>
+                <TableCell className="text-end">{r.leave_days}</TableCell>
+                <TableCell className="text-end">{r.holidays_worked}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          {rows.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={5}>{t("Total ({count} employés)", { count: rows.length })}</TableCell>
+                <TableCell className="text-end">{totals.worked}</TableCell>
+                <TableCell className="text-end">{totals.rest}</TableCell>
+                <TableCell className="text-end">{totals.ot}</TableCell>
+                <TableCell className="text-end">{totals.abs}</TableCell>
+                <TableCell className="text-end">{totals.leave}</TableCell>
+                <TableCell className="text-end">{totals.hol}</TableCell>
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Photos avant / après ({report.photos.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PhotoGallery photos={report.photos.map((p) => ({ id: p.id, url: p.url, caption: `${formatDateFr(p.activity_date)} · ${p.phase.toUpperCase()}${p.location ? ` · ${p.location}` : ""}` }))} />
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <ModuleButtons pdfSlot={report ? <PdfExportButton kind="travailleur" params={{ employe: report.employee.id, from, to }} /> : undefined} />
+      <ModuleButtons pdfSlot={<PdfExportButton kind="travailleurs-periode" params={pdfParams} />} />
     </div>
   );
 }

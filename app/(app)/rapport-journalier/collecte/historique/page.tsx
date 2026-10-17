@@ -4,6 +4,7 @@ import { requireModule } from "@/lib/auth";
 import { getTrucks, employeeName } from "@/lib/data/employees";
 import { getCollectionReports } from "@/lib/data/reports";
 import { formatDateFr } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { Button } from "@/components/ui/button";
@@ -12,39 +13,39 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export const metadata = { title: "Historique — Rapports collecte" };
+export const generateMetadata = pageTitle("Historique des rapports de collecte");
 
 export default async function CollecteHistoriquePage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; truck?: string }> }) {
-  await requireModule("rapport_journalier");
+  const [, t] = await Promise.all([requireModule("rapport_journalier"), getT()]);
   const sp = await searchParams;
   const [reports, trucks] = await Promise.all([getCollectionReports(sp), getTrucks()]);
 
   return (
     <div>
-      <ModuleHeader title="Historique des rapports de collecte" subtitle={`${reports.length} rapport(s)`} backHref="/rapport-journalier/collecte" />
+      <ModuleHeader title={t("Historique des rapports de collecte")} subtitle={t("{count} rapport(s)", { count: reports.length })} backHref="/rapport-journalier/collecte" />
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4">
         <div className="space-y-1">
-          <Label htmlFor="from">Du</Label>
+          <Label htmlFor="from">{t("Du")}</Label>
           <Input id="from" name="from" type="date" defaultValue={sp.from} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="to">Au</Label>
+          <Label htmlFor="to">{t("Au")}</Label>
           <Input id="to" name="to" type="date" defaultValue={sp.to} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="truck">Camion</Label>
+          <Label htmlFor="truck">{t("Camion")}</Label>
           <NativeSelect id="truck" name="truck" defaultValue={sp.truck ?? ""}>
-            <option value="">Tous</option>
-            {trucks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.matricule}
+            <option value="">{t("Tous")}</option>
+            {trucks.map((tr) => (
+              <option key={tr.id} value={tr.id}>
+                {tr.matricule}
               </option>
             ))}
           </NativeSelect>
         </div>
         <div className="flex items-end">
           <Button type="submit">
-            <Search /> Filtrer
+            <Search /> {t("Filtrer")}
           </Button>
         </div>
       </form>
@@ -52,20 +53,20 @@ export default async function CollecteHistoriquePage({ searchParams }: { searchP
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Camion</TableHead>
-              <TableHead>Chauffeur</TableHead>
-              <TableHead>Rippeurs</TableHead>
-              <TableHead>Secteurs</TableHead>
-              <TableHead className="text-right">Tonnage</TableHead>
-              <TableHead className="text-right">Photos</TableHead>
+              <TableHead>{t("Date")}</TableHead>
+              <TableHead>{t("Camion")}</TableHead>
+              <TableHead>{t("Chauffeur")}</TableHead>
+              <TableHead>{t("Rippeurs")}</TableHead>
+              <TableHead>{t("Secteurs")}</TableHead>
+              <TableHead className="text-end">{t("Tonnage")}</TableHead>
+              <TableHead className="text-end">{t("Photos")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {reports.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground">
-                  Aucun rapport.
+                  {t("Aucun rapport.")}
                 </TableCell>
               </TableRow>
             )}
@@ -80,8 +81,8 @@ export default async function CollecteHistoriquePage({ searchParams }: { searchP
                 <TableCell>{r.chauffeur ? employeeName(r.chauffeur) : "—"}</TableCell>
                 <TableCell>{r.rippers.length}</TableCell>
                 <TableCell className="max-w-56 truncate">{r.sectors}</TableCell>
-                <TableCell className="text-right">{r.truckReport ? Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0) : ""}</TableCell>
-                <TableCell className="text-right">{r.photosAvant.length + r.photosApres.length}</TableCell>
+                <TableCell className="text-end">{r.truckReport ? Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0) : ""}</TableCell>
+                <TableCell className="text-end">{r.photosAvant.length + r.photosApres.length}</TableCell>
               </TableRow>
             ))}
           </TableBody>

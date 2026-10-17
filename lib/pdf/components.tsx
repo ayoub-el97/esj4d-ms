@@ -1,10 +1,13 @@
-import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
+import { usePdf } from "./context";
+import type { PhotoItem } from "@/lib/photo-types";
 
 export const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   logo: { width: 40, height: 40, backgroundColor: "#4f46e5", color: "#fff", fontSize: 18, textAlign: "center", paddingTop: 11, borderRadius: 6 },
+  logoImage: { width: 44, height: 44, objectFit: "contain" },
   title: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "center" },
   subtitle: { fontSize: 9, color: "#555", textAlign: "center", marginTop: 2 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8, fontSize: 9 },
@@ -20,15 +23,17 @@ export const styles = StyleSheet.create({
   small: { fontSize: 8, color: "#555" },
 });
 
+/** `label` : clé de traduction (texte français), traduite à l'affichage. */
 export type Column = { key: string; label: string; width: number; align?: "left" | "center" | "right" };
 
 export function PdfTable({ columns, rows }: { columns: Column[]; rows: (Record<string, ReactNode> & { _group?: string })[] }) {
+  const { t } = usePdf();
   return (
     <View style={styles.table}>
       <View style={[styles.tr, styles.th]} fixed>
         {columns.map((c, i) => (
           <View key={c.key} style={[styles.td, { width: `${c.width}%` }, i === columns.length - 1 ? styles.tdLast : {}]}>
-            <Text style={{ textAlign: c.align ?? "left" }}>{c.label}</Text>
+            <Text style={{ textAlign: c.align ?? "left" }}>{t(c.label)}</Text>
           </View>
         ))}
       </View>
@@ -53,26 +58,55 @@ export function PdfTable({ columns, rows }: { columns: Column[]; rows: (Record<s
   );
 }
 
+function Logo({ company }: { company: string }) {
+  const { logoUrl } = usePdf();
+  // eslint-disable-next-line jsx-a11y/alt-text
+  if (logoUrl) return <Image src={logoUrl} style={styles.logoImage} />;
+  return <Text style={styles.logo}>{company.slice(0, 1).toUpperCase()}</Text>;
+}
+
+/** En-tête : logo de la société, titre (déjà traduit) et sous-titre. */
 export function PdfHeader({ company, title, subtitle }: { company: string; title: string; subtitle?: string }) {
   return (
     <View style={styles.header} fixed>
-      <Text style={styles.logo}>{company.slice(0, 1).toUpperCase()}</Text>
+      <Logo company={company} />
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
-      <Text style={[styles.logo, { backgroundColor: "#64748b" }]}>{company.slice(0, 1).toUpperCase()}</Text>
+      <View style={{ width: 44, alignItems: "flex-end" }}>
+        <Text style={[styles.small, { textAlign: "right" }]}>{company}</Text>
+      </View>
     </View>
   );
 }
 
 export function PdfFooter({ company, generatedBy }: { company: string; generatedBy: string }) {
+  const { t, locale } = usePdf();
   return (
     <View style={styles.footer} fixed>
-      <Text>
-        {company} — généré le {new Date().toLocaleString("fr-FR")} par {generatedBy}
-      </Text>
-      <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`} />
+      <Text>{t("{company} — généré le {date} par {user}", { company, date: new Date().toLocaleString(locale === "en" ? "en-GB" : "fr-FR"), user: generatedBy })}</Text>
+      <Text render={({ pageNumber, totalPages }) => t("Page {n} / {total}", { n: pageNumber, total: totalPages ?? pageNumber })} />
+    </View>
+  );
+}
+
+/** Grille de photos (titre = clé de traduction). */
+export function PhotoGrid({ title, photos }: { title: string; photos: PhotoItem[] }) {
+  const { t } = usePdf();
+  return (
+    <View style={{ marginTop: 8 }}>
+      <Text style={styles.section}>{t(title)}</Text>
+      {photos.length === 0 ? (
+        <Text style={styles.small}>{t("Aucune photo")}</Text>
+      ) : (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {photos.map((p) => (
+            // eslint-disable-next-line jsx-a11y/alt-text
+            <Image key={p.id} src={p.url} style={{ width: 160, height: 120, objectFit: "cover", borderWidth: 1, borderColor: "#999" }} />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -90,8 +124,9 @@ export function PdfDocument({
   orientation?: "portrait" | "landscape";
   children: ReactNode;
 }) {
+  const { locale } = usePdf();
   return (
-    <Document title={title} author={company} language="fr">
+    <Document title={title} author={company} language={locale}>
       <Page size="A4" orientation={orientation} style={styles.page}>
         {children}
         <PdfFooter company={company} generatedBy={generatedBy} />

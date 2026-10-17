@@ -55,6 +55,42 @@ export async function getEmployee(id: string): Promise<Employee | null> {
   return data;
 }
 
+export type EmployeeFilters = { equipe?: string; poste?: string; statut?: string; q?: string };
+export type EmployeeRow = Employee & { truck_label: string; chauffeur_label: string };
+
+/** Liste filtrée des employés avec libellés d'affectation (page Employés et Profil). */
+export async function getEmployeeRows(f: EmployeeFilters): Promise<{ rows: EmployeeRow[]; total: number; active: number }> {
+  const [employees, trucks] = await Promise.all([getEmployees(), getTrucks()]);
+  const trucksById = new Map(trucks.map((t) => [t.id, t.matricule]));
+  const namesById = new Map(employees.map((e) => [e.id, employeeName(e)]));
+  const q = (f.q ?? "").toLowerCase();
+  const rows = employees
+    .filter((e) => !f.equipe || e.team_type === f.equipe)
+    .filter((e) => !f.poste || e.position === f.poste)
+    .filter((e) => (f.statut === "inactif" ? !e.is_active : f.statut === "tous" ? true : e.is_active))
+    .filter((e) => !q || `${e.last_name} ${e.first_name} ${e.matricule}`.toLowerCase().includes(q))
+    .map((e) => ({
+      ...e,
+      truck_label: e.truck_id ? (trucksById.get(e.truck_id) ?? "") : "",
+      chauffeur_label: e.chauffeur_id ? (namesById.get(e.chauffeur_id) ?? "") : "",
+    }));
+  return { rows, total: employees.length, active: employees.filter((e) => e.is_active).length };
+}
+
+export type RestDayChange = { id: number; old_rest_day: number | null; new_rest_day: number | null; changed_by_email: string | null; changed_at: string };
+
+/** Historique des changements du jour de repos habituel (alimenté par un trigger). */
+export async function getRestDayHistory(employeeId: string): Promise<RestDayChange[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("employee_rest_day_history")
+    .select("id, old_rest_day, new_rest_day, changed_by_email, changed_at")
+    .eq("employee_id", employeeId)
+    .order("changed_at", { ascending: false })
+    .returns<RestDayChange[]>();
+  return data ?? [];
+}
+
 /** Chauffeurs avec leurs rippeurs rattachés (équipes de collecte). */
 export type CollectionTeam = { chauffeur: Employee; truck: Truck | null; rippeurs: Employee[] };
 

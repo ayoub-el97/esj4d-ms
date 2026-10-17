@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
+import { useT } from "@/lib/i18n/client";
 import { POSITION_LABELS, WEEKDAY_LABELS, type Position } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,61 +16,66 @@ export function EmployeeForm({
   employee,
   trucks,
   chauffeurs,
+  returnTo = "/employes",
 }: {
   employee: Employee | null;
   trucks: Truck[];
   chauffeurs: Employee[];
+  /** Page de retour après enregistrement (/employes ou /profil?onglet=employes) */
+  returnTo?: string;
 }) {
+  const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
 
   return (
     <form action={action}>
       <input type="hidden" name="id" value={employee?.id ?? ""} />
+      <input type="hidden" name="return_to" value={returnTo} />
       <Card>
         <CardHeader>
-          <CardTitle>{employee ? `Modifier ${employee.last_name} ${employee.first_name}` : "Nouvel équipier"}</CardTitle>
+          <CardTitle>{employee ? t("Modifier {name}", { name: `${employee.last_name} ${employee.first_name}` }) : t("Nouvel équipier")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ActionMessage state={state} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="last_name">Nom</Label>
+              <Label htmlFor="last_name">{t("Nom")}</Label>
               <Input id="last_name" name="last_name" defaultValue={employee?.last_name} required />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="first_name">Prénom</Label>
+              <Label htmlFor="first_name">{t("Prénom")}</Label>
               <Input id="first_name" name="first_name" defaultValue={employee?.first_name} required />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="matricule">Matricule / identifiant</Label>
+              <Label htmlFor="matricule">{t("Matricule / identifiant")}</Label>
               <Input id="matricule" name="matricule" defaultValue={employee?.matricule} required />
             </div>
             <div className="space-y-1">
-              <Label>Numéro d&apos;ordre (NB)</Label>
-              <Input value={employee?.order_number ?? "attribué automatiquement"} disabled />
+              <Label>{t("Numéro d'ordre (NB)")}</Label>
+              <Input value={employee?.order_number ?? t("attribué automatiquement")} disabled />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="position">Poste</Label>
+              <Label htmlFor="position">{t("Poste")}</Label>
               <NativeSelect id="position" name="position" value={position} onChange={(e) => setPosition(e.target.value as Position)}>
                 {(Object.keys(POSITION_LABELS) as Position[]).map((p) => (
                   <option key={p} value={p}>
-                    {POSITION_LABELS[p]}
+                    {t(POSITION_LABELS[p])}
                   </option>
                 ))}
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
-                Équipe : {position === "balayeur" ? "Nettoiement" : "Collecte"} (déduite du poste)
+                {t("Équipe : {team} (déduite du poste)", { team: position === "balayeur" ? t("Nettoiement") : t("Collecte") })}
               </p>
             </div>
             {position === "chauffeur" && (
               <div className="space-y-1">
-                <Label htmlFor="truck_id">Camion (matricule)</Label>
+                <Label htmlFor="truck_id">{t("Camion (matricule)")}</Label>
                 <NativeSelect id="truck_id" name="truck_id" defaultValue={employee?.truck_id ?? ""}>
-                  <option value="">— Aucun —</option>
-                  {trucks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.matricule} {t.brand && `(${t.brand})`}
+                  <option value="">{t("— Aucun —")}</option>
+                  {trucks.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.matricule} {tr.brand && `(${tr.brand})`}
                     </option>
                   ))}
                 </NativeSelect>
@@ -77,9 +83,9 @@ export function EmployeeForm({
             )}
             {position === "rippeur" && (
               <div className="space-y-1">
-                <Label htmlFor="chauffeur_id">Chauffeur / équipe de rattachement</Label>
+                <Label htmlFor="chauffeur_id">{t("Chauffeur / équipe de rattachement")}</Label>
                 <NativeSelect id="chauffeur_id" name="chauffeur_id" defaultValue={employee?.chauffeur_id ?? ""}>
-                  <option value="">— Non affecté —</option>
+                  <option value="">{t("— Non affecté —")}</option>
                   {chauffeurs.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.last_name} {c.first_name}
@@ -89,33 +95,34 @@ export function EmployeeForm({
               </div>
             )}
             <div className="space-y-1">
-              <Label htmlFor="rest_day">Jour de repos habituel</Label>
+              <Label htmlFor="rest_day">{t("Jour de repos habituel")}</Label>
               <NativeSelect id="rest_day" name="rest_day" defaultValue={employee?.rest_day ?? ""}>
-                <option value="">— Non défini —</option>
+                <option value="">{t("— Non défini —")}</option>
                 {WEEKDAY_LABELS.map((d, i) => (
                   <option key={i} value={i}>
-                    {d}
+                    {t(d)}
                   </option>
                 ))}
               </NativeSelect>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="hire_date">Date d&apos;embauche (début des congés acquis)</Label>
+              <Label htmlFor="hire_date">{t("Date de début de travail")}</Label>
               <Input id="hire_date" name="hire_date" type="date" defaultValue={employee?.hire_date ?? ""} />
+              <p className="text-xs text-muted-foreground">{t("Sert au calcul des congés acquis.")}</p>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="phone">Téléphone</Label>
-              <Input id="phone" name="phone" defaultValue={employee?.phone} />
+              <Label htmlFor="phone">{t("Téléphone")}</Label>
+              <Input id="phone" name="phone" defaultValue={employee?.phone} dir="ltr" />
             </div>
             <label className="flex items-center gap-2 self-end pb-2 text-sm">
               <input type="checkbox" name="is_active" defaultChecked={employee?.is_active ?? true} className="size-4 accent-indigo-600" />
-              Employé actif
+              {t("Employé actif")}
             </label>
           </div>
           <div className="flex gap-2">
-            <SubmitButton>{employee ? "Enregistrer les modifications" : "Créer l'équipier"}</SubmitButton>
-            <LinkButton href="/employes" variant="outline">
-              Annuler
+            <SubmitButton>{employee ? t("Enregistrer les modifications") : t("Créer l'équipier")}</SubmitButton>
+            <LinkButton href={returnTo} variant="outline">
+              {t("Annuler")}
             </LinkButton>
           </div>
         </CardContent>

@@ -21,6 +21,10 @@ export type SheetRow = {
   rest_day: number | null;
   /** Agent ajouté pour la journée (remplaçant / renfort) */
   is_extra: boolean;
+  /** Date/heure de la dernière saisie (distincte de la date d'activité) */
+  entered_at: string | null;
+  /** Congé ou récupération accepté pour cette date */
+  planned: "conge" | "recuperation" | null;
 };
 
 export type SheetPayload = {

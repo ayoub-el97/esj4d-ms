@@ -2,8 +2,9 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { buildSheet, getWorkDay } from "@/lib/data/attendance";
-import { getSettings } from "@/lib/data/settings";
+import { getSettings, getTeamLeads, logoUrl } from "@/lib/data/settings";
 import { isISODate, todayISO, formatDateLongFr } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { TEAM_LABELS, TEAM_SLUGS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -13,27 +14,23 @@ import { PdfExportButton } from "@/components/pdf-export-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SheetForm } from "./sheet-form";
 
-export default async function SheetPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ equipe: string }>;
-  searchParams: Promise<{ date?: string }>;
-}) {
-  const user = await requireModule("pointage");
+export const generateMetadata = pageTitle("Feuille de présence");
+
+export default async function SheetPage({ params, searchParams }: { params: Promise<{ equipe: string }>; searchParams: Promise<{ date?: string }> }) {
+  const [user, { t, locale }] = await Promise.all([requireModule("pointage"), getI18n()]);
   const { equipe } = await params;
   const team = TEAM_SLUGS[equipe];
   if (!team) notFound();
 
   const sp = await searchParams;
   const date = isISODate(sp.date) ? sp.date : todayISO();
-  const [workDay, sheet, settings] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings()]);
+  const [workDay, sheet, settings, leads] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings(), getTeamLeads(true)]);
   const closed = workDay?.status === "closed";
   const canEdit = user.permissions.pointage.can_edit && !closed;
 
   return (
     <div>
-      <ModuleHeader title={`Feuille de présence — ${TEAM_LABELS[team]}`} subtitle={formatDateLongFr(date)} backHref={`/pointage?date=${date}`}>
+      <ModuleHeader title={t("Feuille de présence — {team}", { team: t(TEAM_LABELS[team]) })} subtitle={formatDateLongFr(date, locale)} backHref={`/pointage?date=${date}`}>
         <Suspense>
           <DateField value={date} />
         </Suspense>
@@ -42,12 +39,12 @@ export default async function SheetPage({
 
       {closed && (
         <Alert className="mb-4">
-          <AlertDescription>Journée clôturée : la feuille est en consultation seule. Un administrateur peut la rouvrir depuis le module Clôturer la journée.</AlertDescription>
+          <AlertDescription>{t("Journée clôturée : la feuille est en consultation seule. Un administrateur peut la rouvrir depuis le module Clôturer la journée.")}</AlertDescription>
         </Alert>
       )}
       {sheet.holidayLabel && (
         <Alert className="mb-4">
-          <AlertDescription>Jour férié : {sheet.holidayLabel}. Le statut « Jour férié » est proposé par défaut.</AlertDescription>
+          <AlertDescription>{t("Jour férié : {label}. Le statut « Jour férié » est proposé par défaut.", { label: sheet.holidayLabel })}</AlertDescription>
         </Alert>
       )}
 
@@ -57,10 +54,12 @@ export default async function SheetPage({
         team={team}
         initialRows={sheet.rows}
         initialTeamLead={sheet.teamLead}
+        teamLeadOptions={leads.filter((l) => !l.team_type || l.team_type === team).map((l) => l.full_name)}
         options={sheet.options}
         canEdit={canEdit}
         agency={settings.agency_name}
         company={settings.company_name}
+        logo={logoUrl(settings.company_logo_path)}
       />
 
       <ModuleButtons

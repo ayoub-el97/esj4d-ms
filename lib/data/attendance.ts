@@ -75,12 +75,17 @@ export function toOption(e: Employee): EmployeeOption {
  */
 export async function buildSheet(date: string, team: TeamType) {
   const supabase = await createClient();
-  const [employees, { data: existing }, { data: meta }, { data: holiday }] = await Promise.all([
+  const [employees, { data: existing }, { data: meta }, { data: holiday }, { data: leaves }, { data: recoveries }] = await Promise.all([
     getEmployees(),
     supabase.from("attendance").select("*").eq("activity_date", date).eq("team_type", team).returns<AttendanceRecord[]>(),
     supabase.from("attendance_sheet_meta").select("team_lead").eq("activity_date", date).eq("team_type", team).maybeSingle<{ team_lead: string }>(),
     supabase.from("holidays").select("label").eq("date", date).maybeSingle<{ label: string }>(),
+    // Congés et récupérations acceptés pour cette date : proposés par défaut
+    supabase.from("leave_requests").select("employee_id").eq("status", "acceptee").lte("start_date", date).gte("end_date", date),
+    supabase.from("recovery_requests").select("employee_id").eq("status", "acceptee").eq("recovery_date", date),
   ]);
+  const onLeave = new Set((leaves ?? []).map((l) => l.employee_id as string));
+  const onRecovery = new Set((recoveries ?? []).map((r) => r.employee_id as string));
 
   const byId = new Map(employees.map((e) => [e.id, e]));
   const dow = getDay(parseISO(date));
@@ -102,17 +107,27 @@ export async function buildSheet(date: string, team: TeamType) {
       position: a.position,
       team_type: a.team_type,
       order_number: e?.order_number ?? 0,
-      name: e ? employeeName(e) : "Employé supprimé",
+      name: e ? employeeName(e) : "—",
       matricule: e?.matricule ?? "",
       rest_day: e?.rest_day ?? null,
       is_extra: !!e && (e.team_type !== team || !e.is_active || !!a.replacing_employee_id),
+      entered_at: a.updated_at,
+      planned: onLeave.has(a.employee_id) ? "conge" : onRecovery.has(a.employee_id) ? "recuperation" : null,
     });
   }
 
   const alreadyIn = new Set(rows.map((r) => r.employee_id));
   for (const e of employees) {
     if (e.team_type !== team || !e.is_active || alreadyIn.has(e.id)) continue;
-    const defaultStatus: AttendanceStatus = holiday ? "ferie" : e.rest_day === dow ? "repos" : "present";
+    const defaultStatus: AttendanceStatus = holiday
+      ? "ferie"
+      : onLeave.has(e.id)
+        ? "conge"
+        : onRecovery.has(e.id)
+          ? "recuperation"
+          : e.rest_day === dow
+            ? "repos"
+            : "present";
     rows.push({
       id: null,
       employee_id: e.id,
@@ -131,6 +146,8 @@ export async function buildSheet(date: string, team: TeamType) {
       matricule: e.matricule,
       rest_day: e.rest_day,
       is_extra: false,
+      entered_at: null,
+      planned: onLeave.has(e.id) ? "conge" : onRecovery.has(e.id) ? "recuperation" : null,
     });
   }
 
@@ -197,28 +214,40 @@ export async function getAttendanceHistory(f: HistoryFilters, limit = 500): Prom
     .sort((a, b) => (a.activity_date === b.activity_date ? a.order_number - b.order_number : 0));
 }
 
-export type MonthlyRow = {
+/** Une ligne de synthèse calculée par la base (fonction attendance_summary) : un jour n'est compté qu'une fois. */
+export type SummaryRow = {
   employee_id: string;
   worked_days: number;
+  rest_days_worked: number;
   absences: number;
   sick_days: number;
   leave_days: number;
+  recovery_days: number;
   rest_days: number;
   holidays_worked: number;
   double_days: number;
   overtime_total: number;
 };
 
-export async function getMonthlyAttendance(month: string, team?: TeamType) {
+export type SummaryWithEmployee = SummaryRow & {
+  name: string;
+  order_number: number;
+  matricule: string;
+  position: Position | null;
+  team_type: TeamType | null;
+  chauffeur_id: string | null;
+};
+
+/** Synthèse du pointage sur une période [from, to]. */
+export async function getAttendanceSummary(from: string, to: string, team?: TeamType): Promise<SummaryWithEmployee[]> {
   const supabase = await createClient();
   const [{ data, error }, employees] = await Promise.all([
-    supabase.rpc("monthly_attendance", { p_month: `${month}-01`, p_team: team ?? null }),
+    supabase.rpc("attendance_summary", { p_from: from, p_to: to, p_team: team ?? null }),
     getEmployees(),
   ]);
   if (error) throw new Error(error.message);
   const byId = new Map(employees.map((e) => [e.id, e]));
-  const rows = (data ?? []) as MonthlyRow[];
-  return rows
+  return ((data ?? []) as SummaryRow[])
     .map((r) => {
       const e = byId.get(r.employee_id);
       return {
@@ -226,11 +255,20 @@ export async function getMonthlyAttendance(month: string, team?: TeamType) {
         overtime_total: Number(r.overtime_total),
         name: e ? employeeName(e) : "?",
         order_number: e?.order_number ?? 0,
+        matricule: e?.matricule ?? "",
         position: e?.position ?? null,
         team_type: e?.team_type ?? null,
+        chauffeur_id: e?.position === "chauffeur" ? e.id : (e?.chauffeur_id ?? null),
       };
     })
     .sort((a, b) => a.order_number - b.order_number);
+}
+
+/** Synthèse mensuelle (mois au format yyyy-MM). */
+export async function getMonthlyAttendance(month: string, team?: TeamType) {
+  const [y, m] = month.split("-").map(Number);
+  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return getAttendanceSummary(`${month}-01`, to, team);
 }
 
 /** Résumé d'une journée pour l'écran de clôture. */

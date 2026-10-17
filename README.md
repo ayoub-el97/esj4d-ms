@@ -69,16 +69,27 @@ Ouvrez http://localhost:3000 et connectez-vous avec le compte créé à l'étape
 
 | Module | Ce qu'il fait |
 |---|---|
-| Pointage | Feuilles de présence nettoiement / collecte par date (chauffeurs avec leurs rippeurs, remplaçants, 2e service), historique filtrable, rapport mensuel, export PDF |
+| Pointage | Feuilles de présence nettoiement / collecte par date (chauffeurs avec leurs rippeurs, remplaçants, 2e service), statuts Présent, Jour de repos travaillé, Absent, Absent maladie, Congé, Récupération, Repos, Jour férié ; date/heure de saisie distincte de la date d'activité ; historique filtrable, rapport mensuel, export PDF |
 | Rapport journalier | Nettoiement (lieux + photos avant/après par agent, PDF une page par agent), Collecte (camion, équipe, secteurs, tonnages, photos), Global (tableau camions + récapitulatif nettoiement) |
 | Rapport camions | Suivi journalier des véhicules, alimenté automatiquement par les rapports de collecte, historique, mensuel, PDF |
-| Congés | Demandes (en attente / acceptée / refusée), soldes acquis / pris / restant (1,5 j/mois paramétrable), ajustements tracés |
+| Congé / Récupération | Nouvelle demande congé, nouvelle demande récupération, solde de congés, solde de récupération ; historiques filtrables ; détail par employé ; corrections réservées à l'administrateur ; PDF |
 | Avertissements | Incidents par employé avec photos justificatives, compteur par période |
 | Programme de travail | Tâches planifiées, agents affectés, photos avant / après, marquage réalisé |
 | Déchet vert | Interventions avec photos avant / après |
-| Rapports travailleurs | Dossier complet d'un employé sur une période |
+| Rapports travailleurs | Rapport global des employés pour un mois ou une période (jours travaillés, repos travaillés, heures sup., absences, congés, fériés), filtres et recherche, PDF ; fiche détaillée par employé |
 | Clôturer la journée | Clôture manuelle avec résumé et confirmation ; réouverture par un administrateur avec justification (journal d'audit) |
-| Paramètres | Comptes et rôles, permissions par module, réglages (société, e-mail du directeur, règles), jours fériés, journal d'audit |
+| Profil de l'entreprise | Logo, nom de la société, agence, chefs d'équipe, employés (poste, jour de repos, date de début de travail) |
+| Paramètres | Comptes et rôles, permissions par module, réglages (e-mail du directeur, règles), jours fériés, journal d'audit |
+
+**Langue** : le sélecteur en haut de l'écran (et sur la page de connexion) bascule l'interface entre français, anglais et arabe (affichage de droite à gauche). Le français reste la langue par défaut. Les PDF sont produits en français ou en anglais ; en arabe, ils restent en français.
+
+### Règles de calcul (centralisées dans la base de données)
+
+- **Un jour n'est jamais compté deux fois** : tous les totaux regroupent par employé et par date, même avec plusieurs services ou plusieurs enregistrements.
+- **Jour de repos travaillé** : statut distinct du pointage. Chaque jour pointé ainsi donne **1 crédit de récupération**, relié à sa date. Réenregistrer la feuille ne crée pas de second crédit.
+- **Congé ou récupération pris** : le pointage fait foi. Un jour pointé « Congé » (ou « Récupération ») est déduit une fois, avec ou sans demande. Un jour passé couvert par une demande **acceptée** mais non pointé est aussi déduit. Les demandes en attente ou refusées ne sont jamais déduites. Corriger le pointage recalcule le solde, et la correction est journalisée.
+- **Acquisition des congés** : 1,5 jour (réglable) par mois complet de service, au mois anniversaire de la date d'entrée. Exemple : entrée le 15/10/2026, premiers 1,5 jour le 15/11/2026.
+- **Soldes** : congés = acquis − pris + corrections ; récupération = crédits − jours pris + corrections. Les demandes ne sont jamais supprimées.
 
 **Rôles** : Directeur/Administrateur (tout), Secrétaire (saisie + rapports), Contrôleur/Superviseur (pointage, équipes, interventions, photos), Lecture seule. Les droits sont modifiables dans *Paramètres → Permissions*.
 
@@ -89,10 +100,14 @@ Ouvrez http://localhost:3000 et connectez-vous avec le compte créé à l'étape
 ## 3. Développement
 
 ```bash
-npm run dev      # serveur de développement
-npm run build    # vérification de compilation (à lancer avant de pousser)
-npm run lint     # analyse statique
+npm run dev                     # serveur de développement
+npm run build                   # vérification de compilation (à lancer avant de pousser)
+npm run lint                    # analyse statique
+node scripts/i18n-check.mjs     # chaque texte de l'interface a-t-il sa traduction anglaise et arabe ?
+bash scripts/test-db.sh         # migrations + tests des règles métier sur un PostgreSQL jetable (Docker requis)
 ```
+
+- **Traductions** : les textes sont écrits en français dans le code et passent par `t("…")`. Les traductions sont dans `lib/i18n/messages/en.ts` et `ar.ts`, avec le texte français comme clé. Un texte sans traduction s'affiche en français.
 
 - `app/` pages (App Router), `components/` interface, `lib/actions/` Server Actions (écritures), `lib/data/` lectures, `lib/pdf/` modèles PDF, `supabase/migrations/` schéma SQL versionné.
 - Pour modifier le schéma : ajouter un fichier `supabase/migrations/00N_xxx.sql`, l'exécuter dans l'éditeur SQL de Supabase (ou `npx supabase db push` après `npx supabase link`), puis régénérer `schema_complete.sql` avec `cat supabase/migrations/*.sql > supabase/schema_complete.sql`.
@@ -113,3 +128,8 @@ Supabase conserve des sauvegardes quotidiennes (plan gratuit : 7 jours). Pour un
 - Règle de calcul du « jour doublé » (par défaut : jour de repos travaillé OU deux services le même jour, modifiable dans Réglages).
 - Champs définitifs du rapport camions.
 - Personnes autorisées à clôturer / rouvrir une journée (par défaut : rôles avec droit « Clôturer » / administrateurs).
+- Moment où un jour de repos travaillé est « validé » (par défaut : dès qu'il est pointé).
+- Décompte d'un congé accepté mais non pointé (par défaut : déduit une fois la date passée).
+- Sens du filtre « Équipe » des rapports travailleurs (par défaut : l'équipe d'un chauffeur avec ses rippeurs).
+
+> Projet déjà installé avec les migrations 001 à 005 ? Exécutez seulement `supabase/migrations/006_profil_entreprise.sql` puis `007_repos_recuperation_conges.sql` dans l'éditeur SQL.

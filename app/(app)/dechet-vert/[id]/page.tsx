@@ -3,6 +3,7 @@ import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
 import { getGreenWasteEntry } from "@/lib/data/green-waste";
 import { formatDateLongFr } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DayStatusBadge } from "@/components/day-status-badge";
@@ -11,10 +12,10 @@ import { PhotoUploader } from "@/components/photo-uploader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GreenWasteForm } from "../green-waste-form";
 
-export const metadata = { title: "Intervention déchet vert" };
+export const generateMetadata = pageTitle("Déchet vert — intervention");
 
 export default async function GreenWasteEntryPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireModule("dechet_vert");
+  const [user, { t, locale }] = await Promise.all([requireModule("dechet_vert"), getI18n()]);
   const { id } = await params;
   const entry = await getGreenWasteEntry(id);
   if (!entry) notFound();
@@ -23,14 +24,14 @@ export default async function GreenWasteEntryPage({ params }: { params: Promise<
 
   return (
     <div>
-      <ModuleHeader title="Déchet vert — intervention" subtitle={formatDateLongFr(entry.activity_date)} backHref={`/dechet-vert?date=${entry.activity_date}`}>
+      <ModuleHeader title={t("Déchet vert — intervention")} subtitle={formatDateLongFr(entry.activity_date, locale)} backHref={`/dechet-vert?date=${entry.activity_date}`}>
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <GreenWasteForm entry={entry} defaultDate={entry.activity_date} canEdit={canEdit} />
         <Card>
           <CardHeader>
-            <CardTitle>Photos</CardTitle>
+            <CardTitle>{t("Photos")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <PhotoUploader entityType="green_waste" entityId={entry.id} phase="avant" activityDate={entry.activity_date} location={entry.location} photos={entry.photosAvant} canEdit={canEdit} />

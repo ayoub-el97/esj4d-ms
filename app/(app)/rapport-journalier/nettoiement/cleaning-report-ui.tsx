@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FilePlus2, Save, UserMinus, UserPlus } from "lucide-react";
 import { addCleaningAgent, createCleaningReport, removeCleaningAgent, updateCleaningAgent, updateCleaningReport } from "@/lib/actions/reports";
 import type { CleaningAgent, CleaningReport } from "@/lib/data/reports";
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function CleaningReportUI({
   canEdit: boolean;
   employeeOptions: { id: string; label: string }[];
 }) {
+  const { t } = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState(false);
@@ -37,7 +39,7 @@ export function CleaningReportUI({
   if (!report) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
-        <p className="text-muted-foreground">Aucun rapport de nettoiement pour cette date.</p>
+        <p className="text-muted-foreground">{t("Aucun rapport de nettoiement pour cette date.")}</p>
         {canEdit ? (
           <Button
             disabled={pending}
@@ -51,10 +53,10 @@ export function CleaningReportUI({
               })
             }
           >
-            <FilePlus2 /> Créer le rapport (prérempli depuis le pointage)
+            <FilePlus2 /> {t("Créer le rapport (prérempli depuis le pointage)")}
           </Button>
         ) : (
-          <p className="text-xs text-muted-foreground">Vous ne pouvez pas créer de rapport (journée clôturée ou droits insuffisants).</p>
+          <p className="text-xs text-muted-foreground">{t("Vous ne pouvez pas créer de rapport (journée clôturée ou droits insuffisants).")}</p>
         )}
       </div>
     );
@@ -64,7 +66,7 @@ export function CleaningReportUI({
 
   return (
     <div className="space-y-4">
-      {agents.length === 0 && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Aucun agent dans ce rapport. Ajoutez-en avec le bouton ci-dessous.</p>}
+      {agents.length === 0 && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">{t("Aucun agent dans ce rapport. Ajoutez-en avec le bouton ci-dessous.")}</p>}
 
       {agents.map((a) => (
         <AgentCard key={a.id} agent={a} date={date} canEdit={canEdit} />
@@ -72,10 +74,10 @@ export function CleaningReportUI({
 
       <Card>
         <CardHeader>
-          <CardTitle>Observations générales</CardTitle>
+          <CardTitle>{t("Observations générales")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Textarea value={observations} disabled={!canEdit} onChange={(e) => setObservations(e.target.value)} placeholder="Commentaires sur la journée…" />
+          <Textarea value={observations} disabled={!canEdit} onChange={(e) => setObservations(e.target.value)} placeholder={t("Commentaires sur la journée…")} />
           {canEdit && (
             <Button
               size="sm"
@@ -91,26 +93,32 @@ export function CleaningReportUI({
                 })
               }
             >
-              <Save /> Enregistrer les observations
+              <Save /> {t("Enregistrer les observations")}
             </Button>
           )}
         </CardContent>
       </Card>
 
       {canEdit && (
-        <Button variant="outline" onClick={() => { setNewAgent(available[0]?.id ?? ""); setAdding(true); }}>
-          <UserPlus /> Ajouter un agent au rapport
+        <Button
+          variant="outline"
+          onClick={() => {
+            setNewAgent(available[0]?.id ?? "");
+            setAdding(true);
+          }}
+        >
+          <UserPlus /> {t("Ajouter un agent au rapport")}
         </Button>
       )}
 
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ajouter un agent</DialogTitle>
+            <DialogTitle>{t("Ajouter un agent")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">L&apos;ajout concerne uniquement ce rapport ; la feuille de présence n&apos;est pas modifiée.</p>
+          <p className="text-sm text-muted-foreground">{t("L'ajout concerne uniquement ce rapport ; la feuille de présence n'est pas modifiée.")}</p>
           <NativeSelect value={newAgent} onChange={(e) => setNewAgent(e.target.value)}>
-            {available.length === 0 && <option value="">Tous les employés sont déjà dans le rapport</option>}
+            {available.length === 0 && <option value="">{t("Tous les employés sont déjà dans le rapport")}</option>}
             {available.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
@@ -119,7 +127,7 @@ export function CleaningReportUI({
           </NativeSelect>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdding(false)}>
-              Annuler
+              {t("Annuler")}
             </Button>
             <Button
               disabled={!newAgent || pending}
@@ -134,7 +142,7 @@ export function CleaningReportUI({
                 })
               }
             >
-              Ajouter
+              {t("Ajouter")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -144,6 +152,7 @@ export function CleaningReportUI({
 }
 
 function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: string; canEdit: boolean }) {
+  const { t } = useT();
   const router = useRouter();
   const [location, setLocation] = useState(agent.location);
   const [comment, setComment] = useState(agent.comment);
@@ -159,7 +168,7 @@ function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: strin
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>
-          <span className="mr-2 text-muted-foreground">#{agent.order_number}</span>
+          <span className="me-2 text-muted-foreground">#{agent.order_number}</span>
           {agent.name}
         </CardTitle>
         {canEdit && (
@@ -168,7 +177,7 @@ function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: strin
             size="sm"
             disabled={pending}
             onClick={() => {
-              if (!window.confirm(`Retirer ${agent.name} du rapport (ses photos seront supprimées) ?`)) return;
+              if (!window.confirm(t("Retirer {name} du rapport (ses photos seront supprimées) ?", { name: agent.name }))) return;
               start(async () => {
                 const r = await removeCleaningAgent(agent.id);
                 if (r.ok) {
@@ -178,18 +187,18 @@ function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: strin
               });
             }}
           >
-            <UserMinus /> Retirer
+            <UserMinus /> {t("Retirer")}
           </Button>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <Label htmlFor={`loc-${agent.id}`}>Lieu de travail</Label>
-            <Input id={`loc-${agent.id}`} value={location} disabled={!canEdit} placeholder="Ex. Secteur 2, avenue …" onChange={(e) => setLocation(e.target.value)} onBlur={() => location !== agent.location && saveField({ location })} />
+            <Label htmlFor={`loc-${agent.id}`}>{t("Lieu de travail")}</Label>
+            <Input id={`loc-${agent.id}`} value={location} disabled={!canEdit} placeholder={t("Ex. Secteur 2, avenue …")} onChange={(e) => setLocation(e.target.value)} onBlur={() => location !== agent.location && saveField({ location })} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor={`com-${agent.id}`}>Commentaire / observation</Label>
+            <Label htmlFor={`com-${agent.id}`}>{t("Commentaire / observation")}</Label>
             <Input id={`com-${agent.id}`} value={comment} disabled={!canEdit} onChange={(e) => setComment(e.target.value)} onBlur={() => comment !== agent.comment && saveField({ comment })} />
           </div>
         </div>

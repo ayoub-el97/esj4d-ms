@@ -5,6 +5,7 @@ import { getWorkDay } from "@/lib/data/attendance";
 import { getTrucks, employeeName } from "@/lib/data/employees";
 import { getCollectionReports } from "@/lib/data/reports";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
@@ -14,10 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NewCollectionReport } from "./new-collection-report";
 
-export const metadata = { title: "Rapport journalier — Collecte" };
+export const generateMetadata = pageTitle("Rapport journalier — Collecte");
 
 export default async function CollectePage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
-  const user = await requireModule("rapport_journalier");
+  const [user, { t, locale }] = await Promise.all([requireModule("rapport_journalier"), getI18n()]);
   const sp = await searchParams;
   const date = isISODate(sp.date) ? sp.date : todayISO();
   const [workDay, reports, trucks] = await Promise.all([getWorkDay(date), getCollectionReports({ date }), getTrucks(true)]);
@@ -26,16 +27,16 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
-      <ModuleHeader title="Rapport journalier — Collecte" subtitle={formatDateLongFr(date)} backHref={`/rapport-journalier?date=${date}`}>
+      <ModuleHeader title={t("Rapport journalier — Collecte")} subtitle={formatDateLongFr(date, locale)} backHref={`/rapport-journalier?date=${date}`}>
         <Suspense>
           <DateField value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
-        {canEdit && <NewCollectionReport date={date} trucks={trucks.filter((t) => !usedTrucks.has(t.id))} />}
+        {canEdit && <NewCollectionReport date={date} trucks={trucks.filter((tr) => !usedTrucks.has(tr.id))} />}
       </ModuleHeader>
 
       {reports.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Aucun rapport de collecte pour cette date. Choisissez un camion pour en créer un.</p>
+        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport de collecte pour cette date. Choisissez un camion pour en créer un.")}</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {reports.map((r) => (
@@ -45,27 +46,27 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
                   <CardTitle className="flex items-center gap-2">
                     <span className="font-mono">{r.truck?.matricule ?? "?"}</span>
                     <span className="text-sm font-normal text-muted-foreground">{r.truck?.brand}</span>
-                    <Badge variant="secondary" className="ml-auto">
-                      {r.photosAvant.length + r.photosApres.length} photo(s)
+                    <Badge variant="secondary" className="ms-auto">
+                      {t("{count} photo(s)", { count: r.photosAvant.length + r.photosApres.length })}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Chauffeur : </span>
+                    <span className="text-muted-foreground">{t("Chauffeur")} : </span>
                     {r.chauffeur ? employeeName(r.chauffeur) : "—"}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Rippeurs : </span>
+                    <span className="text-muted-foreground">{t("Rippeurs")} : </span>
                     {r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Secteurs : </span>
+                    <span className="text-muted-foreground">{t("Secteurs")} : </span>
                     {r.sectors || "—"}
                   </div>
                   {r.truckReport && (
                     <div className="text-muted-foreground">
-                      Tonnage : {Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0)} t · Vidages : {r.truckReport.dumps_count}
+                      {t("Tonnage : {ton} t · Vidages : {dumps}", { ton: Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0), dumps: r.truckReport.dumps_count })}
                     </div>
                   )}
                 </CardContent>
@@ -75,10 +76,7 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <ModuleButtons
-        pdfSlot={reports.length ? <PdfExportButton kind="rapport-collecte" params={{ date }} /> : undefined}
-        historyHref="/rapport-journalier/collecte/historique"
-      />
+      <ModuleButtons pdfSlot={reports.length ? <PdfExportButton kind="rapport-collecte" params={{ date }} /> : undefined} historyHref="/rapport-journalier/collecte/historique" />
     </div>
   );
 }

@@ -4,16 +4,17 @@ import { getWorkDay } from "@/lib/data/attendance";
 import { getEmployees } from "@/lib/data/employees";
 import { getCollectionReport } from "@/lib/data/reports";
 import { formatDateLongFr } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { CollectionForm } from "./collection-form";
 
-export const metadata = { title: "Rapport de collecte" };
+export const generateMetadata = pageTitle("Rapport de collecte");
 
 export default async function CollectionReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireModule("rapport_journalier");
+  const [user, { t, locale }] = await Promise.all([requireModule("rapport_journalier"), getI18n()]);
   const { id } = await params;
   const report = await getCollectionReport(id);
   if (!report) notFound();
@@ -23,8 +24,8 @@ export default async function CollectionReportPage({ params }: { params: Promise
   return (
     <div>
       <ModuleHeader
-        title={`Rapport de collecte — camion ${report.truck?.matricule ?? ""}`}
-        subtitle={formatDateLongFr(report.activity_date)}
+        title={t("Rapport de collecte — camion {matricule}", { matricule: report.truck?.matricule ?? "" })}
+        subtitle={formatDateLongFr(report.activity_date, locale)}
         backHref={`/rapport-journalier/collecte?date=${report.activity_date}`}
       >
         <DayStatusBadge workDay={workDay} />
@@ -32,10 +33,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
 
       <CollectionForm report={report} employees={collecte} canEdit={canEdit} />
 
-      <ModuleButtons
-        pdfSlot={<PdfExportButton kind="rapport-collecte" params={{ date: report.activity_date, id: report.id }} />}
-        historyHref="/rapport-journalier/collecte/historique"
-      />
+      <ModuleButtons pdfSlot={<PdfExportButton kind="rapport-collecte" params={{ date: report.activity_date, id: report.id }} />} historyHref="/rapport-journalier/collecte/historique" />
     </div>
   );
 }

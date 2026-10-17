@@ -1,29 +1,67 @@
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
-import { getEmployee, getEmployees, getTrucks } from "@/lib/data/employees";
+import { getEmployee, getEmployees, getRestDayHistory, getTrucks } from "@/lib/data/employees";
+import { formatDateTimeFr } from "@/lib/dates";
+import { getT, pageTitle } from "@/lib/i18n/server";
+import { WEEKDAY_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmployeeForm } from "../employee-form";
 
-export const metadata = { title: "Fiche employé" };
+export const generateMetadata = pageTitle("Fiche employé");
 
-export default async function EmployePage({ params }: { params: Promise<{ id: string }> }) {
-  await requireModule("employes", "edit");
+const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
+
+export default async function EmployePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ retour?: string }> }) {
+  const [, t] = await Promise.all([requireModule("employes", "edit"), getT()]);
   const { id } = await params;
-  const [employee, trucks, collecte] = await Promise.all([
-    getEmployee(id),
-    getTrucks(true),
-    getEmployees({ team: "collecte", onlyActive: true }),
-  ]);
+  const { retour } = await searchParams;
+  const returnTo = retour && RETURN_TARGETS.includes(retour) ? retour : "/employes";
+  const [employee, trucks, collecte, restHistory] = await Promise.all([getEmployee(id), getTrucks(true), getEmployees({ team: "collecte", onlyActive: true }), getRestDayHistory(id)]);
   if (!employee) notFound();
+  const day = (d: number | null) => (d == null ? t("— Non défini —") : t(WEEKDAY_LABELS[d]));
 
   return (
-    <div>
-      <ModuleHeader title="Fiche employé" subtitle={`NB ${employee.order_number} · ${employee.matricule}`} backHref="/employes" />
-      <EmployeeForm
-        employee={employee}
-        trucks={trucks}
-        chauffeurs={collecte.filter((e) => e.position === "chauffeur" && e.id !== employee.id)}
-      />
+    <div className="space-y-6">
+      <ModuleHeader title={t("Fiche employé")} subtitle={t("NB {nb} · {matricule}", { nb: employee.order_number, matricule: employee.matricule })} backHref={returnTo} />
+      <EmployeeForm employee={employee} trucks={trucks} chauffeurs={collecte.filter((e) => e.position === "chauffeur" && e.id !== employee.id)} returnTo={returnTo} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("Historique du jour de repos")}</CardTitle>
+          <CardDescription>{t("Chaque changement du jour de repos habituel est conservé avec l'utilisateur et la date.")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("Date de modification")}</TableHead>
+                <TableHead>{t("Ancien jour")}</TableHead>
+                <TableHead>{t("Nouveau jour")}</TableHead>
+                <TableHead>{t("Modifié par")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {restHistory.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    {t("Aucun changement enregistré.")}
+                  </TableCell>
+                </TableRow>
+              )}
+              {restHistory.map((h) => (
+                <TableRow key={h.id}>
+                  <TableCell>{formatDateTimeFr(h.changed_at)}</TableCell>
+                  <TableCell>{h.old_rest_day == null && h.new_rest_day != null && restHistory[restHistory.length - 1]?.id === h.id ? t("(création)") : day(h.old_rest_day)}</TableCell>
+                  <TableCell className="font-medium">{day(h.new_rest_day)}</TableCell>
+                  <TableCell dir="ltr">{h.changed_by_email ?? t("système")}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
