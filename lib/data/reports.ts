@@ -74,7 +74,7 @@ export async function getCleaningReport(date: string): Promise<{ report: Cleanin
   if (!report) return { report: null, agents: [] };
 
   const [{ data: agents }, employees] = await Promise.all([
-    supabase.from("cleaning_report_agents").select("*").eq("report_id", report.id).order("sort_order").order("created_at"),
+    supabase.from("cleaning_report_agents").select("*").eq("report_id", report.id).eq("excluded", false).order("sort_order").order("created_at"),
     getEmployees(),
   ]);
   const byId = new Map(employees.map((e) => [e.id, e]));

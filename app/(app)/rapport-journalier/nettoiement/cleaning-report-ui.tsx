@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FilePlus2, Save, UserMinus, UserPlus } from "lucide-react";
-import { addCleaningAgent, createCleaningReport, removeCleaningAgent, updateCleaningAgent, updateCleaningReport } from "@/lib/actions/reports";
+import { addCleaningAgent, removeCleaningAgent, updateCleaningAgent, updateCleaningReport } from "@/lib/actions/reports";
+import { LinkButton } from "@/components/link-button";
+import { SyncReportsButton } from "@/components/sync-reports-button";
 import type { CleaningAgent, CleaningReport } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
@@ -40,21 +42,16 @@ export function CleaningReportUI({
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
         <p className="text-muted-foreground">{t("Aucun rapport de nettoiement pour cette date.")}</p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {t("Le rapport se remplit automatiquement dès que la feuille de présence nettoiement est enregistrée : chaque agent qui a travaillé y figure avec son lieu de travail et ses photos avant / après.")}
+        </p>
         {canEdit ? (
-          <Button
-            disabled={pending}
-            onClick={() =>
-              start(async () => {
-                const r = await createCleaningReport(date);
-                if (r.ok) {
-                  toast.success(r.message);
-                  router.refresh();
-                } else toast.error(r.error);
-              })
-            }
-          >
-            <FilePlus2 /> {t("Créer le rapport (prérempli depuis le pointage)")}
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <LinkButton href={`/pointage/nettoiement?date=${date}`} variant="default" size="sm">
+              <FilePlus2 /> {t("Ouvrir la feuille de présence")}
+            </LinkButton>
+            <SyncReportsButton date={date} team="nettoiement" label="Remplir depuis le pointage déjà enregistré" />
+          </div>
         ) : (
           <p className="text-xs text-muted-foreground">{t("Vous ne pouvez pas créer de rapport (journée clôturée ou droits insuffisants).")}</p>
         )}
@@ -100,15 +97,19 @@ export function CleaningReportUI({
       </Card>
 
       {canEdit && (
-        <Button
-          variant="outline"
-          onClick={() => {
-            setNewAgent(available[0]?.id ?? "");
-            setAdding(true);
-          }}
-        >
-          <UserPlus /> {t("Ajouter un agent au rapport")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setNewAgent(available[0]?.id ?? "");
+              setAdding(true);
+            }}
+          >
+            <UserPlus /> {t("Ajouter un agent au rapport")}
+          </Button>
+          <SyncReportsButton date={date} team="nettoiement" />
+          <span className="text-xs text-muted-foreground">{t("Le rapport suit le pointage ; les lieux et photos déjà saisis sont conservés.")}</span>
+        </div>
       )}
 
       <Dialog open={adding} onOpenChange={setAdding}>

@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
-import { getEmployees } from "@/lib/data/employees";
 import { getCollectionReport } from "@/lib/data/reports";
 import { formatDateLongFr } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
@@ -18,7 +17,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
   const { id } = await params;
   const report = await getCollectionReport(id);
   if (!report) notFound();
-  const [workDay, collecte] = await Promise.all([getWorkDay(report.activity_date), getEmployees({ team: "collecte", onlyActive: true })]);
+  const workDay = await getWorkDay(report.activity_date);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
 
   return (
@@ -31,7 +30,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
 
-      <CollectionForm report={report} employees={collecte} canEdit={canEdit} />
+      <CollectionForm report={report} canEdit={canEdit} />
 
       <ModuleButtons pdfSlot={<PdfExportButton kind="rapport-collecte" params={{ date: report.activity_date, id: report.id }} />} historyHref="/rapport-journalier/collecte/historique" />
     </div>

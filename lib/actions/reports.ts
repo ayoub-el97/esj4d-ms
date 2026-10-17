@@ -7,6 +7,7 @@ import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { deletePhotosOfEntity } from "@/lib/actions/photos";
+import { syncCleaningReport, syncCollectionReports } from "@/lib/report-sync";
 import type { ActionResult } from "@/lib/types";
 
 const dateSchema = z.string().date("Date invalide.");
@@ -20,32 +21,29 @@ const intField = z.preprocess((v) => (v === "" || v == null ? 0 : Number(v)), z.
 // ===========================================================================
 
 /** Crée le rapport du jour, prérempli avec les agents présents au pointage. */
-export async function createCleaningReport(date: string): Promise<ActionResult> {
+/** Remplit (ou met à jour) les rapports journaliers d'une date à partir du pointage. */
+export async function syncReportsFromAttendance(date: string, team: "nettoiement" | "collecte"): Promise<ActionResult> {
   const t = await getT();
   const auth = await assertModule("rapport_journalier", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   if (!dateSchema.safeParse(date).success) return { ok: false, error: t("Date invalide.") };
-
   const supabase = await createClient();
-  const { data: report, error } = await supabase.from("cleaning_reports").insert({ activity_date: date }).select("id").single();
-  if (error) return { ok: false, error: t(friendlyError(error.message)) };
-
-  const { data: present } = await supabase
-    .from("attendance")
-    .select("employee_id")
-    .eq("activity_date", date)
-    .eq("team_type", "nettoiement")
-    .eq("status", "present")
-    .eq("shift", 1);
-  const ids = Array.from(new Set((present ?? []).map((p) => p.employee_id)));
-  if (ids.length) {
-    const { data: emps } = await supabase.from("employees").select("id, order_number").in("id", ids);
-    const rows = (emps ?? []).map((e) => ({ report_id: report.id, activity_date: date, employee_id: e.id, sort_order: e.order_number }));
-    const { error: e2 } = await supabase.from("cleaning_report_agents").insert(rows);
-    if (e2) return { ok: false, error: t(friendlyError(e2.message)) };
+  try {
+    if (team === "nettoiement") {
+      const n = await syncCleaningReport(supabase, date);
+      revalidatePath("/rapport-journalier", "layout");
+      return n
+        ? { ok: true, message: t("Rapport journalier nettoiement mis à jour : {count} agent(s).", { count: n }) }
+        : { ok: false, error: t("Aucun agent de nettoiement n'a travaillé ce jour d'après le pointage.") };
+    }
+    const r = await syncCollectionReports(supabase, date);
+    revalidatePath("/rapport-journalier", "layout");
+    revalidatePath("/rapport-camions");
+    const message = [t("Rapport journalier collecte mis à jour : {count} équipe(s).", { count: r.teams }), ...r.warnings.map((w) => t(w.key, w.vars))].join(" ");
+    return r.teams ? { ok: true, message } : { ok: false, error: [t("Aucune équipe de collecte n'a travaillé ce jour d'après le pointage."), ...r.warnings.map((w) => t(w.key, w.vars))].join(" ") };
+  } catch (e) {
+    return { ok: false, error: t(friendlyError((e as Error).message)) };
   }
-  revalidatePath("/rapport-journalier/nettoiement");
-  return { ok: true, message: ids.length ? t("Rapport créé avec {count} agent(s) présent(s) au pointage.", { count: ids.length }) : t("Rapport créé (aucun agent présent au pointage : ajoutez-les manuellement).") };
 }
 
 export async function updateCleaningAgent(id: string, patch: { location?: string; comment?: string }): Promise<ActionResult> {
@@ -66,8 +64,16 @@ export async function addCleaningAgent(reportId: string, date: string, employeeI
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   if (!uuid.safeParse(reportId).success || !uuid.safeParse(employeeId).success) return { ok: false, error: t("Identifiant invalide.") };
   const supabase = await createClient();
+  // Agent précédemment retiré à la main : on le réintègre
+  const { data: hidden } = await supabase.from("cleaning_report_agents").select("id").eq("report_id", reportId).eq("employee_id", employeeId).eq("excluded", true).maybeSingle();
+  if (hidden) {
+    const { error } = await supabase.from("cleaning_report_agents").update({ excluded: false }).eq("id", hidden.id);
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    revalidatePath("/rapport-journalier/nettoiement");
+    return { ok: true, message: t("Agent ajouté au rapport (le pointage n'est pas modifié).") };
+  }
   const { data: e } = await supabase.from("employees").select("order_number").eq("id", employeeId).maybeSingle();
-  const { error } = await supabase.from("cleaning_report_agents").insert({ report_id: reportId, activity_date: date, employee_id: employeeId, sort_order: e?.order_number ?? 999 });
+  const { error } = await supabase.from("cleaning_report_agents").insert({ report_id: reportId, activity_date: date, employee_id: employeeId, sort_order: e?.order_number ?? 999, manual: true });
   if (error) return { ok: false, error: error.message.includes("duplicate") ? t("Cet agent est déjà dans le rapport.") : t(friendlyError(error.message)) };
   revalidatePath("/rapport-journalier/nettoiement");
   return { ok: true, message: t("Agent ajouté au rapport (le pointage n'est pas modifié).") };
@@ -78,9 +84,13 @@ export async function removeCleaningAgent(id: string): Promise<ActionResult> {
   const auth = await assertModule("rapport_journalier", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   const supabase = await createClient();
-  const { error } = await supabase.from("cleaning_report_agents").delete().eq("id", id);
-  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  const { data: agent } = await supabase.from("cleaning_report_agents").select("manual").eq("id", id).maybeSingle();
   await deletePhotosOfEntity("cleaning_report_agent", id);
+  // Ajouté à la main : supprimé ; issu du pointage : masqué, pour ne pas être réajouté automatiquement
+  const { error } = agent?.manual
+    ? await supabase.from("cleaning_report_agents").delete().eq("id", id)
+    : await supabase.from("cleaning_report_agents").update({ excluded: true, location: "", comment: "" }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/rapport-journalier/nettoiement");
   return { ok: true, message: t("Agent retiré du rapport.") };
 }

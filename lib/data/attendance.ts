@@ -1,7 +1,7 @@
 import "server-only";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { employeeName, getEmployees, type Employee } from "@/lib/data/employees";
+import { employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
 import type { EmployeeOption, SheetRow } from "@/lib/attendance-types";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
@@ -49,6 +49,7 @@ export type AttendanceRecord = {
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;
+  truck_id: string | null;
   position: Position;
   team_type: TeamType;
   created_at: string;
@@ -76,8 +77,9 @@ export function toOption(e: Employee): EmployeeOption {
  */
 export async function buildSheet(date: string, team: TeamType) {
   const supabase = await createClient();
-  const [employees, { data: existing }, { data: meta }, { data: holiday }, { data: leaves }, { data: recoveries }] = await Promise.all([
+  const [employees, trucks, { data: existing }, { data: meta }, { data: holiday }, { data: leaves }, { data: recoveries }] = await Promise.all([
     getEmployees(),
+    getTrucks(true),
     supabase.from("attendance").select("*").eq("activity_date", date).eq("team_type", team).returns<AttendanceRecord[]>(),
     supabase.from("attendance_sheet_meta").select("team_lead").eq("activity_date", date).eq("team_type", team).maybeSingle<{ team_lead: string }>(),
     supabase.from("holidays").select("label").eq("date", date).maybeSingle<{ label: string }>(),
@@ -105,6 +107,8 @@ export async function buildSheet(date: string, team: TeamType) {
       observation: a.observation,
       replacing_employee_id: a.replacing_employee_id,
       chauffeur_id: a.chauffeur_id,
+      // Feuilles enregistrées avant la migration 009 : camion habituel du chauffeur
+      truck_id: a.truck_id ?? (a.position === "chauffeur" ? (e?.truck_id ?? null) : null),
       position: a.position,
       team_type: a.team_type,
       order_number: e?.order_number ?? 0,
@@ -141,6 +145,7 @@ export async function buildSheet(date: string, team: TeamType) {
       observation: "",
       replacing_employee_id: null,
       chauffeur_id: e.position === "rippeur" ? e.chauffeur_id : null,
+      truck_id: e.position === "chauffeur" ? e.truck_id : null,
       position: e.position,
       team_type: e.team_type,
       order_number: e.order_number,
@@ -165,6 +170,8 @@ export async function buildSheet(date: string, team: TeamType) {
     sub.replacing_employee_id = titular.employee_id;
     sub.chauffeur_id = titular.position === "chauffeur" ? titular.employee_id : titular.chauffeur_id;
     sub.status = subEmployee?.rest_day === dow ? "repos_travaille" : "present";
+    // Le chauffeur remplaçant prend le camion du titulaire
+    if (titular.position === "chauffeur") sub.truck_id = titular.truck_id;
   }
 
   rows.sort((a, b) => a.order_number - b.order_number || a.shift - b.shift);
@@ -175,6 +182,7 @@ export async function buildSheet(date: string, team: TeamType) {
     holidayLabel: holiday?.label ?? null,
     hasSaved: (existing ?? []).length > 0,
     options: employees.filter((e) => e.is_active).map(toOption),
+    trucks: trucks.map((tr) => ({ id: tr.id, matricule: tr.matricule, brand: tr.brand })),
   };
 }
 

@@ -4,26 +4,22 @@ import { useActionState, useTransition } from "react";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { deleteCollectionReport, saveCollectionReport } from "@/lib/actions/reports";
-import type { Employee } from "@/lib/data/employees";
 import type { CollectionReportFull } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
-import { DRIVER_POSITIONS, POSITION_LABELS } from "@/lib/types";
+import Link from "next/link";
+import { POSITION_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 import { PhotoUploader } from "@/components/photo-uploader";
 
-export function CollectionForm({ report, employees, canEdit }: { report: CollectionReportFull; employees: Employee[]; canEdit: boolean }) {
+export function CollectionForm({ report, canEdit }: { report: CollectionReportFull; canEdit: boolean }) {
   const { t } = useT();
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
-  const chauffeurs = employees.filter((e) => DRIVER_POSITIONS.includes(e.position));
-  const crew = employees.filter((e) => !DRIVER_POSITIONS.includes(e.position));
-  const selected = new Set(report.rippers.map((r) => r.id));
   const tr = report.truckReport;
 
   return (
@@ -34,31 +30,35 @@ export function CollectionForm({ report, employees, canEdit }: { report: Collect
           <Card>
             <CardHeader>
               <CardTitle>{t("Équipe du camion {matricule}", { matricule: report.truck?.matricule ?? "" })}</CardTitle>
-              <CardDescription>{t("Préremplie depuis les affectations ; modifiable pour cette date uniquement.")}</CardDescription>
+              <CardDescription>{t("Reprise du pointage du jour.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <input type="hidden" name="chauffeur_id" value={report.chauffeur_id ?? ""} />
+              {report.rippers.map((r) => (
+                <input key={r.id} type="hidden" name="rippers" value={r.id} />
+              ))}
               <div className="space-y-1">
-                <Label htmlFor="chauffeur_id">{t("Chauffeur")}</Label>
-                <NativeSelect id="chauffeur_id" name="chauffeur_id" defaultValue={report.chauffeur_id ?? ""}>
-                  <option value="">{t("— Aucun —")}</option>
-                  {chauffeurs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.last_name} {c.first_name}
-                    </option>
-                  ))}
-                </NativeSelect>
+                <Label>{t("Chauffeur")}</Label>
+                <p className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-sm">
+                  {report.chauffeur ? `${report.chauffeur.last_name} ${report.chauffeur.first_name} (${t(POSITION_LABELS[report.chauffeur.position])})` : "—"}
+                </p>
               </div>
               <div className="space-y-1">
-                <Label>{t("Rippeurs")}</Label>
-                <div className="grid max-h-56 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2">
-                  {crew.map((e) => (
-                    <label key={e.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" name="rippers" value={e.id} defaultChecked={selected.has(e.id)} className="size-4 accent-indigo-600" />
-                      {e.last_name} {e.first_name}
-                      <span className="text-xs text-muted-foreground">({t(POSITION_LABELS[e.position])})</span>
-                    </label>
+                <Label>{t("Équipe du jour")}</Label>
+                <ul className="space-y-0.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-sm">
+                  {report.rippers.length === 0 && <li className="text-muted-foreground">—</li>}
+                  {report.rippers.map((e) => (
+                    <li key={e.id}>
+                      {e.last_name} {e.first_name} <span className="text-xs text-muted-foreground">({t(POSITION_LABELS[e.position])})</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {t("Le chauffeur, l'équipe et le camion viennent du pointage. Pour un absent, un malade ou un échange de camion, corrigez la feuille de présence : le rapport se met à jour à l'enregistrement.")}{" "}
+                  <Link href={`/pointage/collecte?date=${report.activity_date}`} className="underline">
+                    {t("Ouvrir la feuille de présence")}
+                  </Link>
+                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="sectors">{t("Lieux / secteurs de travail")}</Label>

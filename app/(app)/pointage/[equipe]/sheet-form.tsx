@@ -30,6 +30,8 @@ type Props = {
   agency: string;
   company: string;
   logo: string | null;
+  /** Camions actifs (camion du jour des chauffeurs) */
+  trucks: { id: string; matricule: string; brand: string }[];
 };
 
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
@@ -46,7 +48,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -105,6 +107,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         rest_day: o.rest_day,
         is_extra: true,
         substitute_id: o.substitute_id,
+        truck_id: null,
       },
     ]);
     setDirty(true);
@@ -126,6 +129,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     update(subIndex, {
       replacing_employee_id: titular.employee_id,
       chauffeur_id: crewChauffeur,
+      ...(titular.position === "chauffeur" ? { truck_id: titular.truck_id } : {}),
       status: isWorked(sub.status) ? sub.status : sub.rest_day === dow ? "repos_travaille" : "present",
     });
   };
@@ -149,7 +153,10 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     const result: Group[] = chauffeurs.map((c) => {
       const idx = rows.map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1)).filter((i) => i >= 0);
       idx.forEach((i) => used.add(i));
-      return { key: c.employee_id, title: t("Équipe {name}", { name: c.name }), chauffeurId: c.employee_id, idx };
+      const driver = idx.map((i) => rows[i]).find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && isWorked(r.status) && r.truck_id);
+      const plate = (driver?.truck_id ? trucks.find((tr) => tr.id === driver.truck_id)?.matricule : null) ?? (c.truck_id ? trucks.find((tr) => tr.id === c.truck_id)?.matricule : null);
+      const title = plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name });
+      return { key: c.employee_id, title, chauffeurId: c.employee_id, idx };
     });
     const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
     const freeSubstitutes = rest.filter((i) => isSubstitutePosition(rows[i].position));
@@ -157,7 +164,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (freeSubstitutes.length) result.push({ key: "subs", title: t("Remplaçants sans remplacement ce jour"), chauffeurId: null, idx: freeSubstitutes });
     if (others.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: others });
     return result;
-  }, [rows, team, t]);
+  }, [rows, team, t, trucks]);
 
   const counts = useMemo(() => {
     const c: Partial<Record<AttendanceStatus, number>> = {};
@@ -239,6 +246,8 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 onRemove={remove}
                 onAddShift={addShift}
                 onAssignSubstitute={assignSubstitute}
+                trucks={trucks}
+                teams={team === "collecte" ? rows.filter((x) => x.position === "chauffeur" && x.shift === 1).map((x) => ({ id: x.employee_id, name: x.name })) : []}
                 onAddMember={team === "collecte" && g.chauffeurId ? () => setAdding({ chauffeurId: g.chauffeurId }) : undefined}
               />
             ))}
@@ -294,6 +303,8 @@ function GroupRows({
   onRemove,
   onAddShift,
   onAssignSubstitute,
+  trucks,
+  teams,
   onAddMember,
 }: {
   t: TFunction;
@@ -307,6 +318,8 @@ function GroupRows({
   onRemove: (i: number) => void;
   onAddShift: (i: number) => void;
   onAssignSubstitute: (i: number) => void;
+  trucks: { id: string; matricule: string; brand: string }[];
+  teams: { id: string; name: string }[];
   onAddMember?: () => void;
 }) {
   return (
@@ -338,6 +351,35 @@ function GroupRows({
               {r.shift > 1 && <span className="ms-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">{t("service {n}", { n: r.shift })}</span>}
               {replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("remplace {name}", { name: replacing.name })}</div>}
               {r.is_extra && !replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("ajouté pour la journée")}</div>}
+              {canEdit && r.team_type === "collecte" && r.shift === 1 && (r.position === "chauffeur" || (r.position === "chauffeur_remplacant" && r.chauffeur_id)) && isWorked(r.status) && (
+                <label className="mt-1 flex items-center gap-1 text-[11px] font-normal not-italic text-muted-foreground">
+                  {t("Camion du jour")}
+                  <NativeSelect className="h-6 w-auto py-0 text-xs" value={r.truck_id ?? ""} onChange={(e) => onUpdate(i, { truck_id: e.target.value || null })}>
+                    <option value="">{t("— Aucun —")}</option>
+                    {trucks.map((tr) => (
+                      <option key={tr.id} value={tr.id}>
+                        {tr.matricule}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              )}
+              {!canEdit && r.truck_id && (r.position === "chauffeur" || r.position === "chauffeur_remplacant") && (
+                <div className="text-[11px] font-normal text-muted-foreground">{t("Camion {matricule}", { matricule: trucks.find((tr) => tr.id === r.truck_id)?.matricule ?? "?" })}</div>
+              )}
+              {canEdit && r.team_type === "collecte" && r.shift === 1 && (r.position === "rippeur" || r.position === "rippeur_remplacant") && teams.length > 0 && (
+                <label className="mt-1 flex items-center gap-1 text-[11px] font-normal not-italic text-muted-foreground">
+                  {t("Équipe du jour")}
+                  <NativeSelect className="h-6 w-auto py-0 text-xs" value={r.chauffeur_id ?? ""} onChange={(e) => onUpdate(i, { chauffeur_id: e.target.value || null })}>
+                    <option value="">{t("— Sans équipe —")}</option>
+                    {teams.map((tm) => (
+                      <option key={tm.id} value={tm.id}>
+                        {tm.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              )}
               {substitute && r.shift === 1 && (
                 <div className="text-[11px] font-normal text-muted-foreground">
                   {t("Remplaçant : {name}", { name: substitute.name })}

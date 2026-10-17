@@ -66,7 +66,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
         "pointage",
         t("Feuille de présence {team} du {date}", { team: t(TEAM_LABELS[team]), date: formatDateFr(date) }),
         `pointage-${team}-${date}.pdf`,
-        createElement(AttendanceSheetPdf, { ...common, agency: settings.agency_name, teamLead: sheet.teamLead, date, team, rows: sheet.rows }),
+        createElement(AttendanceSheetPdf, { ...common, agency: settings.agency_name, teamLead: sheet.teamLead, date, team, rows: sheet.rows, trucks: sheet.trucks }),
       );
     }
     case "pointage-mensuel": {

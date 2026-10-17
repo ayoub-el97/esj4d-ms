@@ -65,6 +65,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         agency={settings.agency_name}
         company={settings.company_name}
         logo={logoUrl(settings.company_logo_path)}
+        trucks={sheet.trucks}
       />
 
       <ModuleButtons

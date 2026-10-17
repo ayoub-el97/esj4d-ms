@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertModule, friendlyError } from "@/lib/auth";
+import { assertModule, friendlyError, hasPermission } from "@/lib/auth";
+import { syncCleaningReport, syncCollectionReports } from "@/lib/report-sync";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { isDayClosed } from "@/lib/data/attendance";
@@ -23,6 +24,7 @@ const rowSchema = z.object({
   observation: z.string().max(500).default(""),
   replacing_employee_id: optionalUuid,
   chauffeur_id: optionalUuid,
+  truck_id: optionalUuid,
   position: z.enum(POSITIONS as [Position, ...Position[]]),
   team_type: z.enum(["collecte", "nettoiement"]),
 });
@@ -76,7 +78,26 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
   if (metaError) return { ok: false, error: t(friendlyError(metaError.message)) };
 
   revalidatePath("/pointage");
-  return { ok: true, message: t("Feuille de présence enregistrée.") };
+
+  // Rapport journalier rempli automatiquement depuis le pointage (si l'utilisateur peut le modifier)
+  let reportNote = "";
+  if (hasPermission(auth.user, "rapport_journalier", "edit")) {
+    try {
+      if (team_type === "nettoiement") {
+        const n = await syncCleaningReport(supabase, activity_date);
+        reportNote = t("Rapport journalier nettoiement mis à jour : {count} agent(s).", { count: n });
+      } else {
+        const r = await syncCollectionReports(supabase, activity_date);
+        reportNote = t("Rapport journalier collecte mis à jour : {count} équipe(s).", { count: r.teams });
+        if (r.warnings.length) reportNote += " " + r.warnings.map((w) => t(w.key, w.vars)).join(" ");
+      }
+      revalidatePath("/rapport-journalier", "layout");
+      revalidatePath("/rapport-camions");
+    } catch (e) {
+      reportNote = t("Le rapport journalier n'a pas pu être mis à jour : {message}", { message: t(friendlyError((e as Error).message)) });
+    }
+  }
+  return { ok: true, message: [t("Feuille de présence enregistrée."), reportNote].filter(Boolean).join(" ") };
 }
 
 export async function closeDay(date: string): Promise<ActionResult> {

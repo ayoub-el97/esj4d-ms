@@ -14,6 +14,8 @@ import { PdfExportButton } from "@/components/pdf-export-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { NewCollectionReport } from "./new-collection-report";
+import { SyncReportsButton } from "@/components/sync-reports-button";
+import { LinkButton } from "@/components/link-button";
 
 export const generateMetadata = pageTitle("Rapport journalier — Collecte");
 
@@ -32,11 +34,18 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
           <DateField value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
+        {canEdit && <SyncReportsButton date={date} team="collecte" />}
         {canEdit && <NewCollectionReport date={date} trucks={trucks.filter((tr) => !usedTrucks.has(tr.id))} />}
       </ModuleHeader>
 
       {reports.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport de collecte pour cette date. Choisissez un camion pour en créer un.")}</p>
+        <div className="space-y-2 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <p>{t("Aucun rapport de collecte pour cette date.")}</p>
+          <p>{t("Les rapports se remplissent automatiquement dès que la feuille de présence collecte est enregistrée : un rapport par chauffeur et son équipe, sur le camion du jour.")}</p>
+          <LinkButton href={`/pointage/collecte?date=${date}`} size="sm">
+            {t("Ouvrir la feuille de présence")}
+          </LinkButton>
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {reports.map((r) => (

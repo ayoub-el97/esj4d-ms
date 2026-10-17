@@ -24,6 +24,7 @@ export function AttendanceSheetPdf({
   date,
   team,
   rows,
+  trucks = [],
   generatedBy,
 }: {
   company: string;
@@ -32,6 +33,7 @@ export function AttendanceSheetPdf({
   date: string;
   team: TeamType;
   rows: SheetRow[];
+  trucks?: { id: string; matricule: string }[];
   generatedBy: string;
 }) {
   const { t } = usePdf();
@@ -54,7 +56,10 @@ export function AttendanceSheetPdf({
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<string>();
     for (const c of chauffeurs) {
-      tableRows.push({ _group: t("Équipe {name}", { name: c.name }) });
+      const teamRows = rows.filter((r) => r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id);
+      const driver = teamRows.find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && WORKED_STATUSES.includes(r.status) && r.truck_id) ?? c;
+      const plate = trucks.find((tr) => tr.id === driver.truck_id)?.matricule;
+      tableRows.push({ _group: plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name }) });
       for (const r of rows) {
         if (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id) {
           tableRows.push(toRow(r));

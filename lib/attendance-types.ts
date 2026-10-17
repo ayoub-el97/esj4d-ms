@@ -12,6 +12,8 @@ export type SheetRow = {
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;
+  /** Camion conduit ce jour-là (chauffeurs titulaires et remplaçants) */
+  truck_id: string | null;
   position: Position;
   team_type: TeamType;
   // Affichage
