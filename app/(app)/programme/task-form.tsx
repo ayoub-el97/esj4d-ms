@@ -15,10 +15,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
+import { PendingPhotosPicker, uploadPendingPhotos, type PendingPhoto } from "@/components/pending-photos";
 
 export function TaskForm({ task, defaultDate, employees, canEdit }: { task: WorkTask | null; defaultDate: string; employees: { id: string; label: string }[]; canEdit: boolean }) {
   const { t } = useT();
-  const [state, action] = useActionState(saveTask, null);
+  const router = useRouter();
+  // Photos « avant » choisies à la création : envoyées juste après l'enregistrement de la tâche
+  const [newPhotos, setNewPhotos] = useState<PendingPhoto[]>([]);
+  const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveTask>> | null, formData: FormData) => {
+    const r = await saveTask(prev, formData);
+    if (task || !r.ok || !r.data) return r;
+    const id = r.data.id;
+    const failed = await uploadPendingPhotos(newPhotos, {
+      entityType: "work_task",
+      entityId: id,
+      phase: "avant",
+      activityDate: String(formData.get("planned_date") ?? "") || null,
+      employeeId: String(formData.getAll("agents")[0] ?? "") || null,
+      location: String(formData.get("location") ?? ""),
+    });
+    if (failed) toast.error(t("{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.", { count: failed }));
+    else if (newPhotos.length) toast.success(t("{count} photo(s) enregistrée(s).", { count: newPhotos.length }));
+    router.push(`/programme/${id}`);
+    return r;
+  }, null);
   const [pending, start] = useTransition();
   const selected = new Set(task?.agents.map((a) => a.id) ?? []);
   return (
@@ -55,6 +75,7 @@ export function TaskForm({ task, defaultDate, employees, canEdit }: { task: Work
               </div>
             </div>
           </fieldset>
+          {!task && canEdit && <PendingPhotosPicker photos={newPhotos} onChange={setNewPhotos} title="Photo de l'endroit avant" />}
           {canEdit && (
             <div className="flex gap-2">
               <SubmitButton className="flex-1">{task ? t("Enregistrer") : t("Créer la tâche")}</SubmitButton>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { deleteWarning, saveWarning } from "@/lib/actions/warnings";
@@ -16,10 +17,29 @@ import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 import { LinkButton } from "@/components/link-button";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { PendingPhotosPicker, uploadPendingPhotos, type PendingPhoto } from "@/components/pending-photos";
 
 export function WarningForm({ warning, employees, canEdit, defaultDate }: { warning: Warning | null; employees: { id: string; label: string }[]; canEdit: boolean; defaultDate: string }) {
   const { t } = useT();
-  const [state, action] = useActionState(saveWarning, null);
+  const router = useRouter();
+  // Photos choisies à la création : envoyées juste après l'enregistrement de l'avertissement
+  const [newPhotos, setNewPhotos] = useState<PendingPhoto[]>([]);
+  const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveWarning>> | null, formData: FormData) => {
+    const r = await saveWarning(prev, formData);
+    if (warning || !r.ok || !r.data) return r;
+    const id = r.data.id;
+    const failed = await uploadPendingPhotos(newPhotos, {
+      entityType: "warning",
+      entityId: id,
+      phase: "justificatif",
+      activityDate: null,
+      employeeId: String(formData.get("employee_id") ?? "") || null,
+    });
+    if (failed) toast.error(t("{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.", { count: failed }));
+    else if (newPhotos.length) toast.success(t("{count} photo(s) enregistrée(s).", { count: newPhotos.length }));
+    router.push(`/avertissements/${id}?ok=1`);
+    return r;
+  }, null);
   const [pending, start] = useTransition();
 
   return (
@@ -67,6 +87,7 @@ export function WarningForm({ warning, employees, canEdit, defaultDate }: { warn
                 <Textarea id="observations" name="observations" defaultValue={warning?.observations ?? ""} rows={2} />
               </div>
             </fieldset>
+            {!warning && canEdit && <PendingPhotosPicker photos={newPhotos} onChange={setNewPhotos} title="Photos justificatives" />}
             {canEdit && (
               <div className="flex gap-2">
                 <SubmitButton>{warning ? t("Enregistrer") : t("Créer l'avertissement")}</SubmitButton>
@@ -92,7 +113,6 @@ export function WarningForm({ warning, employees, canEdit, defaultDate }: { warn
                 )}
               </div>
             )}
-            {!warning && <p className="text-xs text-muted-foreground">{t("Les photos justificatives pourront être ajoutées après la création.")}</p>}
           </CardContent>
         </Card>
       </form>

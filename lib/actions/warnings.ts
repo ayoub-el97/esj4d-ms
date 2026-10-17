@@ -18,7 +18,8 @@ const schema = z.object({
   status: z.enum(["ouvert", "en_cours", "clos"]).default("ouvert"),
 });
 
-export async function saveWarning(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/** Enregistre un avertissement. À la création, renvoie l'id pour que le formulaire envoie ensuite les photos choisies. */
+export async function saveWarning(_prev: ActionResult<{ id: string }> | null, formData: FormData): Promise<ActionResult<{ id: string }>> {
   const t = await getT();
   const auth = await assertModule("avertissements", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
@@ -36,7 +37,7 @@ export async function saveWarning(_prev: ActionResult | null, formData: FormData
   const { data, error } = await supabase.from("warnings").insert(values).select("id").single();
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/avertissements");
-  redirect(`/avertissements/${data.id}?ok=1`);
+  return { ok: true, message: t("Avertissement enregistré."), data: { id: data.id } };
 }
 
 export async function deleteWarning(id: string): Promise<ActionResult> {

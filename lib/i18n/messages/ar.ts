@@ -980,4 +980,6 @@ export const ar: Messages = {
   "Vue par jour : 31 derniers jours (choisissez une période avec Du / Au pour en voir d'autres).": "العرض اليومي: آخر 31 يومًا (اختر فترة بـ من / إلى لعرض غيرها).",
   "alerte {count} j avant": "تنبيه قبل {count} يوم",
   "À venir": "القادمة",
+  "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.": "لم يتم إرسال {count} صورة: أضفها مجددًا في الصفحة.",
+  "Les photos sont envoyées lors de l'enregistrement.": "تُرسل الصور عند الحفظ.",
 };

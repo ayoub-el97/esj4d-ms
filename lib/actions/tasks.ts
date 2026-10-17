@@ -17,7 +17,8 @@ const schema = z.object({
   agents: z.array(z.string().uuid()).default([]),
 });
 
-export async function saveTask(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/** Enregistre une tâche. À la création, renvoie l'id pour que le formulaire envoie ensuite les photos choisies. */
+export async function saveTask(_prev: ActionResult<{ id: string }> | null, formData: FormData): Promise<ActionResult<{ id: string }>> {
   const t = await getT();
   const auth = await assertModule("programme", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
@@ -47,8 +48,7 @@ export async function saveTask(_prev: ActionResult | null, formData: FormData): 
     if (error) return { ok: false, error: t(friendlyError(error.message)) };
   }
   revalidatePath("/programme");
-  if (id) return { ok: true, message: t("Tâche enregistrée.") };
-  redirect(`/programme/${taskId}`);
+  return { ok: true, message: t("Tâche enregistrée."), data: id ? undefined : { id: taskId! } };
 }
 
 export async function completeTask(id: string, comments: string): Promise<ActionResult> {

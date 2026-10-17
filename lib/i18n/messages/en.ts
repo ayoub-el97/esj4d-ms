@@ -980,4 +980,6 @@ export const en: Messages = {
   "Vue par jour : 31 derniers jours (choisissez une période avec Du / Au pour en voir d'autres).": "Daily view: last 31 days (choose a period with From / To to see others).",
   "alerte {count} j avant": "alert {count} d before",
   "À venir": "Upcoming",
+  "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.": "{count} photo(s) not sent: add them again on the record page.",
+  "Les photos sont envoyées lors de l'enregistrement.": "Photos are sent when you save.",
 };
