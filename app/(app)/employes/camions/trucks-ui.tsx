@@ -2,8 +2,9 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, Power } from "lucide-react";
-import { saveTruck, setTruckActive } from "@/lib/actions/employees";
+import { useRouter } from "next/navigation";
+import { Pencil, Power, Trash2 } from "lucide-react";
+import { deleteTruck, saveTruck, setTruckActive } from "@/lib/actions/employees";
 import type { Truck } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
 import { Badge } from "@/components/ui/badge";
@@ -19,14 +20,16 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
   const [editing, setEditing] = useState<Truck | null>(null);
   const [state, action] = useActionState(saveTruck, null);
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <Card>
         <CardHeader>
-          <CardTitle>{t("Liste des camions")}</CardTitle>
+          <CardTitle>{t("Véhicules")}</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -40,7 +43,7 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
               {trucks.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    {t("Aucun camion enregistré.")}
+                    {t("Aucun véhicule enregistré.")}
                   </TableCell>
                 </TableRow>
               )}
@@ -69,19 +72,40 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
                       >
                         <Power />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={pending}
+                        aria-label={t("Supprimer")}
+                        title={t("Supprimer")}
+                        onClick={() => {
+                          if (!window.confirm(t("Supprimer définitivement le véhicule {matricule} ?", { matricule: tr.matricule }))) return;
+                          start(async () => {
+                            const r = await deleteTruck(tr.id);
+                            if (r.ok) {
+                              toast.success(r.message);
+                              if (editing?.id === tr.id) setEditing(null);
+                              router.refresh();
+                            } else toast.error(r.error, { duration: 8000 });
+                          });
+                        }}
+                      >
+                        <Trash2 />
+                      </Button>
                     </TableCell>
                   )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
       {canEdit && (
         <Card>
           <CardHeader>
-            <CardTitle>{editing ? t("Modifier {matricule}", { matricule: editing.matricule }) : t("Nouveau camion")}</CardTitle>
+            <CardTitle>{editing ? t("Modifier {matricule}", { matricule: editing.matricule }) : t("Nouveau véhicule")}</CardTitle>
           </CardHeader>
           <CardContent>
             <form

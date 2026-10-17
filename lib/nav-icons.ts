@@ -1,0 +1,46 @@
+// Icône de chaque section (utilisable côté serveur et navigateur).
+import { createElement } from "react";
+import {
+  AlertTriangle,
+  BellRing,
+  Building2,
+  CalendarCheck2,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  FileBarChart2,
+  Home,
+  Leaf,
+  ListTodo,
+  Lock,
+  Settings,
+  Truck,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
+export const NAV_ICONS: Record<string, LucideIcon> = {
+  "/": Home,
+  "/pointage": ClipboardCheck,
+  "/rapport-journalier": ClipboardList,
+  "/rapport-mensuel": FileBarChart2,
+  "/rapport-camions": Truck,
+  "/conges": CalendarDays,
+  "/avertissements": AlertTriangle,
+  "/programme": ListTodo,
+  "/dechet-vert": Leaf,
+  "/rapports-travailleurs": UserRound,
+  "/cloture": Lock,
+  "/rappels": BellRing,
+  "/profil": Building2,
+  "/employes": Users,
+  "/parametres": Settings,
+};
+
+export const iconFor = (href: string): LucideIcon => NAV_ICONS[href] ?? CalendarCheck2;
+
+/** Icône d'une section, en composant stable (évite de créer un composant pendant le rendu). */
+export function NavIcon({ href, className }: { href: string; className?: string }) {
+  return createElement(NAV_ICONS[href] ?? CalendarCheck2, { className, "aria-hidden": true });
+}

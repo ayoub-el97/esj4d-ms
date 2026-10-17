@@ -4,8 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --radius: 0.75rem;
+  --background: oklch(0.982 0.004 264); /* gris bleuté très clair : les cartes blanches ressortent */
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -15,13 +15,13 @@
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.965 0.005 264);
+  --muted-foreground: oklch(0.52 0.02 264);
+  --accent: oklch(0.962 0.018 272);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.92 0.006 264);
+  --input: oklch(0.88 0.008 264);
   --ring: oklch(0.511 0.262 276.966);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -96,10 +96,20 @@ html[dir="rtl"] body {
   font-family: var(--font-arabic), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Barre d'onglets mobile : marge pour la zone du geste d'accueil (iPhone) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Impression : masquer la navigation */
 @media print {
   header,
+  nav,
+  aside,
   .no-print {
     display: none !important;
+  }
+  main {
+    padding: 0 !important;
   }
 }

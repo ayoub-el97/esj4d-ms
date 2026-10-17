@@ -1,78 +1,54 @@
 import Link from "next/link";
-import { Building2, Home, LogOut, Settings, Users } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { signOut } from "@/lib/actions/auth";
 import { getBranding } from "@/lib/data/settings";
 import { getReminderAlerts } from "@/lib/data/reminders";
 import { todayISO } from "@/lib/dates";
 import { getT } from "@/lib/i18n/server";
+import { ADMIN_MODULES, DASHBOARD_MODULES } from "@/lib/modules";
 import { ROLE_LABELS } from "@/lib/types";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { LinkButton } from "@/components/link-button";
+import { MobileTabBar, Sidebar, type NavItem } from "@/components/app-nav";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { NotificationBell } from "@/components/notification-bell";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, t, brand, alerts] = await Promise.all([getCurrentUser(), getT(), getBranding(), getReminderAlerts()]);
-  const canSeeProfile = user.permissions.parametres.can_view || user.permissions.employes.can_view;
+
+  // Navigation filtrée selon les permissions de l'utilisateur
+  const modules: NavItem[] = DASHBOARD_MODULES.filter((m) => user.permissions[m.key].can_view).map(({ href, label, accent }) => ({ href, label, accent }));
+  const admin: NavItem[] = ADMIN_MODULES.filter((m) => (m.href === "/profil" ? user.permissions.parametres.can_view || user.permissions.employes.can_view : user.permissions[m.key].can_view)).map(({ href, label, accent }) => ({
+    href,
+    label,
+    accent,
+  }));
+  const navProps = { modules, admin, userName: user.fullName, userRole: ROLE_LABELS[user.role] };
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+      <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur">
+        <div className="flex h-14 items-center gap-3 px-4">
+          <Link href="/" className="flex min-w-0 items-center gap-2.5 font-semibold">
             {brand.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={brand.logoUrl} alt={brand.companyName} className="size-8 rounded-lg object-contain" />
+              <img src={brand.logoUrl} alt={brand.companyName} className="size-8 shrink-0 rounded-lg object-contain" />
             ) : (
-              <span className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-sm text-white">
-                {brand.companyName.slice(0, 1).toUpperCase()}
-              </span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">{brand.companyName.slice(0, 1).toUpperCase()}</span>
             )}
-            <span className="hidden max-w-40 truncate md:inline">{brand.companyName}</span>
+            <span className="truncate">{brand.companyName}</span>
           </Link>
-
-          <nav className="ms-1 flex items-center gap-1">
-            <LinkButton href="/" variant="ghost" size="sm" title={t("Accueil")}>
-              <Home /> <span className="hidden lg:inline">{t("Accueil")}</span>
-            </LinkButton>
-            {canSeeProfile && (
-              <LinkButton href="/profil" variant="ghost" size="sm" title={t("Profil de l'entreprise")}>
-                <Building2 /> <span className="hidden lg:inline">{t("Profil")}</span>
-              </LinkButton>
-            )}
-            {user.permissions.employes.can_view && (
-              <LinkButton href="/employes" variant="ghost" size="sm" title={t("Employés")}>
-                <Users /> <span className="hidden lg:inline">{t("Employés")}</span>
-              </LinkButton>
-            )}
-            {user.permissions.parametres.can_view && (
-              <LinkButton href="/parametres" variant="ghost" size="sm" title={t("Paramètres")}>
-                <Settings /> <span className="hidden lg:inline">{t("Paramètres")}</span>
-              </LinkButton>
-            )}
-          </nav>
-
-          <div className="ms-auto flex items-center gap-2">
+          <div className="ms-auto flex items-center gap-1.5">
+            <LanguageSwitcher className="hidden sm:inline-flex lg:hidden" />
             <NotificationBell alerts={alerts} today={todayISO()} />
-            <LanguageSwitcher />
-            <div className="hidden text-end sm:block">
-              <div className="text-sm font-medium leading-tight">{user.fullName}</div>
-              <Badge variant="secondary" className="text-[10px]">
-                {t(ROLE_LABELS[user.role])}
-              </Badge>
-            </div>
-            <form action={signOut}>
-              <Button type="submit" variant="outline" size="sm" title={t("Se déconnecter")}>
-                <LogOut className="rtl:rotate-180" /> <span className="hidden sm:inline">{t("Déconnexion")}</span>
-              </Button>
-            </form>
+            <span className="hidden text-sm text-muted-foreground lg:inline">{t("Bonjour {name}", { name: user.fullName.split(" ")[0] })}</span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
+      <div className="flex flex-1">
+        <Sidebar {...navProps} />
+        <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">{children}</main>
+      </div>
+
+      <MobileTabBar {...navProps} />
     </div>
   );
 }

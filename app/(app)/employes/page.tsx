@@ -1,4 +1,4 @@
-import { Plus, Truck } from "lucide-react";
+import { ListPlus, Plus, Truck } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployeeRows } from "@/lib/data/employees";
 import { getT, pageTitle } from "@/lib/i18n/server";
@@ -27,8 +27,13 @@ export default async function EmployesPage({
             <Plus /> {t("Nouvel équipier")}
           </LinkButton>
         )}
+        {user.permissions.employes.can_edit && (
+          <LinkButton href="/employes/import" variant="outline">
+            <ListPlus /> {t("Ajouter plusieurs employés")}
+          </LinkButton>
+        )}
         <LinkButton href="/employes/camions" variant="outline">
-          <Truck /> {t("Camions")}
+          <Truck /> {t("Véhicules")}
         </LinkButton>
       </ModuleHeader>
 

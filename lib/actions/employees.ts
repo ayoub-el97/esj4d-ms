@@ -144,6 +144,7 @@ export async function saveTruck(_prev: ActionResult | null, formData: FormData):
   if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
 
   revalidatePath("/employes/camions");
+  revalidatePath("/profil");
   return { ok: true, message: id ? t("Camion modifié.") : t("Camion ajouté.") };
 }
 
@@ -155,6 +156,7 @@ export async function setTruckActive(id: string, isActive: boolean): Promise<Act
   const { error } = await supabase.from("trucks").update({ is_active: isActive }).eq("id", id);
   if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
   revalidatePath("/employes/camions");
+  revalidatePath("/profil");
   return { ok: true, message: isActive ? t("Camion réactivé.") : t("Camion désactivé.") };
 }
 
@@ -163,4 +165,80 @@ function friendlyDbError(message: string): string {
   if (message.includes("REMPLACANT_INVALIDE")) return "Le remplaçant d'un chauffeur doit être un chauffeur remplaçant, celui d'un rippeur un rippeur remplaçant.";
   if (message.includes("employees_substitute_not_self")) return "Un employé ne peut pas être son propre remplaçant.";
   return friendlyError(message);
+}
+
+/**
+ * Supprime un véhicule jamais utilisé. S'il a un historique (pointage, rapports, pleins)
+ * ou s'il est affecté à un chauffeur, la base refuse : on propose alors de le désactiver.
+ */
+export async function deleteTruck(id: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("trucks").delete().eq("id", id).select("id");
+  if (error) {
+    if (error.code === "23503" || error.message.includes("foreign key"))
+      return { ok: false, error: t("Ce véhicule a un historique (pointage, rapports, carburant) ou est affecté à un chauffeur : il ne peut pas être supprimé. Désactivez-le pour le retirer des listes.") };
+    return { ok: false, error: t(friendlyDbError(error.message)) };
+  }
+  if (!data?.length) return { ok: false, error: t("Véhicule introuvable.") };
+  revalidatePath("/employes/camions");
+  revalidatePath("/profil");
+  return { ok: true, message: t("Véhicule supprimé.") };
+}
+
+// ---------------------------------------------------------------------------
+// Saisie de plusieurs employés en une fois
+// ---------------------------------------------------------------------------
+export type BulkEmployeeInput = { matricule: string; last_name: string; first_name: string; position: string; rest_day: string; hire_date: string; phone: string };
+export type BulkResult = { created: number; errors: { line: number; error: string }[] };
+
+/**
+ * Crée les employés ligne par ligne (le numéro d'ordre NB est attribué automatiquement).
+ * Les lignes valides sont enregistrées ; les autres sont renvoyées avec la raison.
+ * Camion, équipe d'un rippeur et remplaçant se règlent ensuite sur la fiche de chaque employé.
+ */
+export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<ActionResult<BulkResult>> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: t("Aucune ligne à enregistrer.") };
+  if (rows.length > 500) return { ok: false, error: t("500 lignes au maximum par envoi.") };
+
+  const supabase = await createClient();
+  const result: BulkResult = { created: 0, errors: [] };
+  for (const [i, r] of rows.entries()) {
+    const parsed = employeeSchema.safeParse({
+      matricule: r.matricule,
+      last_name: r.last_name,
+      first_name: r.first_name,
+      position: r.position,
+      rest_day: r.rest_day,
+      truck_id: null,
+      chauffeur_id: null,
+      substitute_id: null,
+      hire_date: r.hire_date,
+      phone: r.phone ?? "",
+      is_active: true,
+    });
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const msg = issue.path[0] === "position" ? "Poste invalide." : issue.path[0] === "hire_date" ? "Date d'entrée invalide." : issue.path[0] === "rest_day" ? "Jour de repos invalide." : issue.message;
+      result.errors.push({ line: i + 1, error: t(msg) });
+      continue;
+    }
+    const { id: _id, ...values } = parsed.data;
+    void _id;
+    const { error } = await supabase.from("employees").insert(values);
+    if (error) result.errors.push({ line: i + 1, error: t(friendlyDbError(error.message)) });
+    else result.created++;
+  }
+  if (result.created) {
+    revalidatePath("/employes");
+    revalidatePath("/profil");
+    revalidatePath("/pointage", "layout");
+  }
+  return { ok: true, data: result };
 }

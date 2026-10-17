@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Grande tuile d'action (ex. "Feuille de présence des équipes de collecte"). */
+/**
+ * Tuile d'action (ex. "Feuille de présence des équipes de collecte").
+ * Téléphone : ligne compacte (icône, texte, flèche). Ordinateur : carte.
+ */
 export function ActionTile({
   href,
   label,
@@ -19,13 +23,16 @@ export function ActionTile({
     <Link
       href={href}
       className={cn(
-        "flex min-h-28 flex-col items-center justify-center gap-1 rounded-xl border bg-card p-4 text-center shadow-sm transition-colors hover:bg-muted",
+        "group flex items-center gap-3 rounded-2xl border bg-card p-4 text-start shadow-sm transition hover:border-primary/30 hover:shadow-md sm:min-h-32 sm:flex-col sm:items-start sm:justify-between",
         className,
       )}
     >
-      {icon && <span className="text-indigo-600">{icon}</span>}
-      <span className="font-semibold">{label}</span>
-      {description && <span className="text-xs text-muted-foreground">{description}</span>}
+      {icon && <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary [&_svg]:size-5">{icon}</span>}
+      <span className="min-w-0 flex-1 sm:flex-none">
+        <span className="block font-semibold">{label}</span>
+        {description && <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>}
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition group-hover:text-primary sm:hidden rtl:rotate-180" />
     </Link>
   );
 }
