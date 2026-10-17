@@ -5,7 +5,8 @@ import { getMonthlyAttendance } from "@/lib/data/attendance";
 import { getTruckMonthly } from "@/lib/data/reports";
 import { getLeaveRequests } from "@/lib/data/leaves";
 import { getWarnings } from "@/lib/data/warnings";
-import { monthRange } from "@/lib/dates";
+import { workMonthRange } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import type { TeamType } from "@/lib/types";
 
 export type MonthlyFilters = { team?: TeamType; employee?: string; truck?: string };
@@ -26,7 +27,7 @@ export type MonthlyReport = {
 
 /** Vue mensuelle regroupant pointage, camions, congés, avertissements et interventions (sans doublons). */
 export async function getMonthlyReport(month: string, f: MonthlyFilters = {}): Promise<MonthlyReport> {
-  const { from, to } = monthRange(month);
+  const { from, to } = workMonthRange(month, await getProjectStart());
   const supabase = await createClient();
   const [employees, attendance, trucks, leaveRequests, warnings, cleaningAgents, greenWaste, tasks] = await Promise.all([
     getEmployees(),

@@ -1080,4 +1080,9 @@ export const en: Messages = {
   "Aïd Al Fitr (2e jour)": "Eid al-Fitr (day 2)",
   "Aïd Al Adha (1er jour)": "Eid al-Adha (day 1)",
   "Aïd Al Adha (2e jour)": "Eid al-Adha (day 2)",
+  "Date de début du projet invalide.": "Invalid project start date.",
+  "Date de début du projet": "Project start date",
+  "Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).": "\"Months\" are counted from this date, for employees and monthly reports: start on 08/10/2026 → 1st month from 08/10/2026 to 07/11/2026. Leave empty for calendar months (1st to last day).",
+  "Superviseur": "Supervisor",
+  "aucun (ajoutez un employé au poste Superviseur)": "none (add an employee with the Supervisor position)",
 };

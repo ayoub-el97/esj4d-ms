@@ -1080,4 +1080,9 @@ export const ar: Messages = {
   "Aïd Al Fitr (2e jour)": "عيد الفطر (اليوم الثاني)",
   "Aïd Al Adha (1er jour)": "عيد الأضحى (اليوم الأول)",
   "Aïd Al Adha (2e jour)": "عيد الأضحى (اليوم الثاني)",
+  "Date de début du projet invalide.": "تاريخ بداية المشروع غير صالح.",
+  "Date de début du projet": "تاريخ بداية المشروع",
+  "Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).": "تُحتسب « الأشهر » ابتداءً من هذا التاريخ، للموظفين وللتقارير الشهرية: البداية في 08/10/2026 ← الشهر الأول من 08/10/2026 إلى 07/11/2026. اتركه فارغًا لاعتماد الأشهر الميلادية (من اليوم الأول إلى الأخير).",
+  "Superviseur": "المشرف",
+  "aucun (ajoutez un employé au poste Superviseur)": "لا أحد (أضف موظفًا بمنصب مشرف)",
 };

@@ -150,14 +150,18 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (team === "nettoiement") return [{ key: "all", title: null, chauffeurId: null, idx: rows.map((_, i) => i) }] as Group[];
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<number>();
-    const result: Group[] = chauffeurs.map((c) => {
+    const supervisorIdx = rows.map((r, i) => (r.position === "superviseur" ? i : -1)).filter((i) => i >= 0);
+    supervisorIdx.forEach((i) => used.add(i));
+    const result: Group[] = [];
+    if (supervisorIdx.length) result.push({ key: "superviseurs", title: t("Superviseur"), chauffeurId: null, idx: supervisorIdx });
+    result.push(...chauffeurs.map((c) => {
       const idx = rows.map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1)).filter((i) => i >= 0);
       idx.forEach((i) => used.add(i));
       const driver = idx.map((i) => rows[i]).find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && isWorked(r.status) && r.truck_id);
       const plate = (driver?.truck_id ? trucks.find((tr) => tr.id === driver.truck_id)?.matricule : null) ?? (c.truck_id ? trucks.find((tr) => tr.id === c.truck_id)?.matricule : null);
       const title = plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name });
       return { key: c.employee_id, title, chauffeurId: c.employee_id, idx };
-    });
+    }));
     const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
     const freeSubstitutes = rest.filter((i) => isSubstitutePosition(rows[i].position));
     const others = rest.filter((i) => !isSubstitutePosition(rows[i].position));
@@ -165,6 +169,13 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (others.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: others });
     return result;
   }, [rows, team, t, trucks]);
+
+  const supervisorNames = useMemo(
+    () =>
+      Array.from(new Set(rows.filter((r) => r.position === "superviseur").map((r) => r.name)))
+        .join(", "),
+    [rows],
+  );
 
   const counts = useMemo(() => {
     const c: Partial<Record<AttendanceStatus, number>> = {};
@@ -210,6 +221,12 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         <div className="text-sm sm:text-end">
           <div className="text-muted-foreground">{t("Date")}</div>
           <div className="font-medium">{formatDateFr(date)}</div>
+          {team === "collecte" && (
+            <div className="mt-1">
+              <span className="text-muted-foreground">{t("Superviseur")} : </span>
+              <span className="font-medium">{supervisorNames || t("aucun (ajoutez un employé au poste Superviseur)")}</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -3,7 +3,8 @@ import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName } from "@/lib/data/employees";
 import { getWorkersPeriodReport } from "@/lib/data/worker";
-import { currentMonth, formatDateFr, isISODate, isMonth, monthRange } from "@/lib/dates";
+import { formatDateFr, isISODate, isMonth, todayISO, workMonthOf, workMonthRange } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import { POSITIONS, POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
@@ -21,16 +22,17 @@ export const generateMetadata = pageTitle("Rapports travailleurs");
 type SP = { mois?: string; from?: string; to?: string; categorie?: string; employe?: string; poste?: string; equipe?: string; q?: string };
 
 /** Période choisie : du/au si renseignés, sinon le mois sélectionné (mois courant par défaut). */
-function resolvePeriod(sp: SP): { from: string; to: string; month: string | null } {
+function resolvePeriod(sp: SP, projectStart: string | null): { from: string; to: string; month: string | null } {
   if (isISODate(sp.from) && isISODate(sp.to) && sp.from <= sp.to) return { from: sp.from, to: sp.to, month: null };
-  const month = isMonth(sp.mois) ? sp.mois : currentMonth();
-  return { ...monthRange(month), month };
+  const month = isMonth(sp.mois) ? sp.mois : workMonthOf(todayISO(), projectStart);
+  return { ...workMonthRange(month, projectStart), month };
 }
 
 export default async function RapportsTravailleursPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [, t] = await Promise.all([requireModule("rapports_travailleurs"), getT()]);
   const sp = await searchParams;
-  const { from, to, month } = resolvePeriod(sp);
+  const projectStart = await getProjectStart();
+  const { from, to, month } = resolvePeriod(sp, projectStart);
   const [rows, employees] = await Promise.all([getWorkersPeriodReport(from, to, sp), getEmployees()]);
   const chauffeurs = employees.filter((e) => e.position === "chauffeur");
   const period = t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) });

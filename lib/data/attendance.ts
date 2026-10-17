@@ -1,4 +1,6 @@
 import "server-only";
+import { getProjectStart } from "@/lib/data/settings";
+import { workMonthRange } from "@/lib/dates";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
@@ -290,9 +292,8 @@ export async function getAttendanceSummary(from: string, to: string, team?: Team
 
 /** Synthèse mensuelle (mois au format yyyy-MM). */
 export async function getMonthlyAttendance(month: string, team?: TeamType) {
-  const [y, m] = month.split("-").map(Number);
-  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-  return getAttendanceSummary(`${month}-01`, to, team);
+  const { from, to } = workMonthRange(month, await getProjectStart());
+  return getAttendanceSummary(from, to, team);
 }
 
 /** Résumé d'une journée pour l'écran de clôture. */

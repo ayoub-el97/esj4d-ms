@@ -2,7 +2,8 @@ import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName, getTrucks } from "@/lib/data/employees";
 import { getMonthlyReport } from "@/lib/data/monthly";
-import { currentMonth, formatMonthFr, isMonth } from "@/lib/dates";
+import { formatWorkMonth, isMonth, todayISO, workMonthOf } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import type { TFunction } from "@/lib/i18n/config";
 import { POSITION_LABELS, TEAM_LABELS, TEAM_SLUGS } from "@/lib/types";
@@ -24,7 +25,8 @@ const CATEGORIES = { toutes: "Toutes", pointage: "Pointage", camions: "Camions",
 export default async function RapportMensuelPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, { t, locale }] = await Promise.all([requireModule("rapport_mensuel"), getI18n()]);
   const sp = await searchParams;
-  const month = isMonth(sp.mois) ? sp.mois : currentMonth();
+  const projectStart = await getProjectStart();
+  const month = isMonth(sp.mois) ? sp.mois : workMonthOf(todayISO(), projectStart);
   const cat = (sp.categorie && sp.categorie in CATEGORIES ? sp.categorie : "toutes") as keyof typeof CATEGORIES;
   const team = sp.equipe ? TEAM_SLUGS[sp.equipe] : undefined;
   const [report, employees, trucks] = await Promise.all([getMonthlyReport(month, { team, employee: sp.employe, truck: sp.camion }), getEmployees(), getTrucks()]);
@@ -36,7 +38,7 @@ export default async function RapportMensuelPage({ searchParams }: { searchParam
 
   return (
     <div>
-      <ModuleHeader title={t("Rapport mensuel")} subtitle={formatMonthFr(month, locale)} />
+      <ModuleHeader title={t("Rapport mensuel")} subtitle={formatWorkMonth(month, projectStart, locale)} />
 
       <form className="mb-6 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
         <div className="space-y-1">

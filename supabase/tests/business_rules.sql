@@ -359,6 +359,49 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 16. Mois de projet (début le 08/10/2026) et superviseur
+-- ---------------------------------------------------------------------------
+do $$
+declare r record; sup uuid; e uuid;
+begin
+  -- Sans date de début : mois calendaire
+  assert public.work_month_start('2026-10-20') = '2026-10-01' and public.work_month_end('2026-10-20') = '2026-10-31', 'mois calendaire par défaut';
+
+  update public.settings set value = '"2026-10-08"' where key = 'project_start_date';
+  assert public.work_month_start('2026-10-08') = '2026-10-08', 'début du 1er mois';
+  assert public.work_month_end('2026-10-08') = '2026-11-07', 'fin du 1er mois';
+  assert public.work_month_start('2026-11-07') = '2026-10-08', 'le 07/11 appartient encore au 1er mois';
+  assert public.work_month_start('2026-11-08') = '2026-11-08', 'le 08/11 commence le 2e mois';
+  select * into r from public.work_month_range('2026-10-01');
+  assert r.month_start = '2026-10-08' and r.month_end = '2026-11-07', 'mois « octobre 2026 » = 08/10 → 07/11';
+
+  -- Congés : un mois complet seulement au 08/11 pour un employé entré avant le projet
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('B099', 'Test', 'Projet', 'balayeur', 'nettoiement', 0, '2026-01-01') returning id into e;
+  assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 0, 'pas de mois complet avant le 08/11';
+  assert (select accrued from public.leave_balances('2026-11-08') where employee_id = e) = 1.5, '1,5 jour au 08/11';
+
+  -- Rapport mensuel : le pointage du 05/11 compte dans le mois « octobre »
+  insert into public.attendance (activity_date, employee_id, status, position, team_type) values ('2026-11-05', e, 'present', 'balayeur', 'nettoiement')
+  on conflict (activity_date, employee_id, shift) do update set status = excluded.status;
+  assert (select worked_days from public.monthly_attendance('2026-10-01') where employee_id = e) >= 1, 'pointage du 05/11 dans le mois d''octobre';
+
+  -- Superviseur : poste de la collecte, pointé avec les mêmes règles
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('S001', 'Bennani', 'Karim', 'superviseur', 'collecte', 0, '2026-10-08') returning id into sup;
+  insert into public.attendance (activity_date, employee_id, status, position, team_type) values ('2026-10-21', sup, 'absent', 'superviseur', 'collecte');
+  assert (select absences from public.attendance_summary('2026-10-01', '2026-10-31') where employee_id = sup) = 1, 'absence du superviseur comptée';
+  begin
+    insert into public.employees (matricule, last_name, first_name, position, team_type) values ('S002', 'X', 'Y', 'superviseur', 'nettoiement');
+    raise exception 'ÉCHEC : superviseur hors collecte accepté';
+  exception when check_violation then null;
+  end;
+
+  update public.settings set value = '""' where key = 'project_start_date';
+  raise notice 'OK 16 mois de projet (08/10 → 07/11), congés au jour anniversaire, superviseur pointé';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);

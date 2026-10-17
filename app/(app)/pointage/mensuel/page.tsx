@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { requireModule } from "@/lib/auth";
 import { getMonthlyAttendance } from "@/lib/data/attendance";
-import { currentMonth, formatMonthFr, isMonth } from "@/lib/dates";
+import { formatWorkMonth, isMonth, todayISO, workMonthOf } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { POSITION_LABELS, TEAM_LABELS, TEAM_SLUGS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
@@ -16,7 +17,8 @@ export const generateMetadata = pageTitle("Rapport mensuel de pointage");
 export default async function MensuelPage({ searchParams }: { searchParams: Promise<{ mois?: string; equipe?: string }> }) {
   const [, { t, locale }] = await Promise.all([requireModule("pointage"), getI18n()]);
   const sp = await searchParams;
-  const month = isMonth(sp.mois) ? sp.mois : currentMonth();
+  const projectStart = await getProjectStart();
+  const month = isMonth(sp.mois) ? sp.mois : workMonthOf(todayISO(), projectStart);
   const team = sp.equipe ? TEAM_SLUGS[sp.equipe] : undefined;
   const rows = await getMonthlyAttendance(month, team);
 
@@ -36,7 +38,7 @@ export default async function MensuelPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <ModuleHeader title={t("Rapport mensuel de pointage")} subtitle={formatMonthFr(month, locale)} backHref="/pointage">
+      <ModuleHeader title={t("Rapport mensuel de pointage")} subtitle={formatWorkMonth(month, projectStart, locale)} backHref="/pointage">
         <Suspense>
           <DateField value={month} param="mois" type="month" label="Mois" />
           <TeamFilter value={team ?? ""} />

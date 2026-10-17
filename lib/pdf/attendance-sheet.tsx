@@ -1,6 +1,6 @@
 import { Text, View } from "@react-pdf/renderer";
 import type { SheetRow } from "@/lib/attendance-types";
-import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
@@ -52,9 +52,17 @@ export function AttendanceSheetPdf({
     obs: r.observation,
   });
 
+  const supervisors = rows.filter((r) => r.position === "superviseur");
   if (team === "collecte") {
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<string>();
+    if (supervisors.length) {
+      tableRows.push({ _group: t("Superviseur") });
+      for (const r of supervisors) {
+        tableRows.push(toRow(r));
+        used.add(`${r.employee_id}:${r.shift}`);
+      }
+    }
     for (const c of chauffeurs) {
       const teamRows = rows.filter((r) => r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id);
       const driver = teamRows.find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && WORKED_STATUSES.includes(r.status) && r.truck_id) ?? c;
@@ -94,6 +102,7 @@ export function AttendanceSheetPdf({
         <View style={styles.metaBox}>
           <Text>
             {t("Chef d'équipe")} : {teamLead || "—"}
+            {team === "collecte" ? ` · ${t("Superviseur")} : ${Array.from(new Set(supervisors.map((r) => r.name))).join(", ") || "—"}` : ""}
           </Text>
         </View>
         <View style={styles.metaBox}>
@@ -124,7 +133,7 @@ export function MonthlyAttendancePdf({
   rows: { order_number: number; name: string; position: string | null; worked_days: number; rest_days_worked: number; absences: number; sick_days: number; leave_days: number; holidays_worked: number; double_days: number; overtime_total: number }[];
   generatedBy: string;
 }) {
-  const { t, locale } = usePdf();
+  const { t, locale, projectStart } = usePdf();
   const columns: Column[] = [
     { key: "nb", label: "NB", width: 5, align: "center" },
     { key: "nom", label: "Nom et prénom", width: 22 },
@@ -140,8 +149,8 @@ export function MonthlyAttendancePdf({
   ];
   const title = team ? `${t("Rapport mensuel de pointage")} — ${t(TEAM_LABELS[team])}` : t("Rapport mensuel de pointage");
   return (
-    <PdfDocument title={`${title} — ${formatMonthFr(month, locale)}`} company={company} generatedBy={generatedBy} orientation="landscape">
-      <PdfHeader company={company} title={title} subtitle={formatMonthFr(month, locale)} />
+    <PdfDocument title={`${title} — ${formatWorkMonth(month, projectStart, locale)}`} company={company} generatedBy={generatedBy} orientation="landscape">
+      <PdfHeader company={company} title={title} subtitle={formatWorkMonth(month, projectStart, locale)} />
       <PdfTable
         columns={columns}
         rows={rows.map((r) => ({

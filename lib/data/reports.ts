@@ -1,4 +1,6 @@
 import "server-only";
+import { getProjectStart } from "@/lib/data/settings";
+import { workMonthRange } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, getTrucks, type Employee, type Truck } from "@/lib/data/employees";
 import { getPhotosFor } from "@/lib/data/photos";
@@ -206,9 +208,7 @@ export async function getTruckReports(filters: { date?: string; from?: string; t
 }
 
 export async function getTruckMonthly(month: string) {
-  const from = `${month}-01`;
-  const [y, m] = month.split("-").map(Number);
-  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const { from, to } = workMonthRange(month, await getProjectStart());
   const rows = await getTruckReports({ from, to }, 2000);
   const byTruck = new Map<string, { truck: Truck | null; days: number; tonnage: number; dumps: number; rippers: number; km: number; fuel: number; tickets: number }>();
   for (const r of rows) {

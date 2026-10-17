@@ -2,7 +2,7 @@ import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
 import type { MonthlyReport } from "@/lib/data/monthly";
 import type { WorkerReport } from "@/lib/data/worker";
 import { employeeName } from "@/lib/data/employees";
-import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus } from "@/lib/types";
 import { LEAVE_STATUS_LABELS, TASK_STATUS_LABELS } from "@/lib/module-types";
 import { PHOTO_PHASE_LABELS } from "@/lib/photo-types";
@@ -10,7 +10,7 @@ import { PdfDocument, PdfFooter, PdfHeader, PdfTable, styles, type Column } from
 import { usePdf } from "./context";
 
 export function MonthlyReportPdf({ company, report, category, generatedBy }: { company: string; report: MonthlyReport; category: string; generatedBy: string }) {
-  const { t, locale } = usePdf();
+  const { t, locale, projectStart } = usePdf();
   const show = (c: string) => category === "toutes" || category === c;
   const attCols: Column[] = [
     { key: "nb", label: "NB", width: 5, align: "center" },
@@ -39,7 +39,7 @@ export function MonthlyReportPdf({ company, report, category, generatedBy }: { c
   ];
   return (
     <PdfDocument title={`${t("Rapport mensuel")} ${report.month}`} company={company} generatedBy={generatedBy}>
-      <PdfHeader company={company} title={t("Rapport mensuel")} subtitle={formatMonthFr(report.month, locale)} />
+      <PdfHeader company={company} title={t("Rapport mensuel")} subtitle={formatWorkMonth(report.month, projectStart, locale)} />
       {show("pointage") && (
         <>
           <Text style={styles.section}>{t("Pointage")}</Text>

@@ -118,6 +118,7 @@ const settingsSchema = z.object({
   leave_days_per_month: z.coerce.number().min(0).max(31),
   double_day_on_rest_day: z.boolean(),
   double_day_two_shifts: z.boolean(),
+  project_start_date: z.union([z.literal(""), z.string().date("Date de début du projet invalide.")]),
 });
 
 export async function saveSettings(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -131,6 +132,7 @@ export async function saveSettings(_prev: ActionResult | null, formData: FormDat
     leave_days_per_month: formData.get("leave_days_per_month"),
     double_day_on_rest_day: formData.get("double_day_on_rest_day") === "on",
     double_day_two_shifts: formData.get("double_day_two_shifts") === "on",
+    project_start_date: formData.get("project_start_date") ?? "",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
@@ -138,7 +140,8 @@ export async function saveSettings(_prev: ActionResult | null, formData: FormDat
   const rows = Object.entries(parsed.data).map(([key, value]) => ({ key, value }));
   const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
-  revalidatePath("/parametres/reglages");
+  // La date de début du projet change le découpage des mois partout
+  revalidatePath("/", "layout");
   return { ok: true, message: t("Réglages enregistrés.") };
 }
 

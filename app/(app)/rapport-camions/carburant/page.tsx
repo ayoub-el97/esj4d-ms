@@ -3,7 +3,8 @@ import { Images, Pencil, Plus, Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, getTrucks } from "@/lib/data/employees";
 import { costPivot, entriesTotals, fuelTotals, getFuelEntries, getFuelSummary, type FuelSummaryRow } from "@/lib/data/fuel";
-import { formatDateFr, formatMonthFr, isISODate, todayISO } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth, isISODate, todayISO, workMonthOf, workMonthRange } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { formatAmount, formatMoney } from "@/lib/money";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import type { Locale, TFunction } from "@/lib/i18n/config";
@@ -36,7 +37,8 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
   const today = todayISO();
   const last31 = new Date(Date.parse(`${today}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10);
   const costFilters = period === "day" && !filters.from && !filters.to ? { ...filters, from: last31, to: today } : filters;
-  const monthStart = `${today.slice(0, 7)}-01`;
+  const projectStart = await getProjectStart();
+  const monthStart = workMonthRange(workMonthOf(today, projectStart), projectStart).from;
   const [entries, weekly, monthly, costRows, currentMonth, trucks, collecte] = await Promise.all([
     getFuelEntries(filters),
     getFuelSummary("week", filters),
@@ -190,10 +192,11 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
         note={costFilters !== filters ? t("Vue par jour : 31 derniers jours (choisissez une période avec Du / Au pour en voir d'autres).") : undefined}
         t={t}
         locale={locale}
+        projectStart={projectStart}
       />
 
-      <SummaryTable title={t("Consommation hebdomadaire")} rows={weekly} t={t} locale={locale} period="week" />
-      <SummaryTable title={t("Consommation mensuelle")} rows={monthly} t={t} locale={locale} period="month" />
+      <SummaryTable title={t("Consommation hebdomadaire")} rows={weekly} t={t} locale={locale} period="week" projectStart={projectStart} />
+      <SummaryTable title={t("Consommation mensuelle")} rows={monthly} t={t} locale={locale} period="month" projectStart={projectStart} />
 
       <ModuleButtons
         pdfSlot={
@@ -208,10 +211,10 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
   );
 }
 
-function SummaryTable({ title, rows, t, locale, period }: { title: string; rows: FuelSummaryRow[]; t: TFunction; locale: Locale; period: "week" | "month" }) {
+function SummaryTable({ title, rows, t, locale, period, projectStart }: { title: string; rows: FuelSummaryRow[]; t: TFunction; locale: Locale; period: "week" | "month"; projectStart: string | null }) {
   // Une ligne par période et par camion, puis un total par période (tous camions)
   const periods = Array.from(new Set(rows.map((r) => r.period_start)));
-  const label = (p: string) => (period === "week" ? t("Semaine du {date}", { date: formatDateFr(p) }) : formatMonthFr(p.slice(0, 7), locale));
+  const label = (p: string) => (period === "week" ? t("Semaine du {date}", { date: formatDateFr(p) }) : formatWorkMonth(p.slice(0, 7), projectStart, locale));
   return (
     <>
       <h2 className="mb-2 text-base font-semibold">{title}</h2>

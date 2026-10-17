@@ -68,7 +68,7 @@ export const TEAM_LABELS: Record<TeamType, string> = {
 };
 export const TEAM_SLUGS: Record<string, TeamType> = { collecte: "collecte", nettoiement: "nettoiement" };
 
-export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant";
+export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant" | "superviseur";
 /** Ordre d'affichage des postes */
 export const POSITION_LABELS: Record<Position, string> = {
   balayeur: "Balayeur",
@@ -76,6 +76,7 @@ export const POSITION_LABELS: Record<Position, string> = {
   chauffeur: "Chauffeur",
   chauffeur_remplacant: "Chauffeur remplaçant",
   rippeur_remplacant: "Rippeur remplaçant",
+  superviseur: "Superviseur",
 };
 export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];
 /** Postes de conduite (titulaire ou remplaçant) : peuvent conduire un camion */

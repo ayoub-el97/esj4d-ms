@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { TeamType } from "@/lib/types";
 
@@ -11,6 +12,8 @@ export type AppSettings = {
   double_day_on_rest_day: boolean;
   double_day_two_shifts: boolean;
   company_logo_path: string;
+  /** Date de début du projet (aaaa-mm-jj) : base du calcul des « mois » ; vide = mois calendaire */
+  project_start_date: string;
 };
 
 const DEFAULTS: AppSettings = {
@@ -22,6 +25,7 @@ const DEFAULTS: AppSettings = {
   double_day_on_rest_day: true,
   double_day_two_shifts: true,
   company_logo_path: "",
+  project_start_date: "",
 };
 
 /** Lit les réglages (table settings) en appliquant les valeurs par défaut. */
@@ -36,6 +40,12 @@ export async function getSettings(): Promise<AppSettings> {
   }
   return result;
 }
+
+/** Date de début du projet (ou null) : les mois vont du jour de début au veille du même jour le mois suivant. */
+export const getProjectStart = cache(async (): Promise<string | null> => {
+  const s = await getSettings();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s.project_start_date) ? s.project_start_date : null;
+});
 
 export const BRANDING_BUCKET = "branding";
 

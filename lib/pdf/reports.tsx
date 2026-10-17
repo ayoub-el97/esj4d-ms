@@ -1,7 +1,7 @@
 import { Document, Page, Text, View } from "@react-pdf/renderer";
 import type { CleaningAgent, CleaningSummaryRow, CollectionReportFull, TruckReportRow } from "@/lib/data/reports";
 import { employeeName } from "@/lib/data/employees";
-import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { PdfDocument, PdfFooter, PdfHeader, PdfTable, PhotoGrid, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
@@ -210,7 +210,7 @@ export function TruckMonthlyPdf({
   rows: { truck: { matricule: string; brand: string } | null; days: number; tickets: number; tonnage: number; dumps: number; km: number; fuel: number }[];
   generatedBy: string;
 }) {
-  const { t, locale } = usePdf();
+  const { t, locale, projectStart } = usePdf();
   const columns: Column[] = [
     { key: "mat", label: "Matricule", width: 16 },
     { key: "brand", label: "Marque", width: 14 },
@@ -223,7 +223,7 @@ export function TruckMonthlyPdf({
   ];
   return (
     <PdfDocument title={`${t("Rapport mensuel camions")} ${month}`} company={company} generatedBy={generatedBy}>
-      <PdfHeader company={company} title={t("Rapport mensuel camions")} subtitle={formatMonthFr(month, locale)} />
+      <PdfHeader company={company} title={t("Rapport mensuel camions")} subtitle={formatWorkMonth(month, projectStart, locale)} />
       <PdfTable
         columns={columns}
         rows={rows.map((r) => ({ mat: r.truck?.matricule ?? "", brand: r.truck?.brand ?? "", days: String(r.days), tickets: String(r.tickets), ton: r.tonnage.toFixed(2), dumps: String(r.dumps), km: r.km.toFixed(1), fuel: r.fuel.toFixed(2) }))}

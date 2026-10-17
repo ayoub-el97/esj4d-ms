@@ -51,7 +51,8 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
   if (!user) return null;
   const locale = pdfLocale(userLocale);
   const t = makeT(getMessages(locale));
-  const context: PdfContextValue = { t, locale, logoUrl: logoUrl(settings.company_logo_path) };
+  const projectStart = /^\d{4}-\d{2}-\d{2}$/.test(settings.project_start_date) ? settings.project_start_date : null;
+  const context: PdfContextValue = { t, locale, logoUrl: logoUrl(settings.company_logo_path), projectStart };
   const common = { company: settings.company_name, generatedBy: user.fullName };
   const date = params.date;
   const range = { date: dateOrUndef(params.date), from: dateOrUndef(params.from), to: dateOrUndef(params.to) };

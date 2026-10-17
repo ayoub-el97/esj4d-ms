@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getGreenWasteEntries } from "@/lib/data/green-waste";
-import { formatDateFr, formatMonthFr, isMonth, monthRange } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth, isMonth, workMonthRange } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -17,7 +18,8 @@ export const generateMetadata = pageTitle("Historique — Déchet vert");
 export default async function DechetVertHistoriquePage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; mois?: string }> }) {
   const [, { t, locale }] = await Promise.all([requireModule("dechet_vert"), getI18n()]);
   const sp = await searchParams;
-  const range = isMonth(sp.mois) ? monthRange(sp.mois) : { from: sp.from, to: sp.to };
+  const projectStart = await getProjectStart();
+  const range = isMonth(sp.mois) ? workMonthRange(sp.mois, projectStart) : { from: sp.from, to: sp.to };
   const entries = await getGreenWasteEntries(range);
   const pdfParams: Record<string, string> = {};
   if (range.from) pdfParams.from = range.from;
@@ -25,7 +27,7 @@ export default async function DechetVertHistoriquePage({ searchParams }: { searc
 
   return (
     <div>
-      <ModuleHeader title={t("Historique — Déchet vert")} subtitle={isMonth(sp.mois) ? formatMonthFr(sp.mois, locale) : t("{count} intervention(s)", { count: entries.length })} backHref="/dechet-vert" />
+      <ModuleHeader title={t("Historique — Déchet vert")} subtitle={isMonth(sp.mois) ? formatWorkMonth(sp.mois, projectStart, locale) : t("{count} intervention(s)", { count: entries.length })} backHref="/dechet-vert" />
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3">
         <div className="space-y-1">
           <Label htmlFor="from">{t("Du")}</Label>

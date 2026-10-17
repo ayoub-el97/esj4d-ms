@@ -1,6 +1,6 @@
 import { Document, Page, Text, View } from "@react-pdf/renderer";
 import { fuelTotals, type CostPivot, type FuelEntry, type FuelPeriod, type FuelSummaryRow, type FuelTotals } from "@/lib/data/fuel";
-import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { formatAmount, formatMoney } from "@/lib/money";
 import { PdfDocument, PdfFooter, PdfHeader, PdfTable, PhotoGrid, styles, type Column } from "./components";
 import { usePdf } from "./context";
@@ -25,7 +25,7 @@ export function FuelReportPdf({
   monthly: FuelSummaryRow[];
   generatedBy: string;
 }) {
-  const { t, locale } = usePdf();
+  const { t, locale, projectStart } = usePdf();
   const title = t("Rapport camions — Carburant");
   const entryCols: Column[] = [
     { key: "date", label: "Date", width: 9 },
@@ -105,7 +105,7 @@ export function FuelReportPdf({
       <Text style={styles.section}>{t("Consommation hebdomadaire")}</Text>
       <PdfTable columns={sumCols("Semaine")} rows={sumRows(weekly, (p) => t("Semaine du {date}", { date: formatDateFr(p) }))} />
       <Text style={styles.section}>{t("Consommation mensuelle")}</Text>
-      <PdfTable columns={sumCols("Mois")} rows={sumRows(monthly, (p) => formatMonthFr(p.slice(0, 7), locale))} />
+      <PdfTable columns={sumCols("Mois")} rows={sumRows(monthly, (p) => formatWorkMonth(p.slice(0, 7), projectStart, locale))} />
       <Text style={[styles.small, { marginTop: 6 }]}>
         {t("Consommation calculée de plein à plein : litres du plein × 100 ÷ km parcourus depuis le plein précédent du même camion. Le premier plein d'un camion sert de référence.")}
       </Text>
@@ -145,9 +145,9 @@ export function FuelEntryPdf({ company, entry, generatedBy }: { company: string;
 
 /** Statistiques des coûts (DH) : une ligne par jour / semaine / mois, une colonne par camion. */
 export function FuelCostsPdf({ company, subtitle, period, pivot, generatedBy }: { company: string; subtitle: string; period: FuelPeriod; pivot: CostPivot; generatedBy: string }) {
-  const { t, locale } = usePdf();
+  const { t, locale, projectStart } = usePdf();
   const title = t("Statistiques des coûts carburant");
-  const label = (iso: string) => (period === "month" ? formatMonthFr(iso.slice(0, 7), locale) : period === "week" ? t("Semaine du {date}", { date: formatDateFr(iso) }) : formatDateFr(iso));
+  const label = (iso: string) => (period === "month" ? formatWorkMonth(iso.slice(0, 7), projectStart, locale) : period === "week" ? t("Semaine du {date}", { date: formatDateFr(iso) }) : formatDateFr(iso));
   const truckWidth = pivot.trucks.length ? Math.min(14, 66 / pivot.trucks.length) : 0;
   const first = 100 - 14 - truckWidth * pivot.trucks.length;
   const columns: Column[] = [

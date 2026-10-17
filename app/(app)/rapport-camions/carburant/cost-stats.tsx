@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CostPivot, FuelPeriod } from "@/lib/data/fuel";
-import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import type { Locale, TFunction } from "@/lib/i18n/config";
 import { formatAmount, formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 
 export const PERIOD_PARAM: Record<string, FuelPeriod> = { jour: "day", semaine: "week", mois: "month" };
 
-export function periodLabel(period: FuelPeriod, iso: string, t: TFunction, locale: Locale): string {
-  if (period === "month") return formatMonthFr(iso.slice(0, 7), locale);
+export function periodLabel(period: FuelPeriod, iso: string, t: TFunction, locale: Locale, projectStart: string | null = null): string {
+  if (period === "month") return formatWorkMonth(iso.slice(0, 7), projectStart, locale);
   if (period === "week") return t("Semaine du {date}", { date: formatDateFr(iso) });
   return formatDateFr(iso);
 }
@@ -22,6 +22,7 @@ export function CostStats({
   note,
   t,
   locale,
+  projectStart = null,
 }: {
   pivot: CostPivot;
   period: FuelPeriod;
@@ -29,6 +30,7 @@ export function CostStats({
   note?: string;
   t: TFunction;
   locale: Locale;
+  projectStart?: string | null;
 }) {
   const unit = t("DH");
   const views: { key: string; period: FuelPeriod; label: string }[] = [
@@ -82,7 +84,7 @@ export function CostStats({
             )}
             {pivot.rows.map((r) => (
               <TableRow key={r.period}>
-                <TableCell className="whitespace-nowrap">{periodLabel(period, r.period, t, locale)}</TableCell>
+                <TableCell className="whitespace-nowrap">{periodLabel(period, r.period, t, locale, projectStart)}</TableCell>
                 {pivot.trucks.map((tr) => (
                   <TableCell key={tr.id} className="text-end tabular-nums">
                     {r.byTruck[tr.id] != null ? formatAmount(r.byTruck[tr.id]) : ""}

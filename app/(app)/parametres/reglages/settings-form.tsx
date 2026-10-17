@@ -45,6 +45,13 @@ export function SettingsForm({ settings }: { settings: AppSettings }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
+            <Label htmlFor="project_start_date">{t("Date de début du projet")}</Label>
+            <Input id="project_start_date" name="project_start_date" type="date" defaultValue={settings.project_start_date} />
+            <p className="text-xs text-muted-foreground">
+              {t("Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).")}
+            </p>
+          </div>
+          <div className="space-y-1">
             <Label htmlFor="leave_days_per_month">{t("Congés acquis par mois (jours)")}</Label>
             <Input id="leave_days_per_month" name="leave_days_per_month" type="number" step="0.5" min="0" defaultValue={settings.leave_days_per_month} required />
             <p className="text-xs text-muted-foreground">{t("Règle initiale : 1,5 jour par mois (3 jours tous les deux mois).")}</p>

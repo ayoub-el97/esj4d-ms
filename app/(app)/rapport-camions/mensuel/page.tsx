@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { requireModule } from "@/lib/auth";
 import { getTruckMonthly } from "@/lib/data/reports";
-import { currentMonth, formatMonthFr, isMonth } from "@/lib/dates";
+import { formatWorkMonth, isMonth, todayISO, workMonthOf } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -14,13 +15,14 @@ export const generateMetadata = pageTitle("Rapport mensuel camions");
 export default async function CamionsMensuelPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {
   const [, { t, locale }] = await Promise.all([requireModule("rapport_camions"), getI18n()]);
   const sp = await searchParams;
-  const month = isMonth(sp.mois) ? sp.mois : currentMonth();
+  const projectStart = await getProjectStart();
+  const month = isMonth(sp.mois) ? sp.mois : workMonthOf(todayISO(), projectStart);
   const rows = await getTruckMonthly(month);
   const total = rows.reduce((a, r) => ({ days: a.days + r.days, tonnage: a.tonnage + r.tonnage, dumps: a.dumps + r.dumps, km: a.km + r.km, fuel: a.fuel + r.fuel }), { days: 0, tonnage: 0, dumps: 0, km: 0, fuel: 0 });
 
   return (
     <div>
-      <ModuleHeader title={t("Rapport mensuel camions")} subtitle={formatMonthFr(month, locale)} backHref="/rapport-camions">
+      <ModuleHeader title={t("Rapport mensuel camions")} subtitle={formatWorkMonth(month, projectStart, locale)} backHref="/rapport-camions">
         <Suspense>
           <DateField value={month} param="mois" type="month" label="Mois" />
         </Suspense>

@@ -63,3 +63,48 @@ export function monthRange(mois: string): { from: string; to: string } {
   const [y, m] = mois.split("-").map(Number);
   return { from: `${mois}-01`, to: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) };
 }
+
+// ---------------------------------------------------------------------------
+// Mois de projet : le « mois » commence le jour de début du projet (réglage
+// project_start_date), ex. 08/10 → 07/11. Même calcul que les fonctions SQL
+// work_month_start / work_month_range. Sans date de début : mois calendaire.
+// ---------------------------------------------------------------------------
+function isoUTC(y: number, m0: number, d: number): string {
+  return new Date(Date.UTC(y, m0, d)).toISOString().slice(0, 10);
+}
+
+/** Ajoute n mois à une date ISO ; le jour est ramené au dernier jour du mois si besoin (comme PostgreSQL). */
+export function addMonthsISO(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m - 1 + n + 1, 0)).getUTCDate();
+  return isoUTC(y, m - 1 + n, Math.min(d, lastDay));
+}
+
+function addDaysISO(iso: string, n: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+}
+
+const monthsBetween = (a: string, b: string) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + (Number(b.slice(5, 7)) - Number(a.slice(5, 7)));
+
+/** Période du « mois » aaaa-mm : celle qui commence dans ce mois calendaire. */
+export function workMonthRange(mois: string, projectStart: string | null | undefined): { from: string; to: string } {
+  if (!projectStart || !isISODate(projectStart)) return monthRange(mois);
+  const n = monthsBetween(projectStart, `${mois}-01`);
+  return { from: addMonthsISO(projectStart, n), to: addDaysISO(addMonthsISO(projectStart, n + 1), -1) };
+}
+
+/** Mois (aaaa-mm du début de période) contenant une date. */
+export function workMonthOf(iso: string, projectStart: string | null | undefined): string {
+  if (!projectStart || !isISODate(projectStart)) return iso.slice(0, 7);
+  let n = monthsBetween(projectStart, iso);
+  if (addMonthsISO(projectStart, n) > iso) n -= 1;
+  return addMonthsISO(projectStart, n).slice(0, 7);
+}
+
+/** « octobre 2026 » ou, avec un début de projet, « octobre 2026 (08/10/2026 → 07/11/2026) ». */
+export function formatWorkMonth(mois: string, projectStart: string | null | undefined, locale: Locale = "fr"): string {
+  const name = formatMonthFr(mois, locale);
+  if (!projectStart || !isISODate(projectStart) || projectStart.endsWith("-01")) return name;
+  const { from, to } = workMonthRange(mois, projectStart);
+  return `${name} (${formatDateFr(from)} → ${formatDateFr(to)})`;
+}

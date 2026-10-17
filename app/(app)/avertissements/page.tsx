@@ -4,7 +4,8 @@ import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName } from "@/lib/data/employees";
 import { getWarnings } from "@/lib/data/warnings";
 import { WARNING_STATUS_LABELS } from "@/lib/module-types";
-import { formatDateFr, formatMonthFr, isMonth, monthRange, todayISO } from "@/lib/dates";
+import { formatDateFr, formatWorkMonth, isMonth, todayISO, workMonthRange } from "@/lib/dates";
+import { getProjectStart } from "@/lib/data/settings";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -25,7 +26,8 @@ type SP = { employee?: string; from?: string; to?: string; status?: string; mois
 export default async function AvertissementsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, { t, locale }] = await Promise.all([requireModule("avertissements"), getI18n()]);
   const sp = await searchParams;
-  const range = isMonth(sp.mois) ? monthRange(sp.mois) : { from: sp.from, to: sp.to };
+  const projectStart = await getProjectStart();
+  const range = isMonth(sp.mois) ? workMonthRange(sp.mois, projectStart) : { from: sp.from, to: sp.to };
   const filters = { employee: sp.employee, status: sp.status, from: range.from, to: range.to };
   const [warnings, employees] = await Promise.all([getWarnings(filters), getEmployees()]);
   const canEdit = user.permissions.avertissements.can_edit;
@@ -41,7 +43,7 @@ export default async function AvertissementsPage({ searchParams }: { searchParam
 
   return (
     <div>
-      <ModuleHeader title={t("Avertissements")} subtitle={isMonth(sp.mois) ? formatMonthFr(sp.mois, locale) : t("Date : {date}", { date: formatDateFr(todayISO()) })}>
+      <ModuleHeader title={t("Avertissements")} subtitle={isMonth(sp.mois) ? formatWorkMonth(sp.mois, projectStart, locale) : t("Date : {date}", { date: formatDateFr(todayISO()) })}>
         {canEdit && (
           <LinkButton href="/avertissements/nouveau" variant="destructive">
             <Plus /> {t("Nouvelle demande")}
