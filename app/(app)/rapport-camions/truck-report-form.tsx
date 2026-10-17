@@ -71,7 +71,7 @@ export function TruckReportForm({
               </NativeSelect>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="rippers_count">{t("Nombre de rippeurs")}</Label>
+              <Label htmlFor="rippers_count">{t("Équipe : nombre de rippeurs")}</Label>
               <Input id="rippers_count" name="rippers_count" type="number" min="0" defaultValue={report?.rippers_count ?? 0} />
             </div>
             <div className="space-y-1">
@@ -97,10 +97,6 @@ export function TruckReportForm({
             <div className="space-y-1">
               <Label htmlFor="km">{t("Kilométrage")}</Label>
               <Input id="km" name="km" type="number" step="0.1" min="0" defaultValue={report?.km ?? ""} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="fuel">{t("Carburant (L)")}</Label>
-              <Input id="fuel" name="fuel" type="number" step="0.01" min="0" defaultValue={report?.fuel ?? ""} />
             </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-4">
               <Label htmlFor="observations">{t("Observations")}</Label>

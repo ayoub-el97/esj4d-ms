@@ -100,10 +100,6 @@ export function CollectionForm({ report, canEdit }: { report: CollectionReportFu
                 <Label htmlFor="km">{t("Kilométrage")}</Label>
                 <Input id="km" name="km" type="number" step="0.1" min="0" defaultValue={tr?.km ?? ""} />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="fuel">{t("Carburant (L)")}</Label>
-                <Input id="fuel" name="fuel" type="number" step="0.01" min="0" defaultValue={tr?.fuel ?? ""} />
-              </div>
               <div className="col-span-2 space-y-1">
                 <Label htmlFor="observations">{t("Observations / commentaires")}</Label>
                 <Textarea id="observations" name="observations" defaultValue={report.observations} />

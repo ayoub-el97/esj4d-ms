@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TruckTabs } from "./truck-tabs";
 
 export const generateMetadata = pageTitle("Rapport camions");
 
@@ -38,6 +39,7 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
           </LinkButton>
         )}
       </ModuleHeader>
+      <TruckTabs active="general" />
 
       {sp.ok && (
         <Alert className="mb-4">
@@ -92,9 +94,8 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
               <TableHead>{t("2e ticket")}</TableHead>
               <TableHead className="text-end">{t("2e tonnage")}</TableHead>
               <TableHead className="text-end">{t("Vidages")}</TableHead>
-              <TableHead className="text-end">{t("Rippeurs")}</TableHead>
+              <TableHead>{t("Équipe (rippeurs)")}</TableHead>
               <TableHead className="text-end">{t("Km")}</TableHead>
-              <TableHead className="text-end">{t("Carburant")}</TableHead>
               <TableHead>{t("Observations")}</TableHead>
               {canEdit && <TableHead />}
             </TableRow>
@@ -102,7 +103,7 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={14} className="text-center text-muted-foreground">
+                <TableCell colSpan={13} className="text-center text-muted-foreground">
                   {t("Aucune ligne.")}
                 </TableCell>
               </TableRow>
@@ -118,9 +119,8 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
                 <TableCell>{r.ticket2}</TableCell>
                 <TableCell className="text-end">{r.tonnage2 ?? ""}</TableCell>
                 <TableCell className="text-end">{r.dumps_count}</TableCell>
-                <TableCell className="text-end">{r.rippers_count}</TableCell>
+                <TableCell className="min-w-40 text-xs">{r.crew.length ? r.crew.join(", ") : r.rippers_count ? t("{count} rippeur(s)", { count: r.rippers_count }) : "—"}</TableCell>
                 <TableCell className="text-end">{r.km ?? ""}</TableCell>
-                <TableCell className="text-end">{r.fuel ?? ""}</TableCell>
                 <TableCell className="max-w-48 truncate">{r.observations}</TableCell>
                 {canEdit && (
                   <TableCell>

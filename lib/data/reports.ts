@@ -163,7 +163,7 @@ export async function getCollectionReport(id: string): Promise<CollectionReportF
 // ---------------------------------------------------------------------------
 // Rapport camions
 // ---------------------------------------------------------------------------
-export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null };
+export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null; crew: string[] };
 
 export async function getTruckReports(filters: { date?: string; from?: string; to?: string; truck?: string }, limit = 500): Promise<TruckReportRow[]> {
   const supabase = await createClient();
@@ -177,19 +177,30 @@ export async function getTruckReports(filters: { date?: string; from?: string; t
   const empById = new Map(employees.map((e) => [e.id, e]));
   const truckById = new Map(trucks.map((t) => [t.id, t]));
 
+  // Rapport collecte du même jour et du même camion : lien + noms de l'équipe (rippeurs)
   let links = new Map<string, string>();
+  const crewByReport = new Map<string, string[]>();
   if (rows.length) {
     const { data: reports } = await supabase
       .from("collection_reports")
       .select("id, activity_date, truck_id")
       .in("activity_date", Array.from(new Set(rows.map((r) => r.activity_date))));
     links = new Map((reports ?? []).map((r) => [`${r.activity_date}:${r.truck_id}`, r.id]));
+    const ids = (reports ?? []).map((r) => r.id);
+    if (ids.length) {
+      const { data: rippers } = await supabase.from("collection_report_rippers").select("report_id, employee_id").in("report_id", ids);
+      for (const x of rippers ?? []) {
+        const e = empById.get(x.employee_id);
+        if (e) crewByReport.set(x.report_id, [...(crewByReport.get(x.report_id) ?? []), employeeName(e)]);
+      }
+    }
   }
 
   return rows
     .map((r) => {
       const c = r.chauffeur_id ? empById.get(r.chauffeur_id) : null;
-      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: links.get(`${r.activity_date}:${r.truck_id}`) ?? null };
+      const reportId = links.get(`${r.activity_date}:${r.truck_id}`) ?? null;
+      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: reportId, crew: reportId ? (crewByReport.get(reportId) ?? []) : [] };
     })
     .sort((a, b) => (a.activity_date === b.activity_date ? (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? "") : 0));
 }
@@ -207,9 +218,16 @@ export async function getTruckMonthly(month: string) {
     agg.dumps += r.dumps_count;
     agg.rippers += r.rippers_count;
     agg.km += Number(r.km ?? 0);
-    agg.fuel += Number(r.fuel ?? 0);
     agg.tickets += (r.ticket1 ? 1 : 0) + (r.ticket2 ? 1 : 0);
     byTruck.set(r.truck_id, agg);
+  }
+  // Carburant : somme des pleins du mois (partie 2 du rapport camions)
+  const supabase = await createClient();
+  const [{ data: fills }, trucks] = await Promise.all([supabase.from("fuel_entries").select("truck_id, liters").gte("activity_date", from).lte("activity_date", to), getTrucks()]);
+  for (const f of fills ?? []) {
+    const agg = byTruck.get(f.truck_id) ?? { truck: trucks.find((t) => t.id === f.truck_id) ?? null, days: 0, tonnage: 0, dumps: 0, rippers: 0, km: 0, fuel: 0, tickets: 0 };
+    agg.fuel += Number(f.liters);
+    byTruck.set(f.truck_id, agg);
   }
   return Array.from(byTruck.values()).sort((a, b) => (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? ""));
 }

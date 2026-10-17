@@ -111,16 +111,17 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
 }
 
 const TRUCK_COLUMNS: Column[] = [
-  { key: "brand", label: "Marque", width: 9 },
-  { key: "mat", label: "Matricule", width: 12 },
-  { key: "chauffeur", label: "Chauffeur", width: 18 },
-  { key: "t1", label: "N° ticket", width: 10 },
-  { key: "ton1", label: "Tonnage", width: 9, align: "right" },
-  { key: "t2", label: "2e ticket", width: 10 },
-  { key: "ton2", label: "2e tonnage", width: 9, align: "right" },
-  { key: "dumps", label: "Vidages", width: 8, align: "right" },
-  { key: "rip", label: "Rippeurs", width: 8, align: "right" },
-  { key: "obs", label: "Observations", width: 7 },
+  { key: "brand", label: "Marque", width: 8 },
+  { key: "mat", label: "Matricule", width: 10 },
+  { key: "chauffeur", label: "Chauffeur", width: 13 },
+  { key: "t1", label: "N° ticket", width: 8 },
+  { key: "ton1", label: "Tonnage", width: 7, align: "right" },
+  { key: "t2", label: "2e ticket", width: 8 },
+  { key: "ton2", label: "2e tonnage", width: 7, align: "right" },
+  { key: "dumps", label: "Vidages", width: 6, align: "right" },
+  { key: "rip", label: "Équipe (rippeurs)", width: 16 },
+  { key: "km", label: "Km", width: 6, align: "right" },
+  { key: "obs", label: "Observations", width: 11 },
 ];
 
 const truckRow = (tr: TruckReportRow) => ({
@@ -132,7 +133,8 @@ const truckRow = (tr: TruckReportRow) => ({
   t2: tr.ticket2,
   ton2: tr.tonnage2 == null ? "" : String(tr.tonnage2),
   dumps: String(tr.dumps_count),
-  rip: String(tr.rippers_count),
+  rip: tr.crew.length ? tr.crew.join(", ") : tr.rippers_count ? String(tr.rippers_count) : "",
+  km: tr.km == null ? "" : String(tr.km),
   obs: tr.observations,
 });
 

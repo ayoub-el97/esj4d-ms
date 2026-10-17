@@ -170,7 +170,6 @@ const collectionSchema = z.object({
   tonnage2: optionalNumber,
   dumps_count: intField,
   km: optionalNumber,
-  fuel: optionalNumber,
 });
 
 export async function saveCollectionReport(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -190,7 +189,6 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
     tonnage2: formData.get("tonnage2"),
     dumps_count: formData.get("dumps_count"),
     km: formData.get("km"),
-    fuel: formData.get("fuel"),
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const d = parsed.data;
@@ -224,7 +222,6 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
       dumps_count: d.dumps_count,
       rippers_count: d.rippers.length,
       km: d.km,
-      fuel: d.fuel,
       observations: d.observations,
     },
     { onConflict: "activity_date,truck_id" },
@@ -265,7 +262,6 @@ const truckReportSchema = z.object({
   dumps_count: intField,
   rippers_count: intField,
   km: optionalNumber,
-  fuel: optionalNumber,
   observations: z.string().max(2000).default(""),
 });
 

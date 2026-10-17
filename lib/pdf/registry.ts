@@ -10,6 +10,7 @@ import { getEmployee } from "@/lib/data/employees";
 import { getWarnings } from "@/lib/data/warnings";
 import { getGreenWasteEntries } from "@/lib/data/green-waste";
 import { getTasks } from "@/lib/data/tasks";
+import { entriesTotals, getFuelEntries, getFuelEntry, getFuelSummary } from "@/lib/data/fuel";
 import { getMonthlyReport } from "@/lib/data/monthly";
 import { getWorkerReport, getWorkersPeriodReport } from "@/lib/data/worker";
 import { formatDateFr, isISODate, isMonth } from "@/lib/dates";
@@ -22,6 +23,7 @@ import { CleaningReportPdf, CollectionReportPdf, GlobalDailyPdf, TruckMonthlyPdf
 import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
 import { EmployeeLeavePdf, LeaveBalancesPdf, LeaveHistoryPdf, RecoveryBalancesPdf, RecoveryHistoryPdf, WorkersPeriodPdf } from "./leaves";
 import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
+import { FuelEntryPdf, FuelReportPdf } from "./fuel";
 
 export type BuiltPdf = {
   element: ReactElement;
@@ -97,6 +99,18 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
     case "camions": {
       const rows = await getTruckReports({ ...range, truck: params.truck || undefined });
       return done("rapport_camions", `${t("Rapport camions")} ${subtitle}`, `rapport-camions-${slug}.pdf`, createElement(TruckReportsPdf, { ...common, subtitle, rows }));
+    }
+    case "carburant": {
+      if (params.id) {
+        const entry = await getFuelEntry(params.id);
+        if (!entry) return null;
+        return done("rapport_camions", `${t("Plein de carburant")} ${entry.truck?.matricule ?? ""} ${formatDateFr(entry.activity_date)}`, `carburant-${entry.truck?.matricule ?? ""}-${entry.activity_date}.pdf`, createElement(FuelEntryPdf, { ...common, entry }));
+      }
+      const f = { from: range.from, to: range.to, truck: params.truck || undefined, driver: params.driver || undefined };
+      const [entries, weekly, monthly] = await Promise.all([getFuelEntries(f), getFuelSummary("week", f), getFuelSummary("month", f)]);
+      const parts = [subtitle, entries.find((e) => e.truck_id === f.truck)?.truck?.matricule, f.driver ? entries.find((e) => e.driver_id === f.driver)?.driver_name : undefined].filter(Boolean);
+      const sub = parts.join(" · ");
+      return done("rapport_camions", `${t("Rapport camions — Carburant")} ${sub}`, `carburant-${slug}.pdf`, createElement(FuelReportPdf, { ...common, subtitle: sub, entries, totals: entriesTotals(entries), weekly, monthly }));
     }
     case "camions-mensuel": {
       const month = params.mois;

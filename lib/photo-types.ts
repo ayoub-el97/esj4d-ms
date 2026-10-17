@@ -5,7 +5,7 @@ export const PHOTO_PHASE_LABELS: Record<PhotoPhase, string> = {
   justificatif: "Justificatif",
 };
 
-export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task";
+export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry";
 
 export type PhotoItem = {
   id: string;

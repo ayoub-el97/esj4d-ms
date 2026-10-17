@@ -245,6 +245,41 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 13. Carburant : consommation par plein, synthèses semaine / mois, filtre chauffeur
+-- ---------------------------------------------------------------------------
+do $$
+declare tr uuid; c1 uuid; c2 uuid; r record;
+begin
+  select id into tr from public.trucks where matricule = '77027-A-1';
+  select id into c1 from public.employees where matricule = 'C001';
+  select id into c2 from public.employees where matricule = 'C002';
+  -- jeu. 01/10 : premier plein (pas de référence) ; dim. 04/10 : 120 L pour 400 km ; ven. 09/10 : 100 L pour 400 km
+  insert into public.fuel_entries (activity_date, truck_id, driver_id, liters, cost, odometer_km) values
+    ('2026-10-01', tr, c1, 100, 1200, 10000),
+    ('2026-10-04', tr, c1, 120, 1440, 10400),
+    ('2026-10-09', tr, c2, 100, 1250, 10800);
+  assert (select l_per_100km from public.fuel_entries_calc where truck_id = tr and activity_date = '2026-10-01') is null, 'premier plein : pas de consommation calculable';
+  assert (select l_per_100km from public.fuel_entries_calc where truck_id = tr and activity_date = '2026-10-04') = 30, 'plein 2 : 30 L/100 km attendu';
+  assert (select distance_km from public.fuel_entries_calc where truck_id = tr and activity_date = '2026-10-09') = 400, 'plein 3 : 400 km attendus';
+  assert (select price_per_liter from public.fuel_entries_calc where truck_id = tr and activity_date = '2026-10-09') = 12.5, 'prix au litre';
+
+  select * into r from public.fuel_summary('month', '2026-10-01', '2026-10-31', tr) where period_start = '2026-10-01';
+  assert r.fills = 3 and r.liters = 320 and r.cost = 3890 and r.distance_km = 800 and r.liters_measured = 220, 'synthèse mensuelle : totaux';
+  assert r.l_per_100km = 27.5, format('synthèse mensuelle : 27,5 L/100 km attendus, obtenu %s', r.l_per_100km);
+
+  select * into r from public.fuel_summary('week', '2026-10-01', '2026-10-31', tr) where period_start = '2026-09-28';
+  assert r.fills = 2 and r.l_per_100km = 30, 'semaine du 28/09 : 2 pleins, 30 L/100 km';
+  select * into r from public.fuel_summary('week', '2026-10-01', '2026-10-31', tr) where period_start = '2026-10-05';
+  assert r.fills = 1 and r.l_per_100km = 25, 'semaine du 05/10 : 25 L/100 km';
+
+  -- filtre chauffeur : la distance du plein reste calculée sur le camion
+  select * into r from public.fuel_summary('month', null, null, null, c2);
+  assert r.fills = 1 and r.l_per_100km = 25, 'filtre chauffeur C002';
+  assert public.photo_module('fuel_entry') = 'rapport_camions', 'photos des pleins : droits du module camions';
+  raise notice 'OK 13 carburant : L/100 km par plein, semaine, mois, filtre chauffeur';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);
