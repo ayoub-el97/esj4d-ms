@@ -3,11 +3,10 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Camera, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
-import imageCompression from "browser-image-compression";
-import { createClient } from "@/lib/supabase/client";
-import { deletePhoto, registerPhoto } from "@/lib/actions/photos";
+import { deletePhoto } from "@/lib/actions/photos";
 import { useT } from "@/lib/i18n/client";
-import { PHOTO_BUCKET, PHOTO_PHASE_LABELS, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
+import { uploadPhotoFile } from "@/lib/photo-upload";
+import { PHOTO_PHASE_LABELS, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -50,24 +49,7 @@ export function PhotoUploader({
   const upload = async (tempId: string, file: File) => {
     setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, status: "uploading", error: undefined } : i)));
     try {
-      const compressed = await imageCompression(file, { maxSizeMB: 0.4, maxWidthOrHeight: 1600, useWebWorker: true, fileType: "image/jpeg" });
-      const path = `${entityType}/${entityId}/${crypto.randomUUID()}.jpg`;
-      const supabase = createClient();
-      const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, compressed, { contentType: "image/jpeg", upsert: false });
-      if (error) throw new Error(error.message);
-      const r = await registerPhoto({
-        storage_path: path,
-        entity_type: entityType,
-        entity_id: entityId,
-        phase,
-        activity_date: activityDate,
-        employee_id: employeeId ?? null,
-        location: location ?? "",
-        mime_type: "image/jpeg",
-        size_bytes: compressed.size,
-      });
-      if (!r.ok || !r.data) throw new Error(r.ok ? t("Réponse invalide") : r.error);
-      const saved = r.data;
+      const saved = await uploadPhotoFile(file, { entityType, entityId, phase, activityDate, employeeId, location });
       setItems((prev) => prev.map((i) => (i.id === tempId ? { ...saved, status: "done" } : i)));
     } catch (e) {
       const message = (e as Error).message || t("Échec de l'envoi");

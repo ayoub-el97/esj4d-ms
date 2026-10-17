@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
 import { formatDateFr } from "@/lib/dates";
@@ -25,7 +24,8 @@ const schema = z.object({
   observations: z.string().max(2000).default(""),
 });
 
-export async function saveFuelEntry(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/** Enregistre un plein. À la création, renvoie l'id pour que le formulaire envoie ensuite les photos choisies. */
+export async function saveFuelEntry(_prev: ActionResult<{ id: string }> | null, formData: FormData): Promise<ActionResult<{ id: string }>> {
   const t = await getT();
   const auth = await assertModule("rapport_camions", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
@@ -57,7 +57,7 @@ export async function saveFuelEntry(_prev: ActionResult | null, formData: FormDa
   const { data, error } = await supabase.from("fuel_entries").insert(values).select("id").single();
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/rapport-camions/carburant");
-  redirect(`/rapport-camions/carburant/${data.id}?ok=1`);
+  return { ok: true, message: t("Plein enregistré."), data: { id: data.id } };
 }
 
 export async function deleteFuelEntry(id: string): Promise<ActionResult> {

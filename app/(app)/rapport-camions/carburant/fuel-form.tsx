@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Camera, ImagePlus, Trash2, X } from "lucide-react";
 import { deleteFuelEntry, saveFuelEntry } from "@/lib/actions/fuel";
+import { uploadPhotoFile } from "@/lib/photo-upload";
 import type { Employee, Truck } from "@/lib/data/employees";
 import type { FuelEntry } from "@/lib/data/fuel";
 import { useT } from "@/lib/i18n/client";
@@ -32,7 +33,46 @@ export function FuelForm({
 }) {
   const { t } = useT();
   const router = useRouter();
-  const [state, action] = useActionState(saveFuelEntry, null);
+  // Photos choisies avant l'enregistrement (création) : envoyées juste après la création du plein
+  const [pendingPhotos, setPendingPhotos] = useState<{ key: string; file: File; url: string }[]>([]);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    setPendingPhotos((prev) => [...prev, ...Array.from(files).map((file) => ({ key: crypto.randomUUID(), file, url: URL.createObjectURL(file) }))]);
+  };
+  const removePending = (key: string) =>
+    setPendingPhotos((prev) => {
+      const p = prev.find((x) => x.key === key);
+      if (p) URL.revokeObjectURL(p.url);
+      return prev.filter((x) => x.key !== key);
+    });
+
+  const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveFuelEntry>> | null, formData: FormData) => {
+    const r = await saveFuelEntry(prev, formData);
+    if (entry || !r.ok || !r.data) return r;
+    // Création réussie : envoi des photos, puis ouverture de la fiche du plein
+    const id = r.data.id;
+    let failed = 0;
+    for (const p of pendingPhotos) {
+      try {
+        await uploadPhotoFile(p.file, {
+          entityType: "fuel_entry",
+          entityId: id,
+          phase: "justificatif",
+          activityDate: String(formData.get("activity_date") ?? "") || null,
+          employeeId: String(formData.get("driver_id") ?? "") || null,
+          location: String(formData.get("station") ?? ""),
+        });
+      } catch {
+        failed++;
+      }
+    }
+    if (failed) toast.error(t("{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche du plein.", { count: failed }));
+    else if (pendingPhotos.length) toast.success(t("{count} photo(s) enregistrée(s).", { count: pendingPhotos.length }));
+    router.push(`/rapport-camions/carburant/${id}?ok=1`);
+    return r;
+  }, null);
   const [pending, start] = useTransition();
   const firstTruck = entry?.truck_id ?? trucks[0]?.id ?? "";
   const [truckId, setTruckId] = useState(firstTruck);
@@ -110,7 +150,41 @@ export function FuelForm({
               <Textarea id="observations" name="observations" defaultValue={entry?.observations ?? ""} />
             </div>
           </fieldset>
-          {!entry && canEdit && <p className="text-xs text-muted-foreground">{t("Après l'enregistrement, vous pourrez ajouter les photos (ticket, compteur, pompe).")}</p>}
+          {!entry && canEdit && (
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold">{t("Photos (ticket, compteur, pompe)")}</span>
+                <span className="text-xs text-muted-foreground">({pendingPhotos.length})</span>
+                <div className="ms-auto flex gap-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()}>
+                    <Camera /> {t("Prendre une photo")}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                    <ImagePlus /> {t("Importer")}
+                  </Button>
+                </div>
+                {/* sans attribut name : les fichiers ne partent pas avec le formulaire, ils sont envoyés après la création */}
+                <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+                <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+              </div>
+              {pendingPhotos.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{t("Aucune photo")}</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {pendingPhotos.map((p) => (
+                    <div key={p.key} className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt="" className="size-full object-cover" />
+                      <button type="button" aria-label={t("Supprimer")} className="absolute end-1 top-1 rounded-full bg-black/60 p-1 text-white" onClick={() => removePending(p.key)}>
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">{t("Les photos sont envoyées lors de l'enregistrement du plein.")}</p>
+            </div>
+          )}
           {canEdit && (
             <div className="flex flex-wrap gap-2">
               <SubmitButton>{t("Enregistrer")}</SubmitButton>

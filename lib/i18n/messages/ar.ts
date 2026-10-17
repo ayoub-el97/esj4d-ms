@@ -910,4 +910,8 @@ export const ar: Messages = {
   "{count} rippeur(s)": "{count} عامل جمع",
   "Équipe (rippeurs)": "الطاقم (عمال الجمع)",
   "Équipe : nombre de rippeurs": "الطاقم: عدد عمال الجمع",
+  "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche du plein.": "لم يتم إرسال {count} صورة: أضفها مجددًا في صفحة التعبئة.",
+  "{count} photo(s) enregistrée(s).": "تم حفظ {count} صورة.",
+  "Les photos sont envoyées lors de l'enregistrement du plein.": "تُرسل الصور عند حفظ التعبئة.",
+  "Plein enregistré. Vous pouvez ajouter ou retirer des photos ci-dessous.": "تم حفظ التعبئة. يمكنك إضافة صور أو حذفها أدناه.",
 };

@@ -910,4 +910,8 @@ export const en: Messages = {
   "{count} rippeur(s)": "{count} loader(s)",
   "Équipe (rippeurs)": "Crew (loaders)",
   "Équipe : nombre de rippeurs": "Crew: number of loaders",
+  "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche du plein.": "{count} photo(s) not sent: add them again on the fill-up page.",
+  "{count} photo(s) enregistrée(s).": "{count} photo(s) saved.",
+  "Les photos sont envoyées lors de l'enregistrement du plein.": "Photos are sent when the fill-up is saved.",
+  "Plein enregistré. Vous pouvez ajouter ou retirer des photos ci-dessous.": "Fill-up saved. You can add or remove photos below.",
 };

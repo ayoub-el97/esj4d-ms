@@ -32,7 +32,7 @@ export default async function PleinPage({ params, searchParams }: { params: Prom
       </ModuleHeader>
       {sp.ok && (
         <Alert className="mb-4">
-          <AlertDescription>{t("Plein enregistré. Ajoutez maintenant les photos (ticket, compteur, pompe).")}</AlertDescription>
+          <AlertDescription>{t("Plein enregistré. Vous pouvez ajouter ou retirer des photos ci-dessous.")}</AlertDescription>
         </Alert>
       )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_1fr]">
