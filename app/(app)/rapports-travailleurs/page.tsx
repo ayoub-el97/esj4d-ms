@@ -36,8 +36,8 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
   const period = t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) });
 
   const totals = rows.reduce(
-    (a, r) => ({ worked: a.worked + r.worked_days, rest: a.rest + r.rest_days_worked, ot: a.ot + r.overtime_total, abs: a.abs + r.absences + r.sick_days, leave: a.leave + r.leave_days, recup: a.recup + r.recovery_days, owed: a.owed + r.recovery_balance, hol: a.hol + r.holidays_worked }),
-    { worked: 0, rest: 0, ot: 0, abs: 0, leave: 0, recup: 0, owed: 0, hol: 0 },
+    (a, r) => ({ worked: a.worked + r.worked_days, rest: a.rest + r.rest_days_worked, ot: a.ot + r.overtime_total, abs: a.abs + r.absences + r.sick_days, accrued: a.accrued + r.leave_accrued, leave: a.leave + r.leave_days, leaveLeft: a.leaveLeft + r.leave_balance, recup: a.recup + r.recovery_days, owed: a.owed + r.recovery_balance, hol: a.hol + r.holidays_worked }),
+    { worked: 0, rest: 0, ot: 0, abs: 0, leave: 0, recup: 0, owed: 0, hol: 0, accrued: 0, leaveLeft: 0 },
   );
   const pdfParams: Record<string, string> = { from, to };
   for (const k of ["categorie", "employe", "poste", "equipe", "q"] as const) if (sp[k]) pdfParams[k] = sp[k]!;
@@ -128,7 +128,9 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
               <TableHead className="text-end">{t("Total HS")}</TableHead>
               <TableHead className="text-end">{t("Absences")}</TableHead>
               <TableHead className="text-end">{t("Fériés travaillés")}</TableHead>
+              <TableHead className="text-end" title={t("Congés acquis à la fin de la période (1,5 jour par mois complet de service)")}>{t("Total congés")}</TableHead>
               <TableHead className="text-end">{t("Congés pris")}</TableHead>
+              <TableHead className="text-end" title={t("Congés acquis − congés pris + corrections, à la fin de la période")}>{t("Congé restant")}</TableHead>
               <TableHead className="text-end">{t("Récupérations prises")}</TableHead>
               <TableHead className="text-end" title={t("Jours de repos travaillés pas encore récupérés, à la fin de la période")}>{t("Récupération restante")}</TableHead>
             </TableRow>
@@ -136,7 +138,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={13} className="text-center text-muted-foreground">
+                <TableCell colSpan={15} className="text-center text-muted-foreground">
                   {t("Aucun employé ne correspond aux filtres.")}
                 </TableCell>
               </TableRow>
@@ -162,7 +164,9 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
                   {r.absences + r.sick_days}
                 </TableCell>
                 <TableCell className="text-end">{r.holidays_worked}</TableCell>
+                <TableCell className="text-end">{r.leave_accrued}</TableCell>
                 <TableCell className="text-end">{r.leave_days}</TableCell>
+                <TableCell className={`text-end ${r.leave_balance < 0 ? "font-medium text-destructive" : "font-medium"}`}>{r.leave_balance}</TableCell>
                 <TableCell className="text-end">{r.recovery_days}</TableCell>
                 <TableCell className={`text-end ${r.recovery_balance > 0 ? "font-medium text-violet-700" : ""}`}>{r.recovery_balance}</TableCell>
               </TableRow>
@@ -177,7 +181,9 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
                 <TableCell className="text-end">{totals.ot}</TableCell>
                 <TableCell className="text-end">{totals.abs}</TableCell>
                 <TableCell className="text-end">{totals.hol}</TableCell>
+                <TableCell className="text-end">{totals.accrued}</TableCell>
                 <TableCell className="text-end">{totals.leave}</TableCell>
+                <TableCell className="text-end">{totals.leaveLeft}</TableCell>
                 <TableCell className="text-end">{totals.recup}</TableCell>
                 <TableCell className="text-end">{totals.owed}</TableCell>
               </TableRow>

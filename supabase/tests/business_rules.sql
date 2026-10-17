@@ -190,6 +190,16 @@ begin
   raise notice 'OK 10c rapport travailleurs : 1 repos travaillé, 1 récupéré, 0 restant (1 dû avant la récupération)';
 end $$;
 
+-- Rapport travailleurs : total congés et congé restant à la fin de la période
+do $$
+declare b record;
+begin
+  -- T-B2 entré le 01/01/2026 : 9 mois complets au 31/10 = 13,5 jours ; pris en octobre = 2
+  select * into b from public.leave_balances('2026-10-31') where employee_id = (select b2 from ids);
+  assert b.accrued = 13.5 and b.taken = 2 and b.balance = 11.5, format('acquis %s, pris %s, restant %s (attendu 13,5 / 2 / 11,5)', b.accrued, b.taken, b.balance);
+  raise notice 'OK 10d total congés 13,5 − pris 2 = congé restant 11,5';
+end $$;
+
 -- Congé : demande en attente ou refusée sans effet sur le solde
 insert into public.leave_requests (employee_id, start_date, end_date, requested_days, status)
 select b2, '2026-10-12', '2026-10-13', 2, 'en_attente' from ids;

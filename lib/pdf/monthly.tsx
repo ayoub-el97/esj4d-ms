@@ -101,7 +101,7 @@ export function WorkerReportPdf({ company, report, generatedBy }: { company: str
           {t("NB")} {e.order_number} · {t("Matricule")} {e.matricule} · {t(POSITION_LABELS[e.position])} · {t(TEAM_LABELS[e.team_type])}
         </Text>
         <Text style={{ marginBottom: 6 }}>
-          {t("Jours travaillés")} : {s.worked} · {t("Repos travaillés")} : {s.restWorked} · {t("Absences")} : {s.absent} · {t("Maladie")} : {s.sick} · {t("Congés pris")} : {s.leave} · {t("Récupérations prises")} : {s.recovery} · {t("Récupération restante")} : {s.recoveryBalance} · {t("Heures sup.")} : {s.overtime}
+          {t("Jours travaillés")} : {s.worked} · {t("Repos travaillés")} : {s.restWorked} · {t("Absences")} : {s.absent} · {t("Maladie")} : {s.sick} · {t("Total congés")} : {s.leaveAccrued} · {t("Congés pris")} : {s.leave} · {t("Congé restant")} : {s.leaveBalance} · {t("Récupérations prises")} : {s.recovery} · {t("Récupération restante")} : {s.recoveryBalance} · {t("Heures sup.")} : {s.overtime}
         </Text>
         <Text style={styles.section}>{t("Pointages")}</Text>
         <PdfTable

@@ -33,6 +33,10 @@ export type WorkerPeriodRow = {
   recovery_days: number;
   /** Jours de récupération encore dus à la fin de la période */
   recovery_balance: number;
+  /** Total des congés acquis à la fin de la période (1,5 j par mois complet de service) */
+  leave_accrued: number;
+  /** Congé restant à la fin de la période (acquis − pris + corrections) */
+  leave_balance: number;
   holidays_worked: number;
 };
 
@@ -49,14 +53,17 @@ async function takenByEmployee(kind: "conge" | "recuperation", from: string, to:
 export async function getWorkersPeriodReport(from: string, to: string, f: WorkersFilters): Promise<WorkerPeriodRow[]> {
   const team = f.categorie === "collecte" || f.categorie === "nettoiement" ? (f.categorie as TeamType) : undefined;
   const supabase = await createClient();
-  const [summary, employees, leaveTaken, recoveryTaken, recoveryBalances] = await Promise.all([
+  const [summary, employees, leaveTaken, recoveryTaken, recoveryBalances, leaveBalances] = await Promise.all([
     getAttendanceSummary(from, to, team),
     getEmployees(),
     takenByEmployee("conge", from, to),
     takenByEmployee("recuperation", from, to),
     supabase.rpc("recovery_balances", { p_from: from, p_to: to }),
+    supabase.rpc("leave_balances", { p_as_of: to }),
   ]);
   if (recoveryBalances.error) throw new Error(recoveryBalances.error.message);
+  if (leaveBalances.error) throw new Error(leaveBalances.error.message);
+  const leaveByEmployee = new Map(((leaveBalances.data ?? []) as { employee_id: string; accrued: number; balance: number }[]).map((b) => [b.employee_id, { accrued: Number(b.accrued), balance: Number(b.balance) }]));
   const balanceByEmployee = new Map(((recoveryBalances.data ?? []) as { employee_id: string; balance: number }[]).map((b) => [b.employee_id, Number(b.balance)]));
   const byEmployee = new Map(summary.map((s) => [s.employee_id, s]));
   const names = new Map(employees.map((e) => [e.id, employeeName(e)]));
@@ -88,6 +95,8 @@ export async function getWorkersPeriodReport(from: string, to: string, f: Worker
         leave_days: leaveTaken.get(e.id) ?? 0,
         recovery_days: recoveryTaken.get(e.id) ?? 0,
         recovery_balance: balanceByEmployee.get(e.id) ?? 0,
+        leave_accrued: leaveByEmployee.get(e.id)?.accrued ?? 0,
+        leave_balance: leaveByEmployee.get(e.id)?.balance ?? 0,
         holidays_worked: s?.holidays_worked ?? 0,
       };
     })
@@ -101,7 +110,7 @@ export type WorkerReport = {
   from: string;
   to: string;
   attendance: HistoryRow[];
-  summary: { worked: number; restWorked: number; absent: number; sick: number; leave: number; recovery: number; recoveryBalance: number; overtime: number };
+  summary: { worked: number; restWorked: number; absent: number; sick: number; leave: number; recovery: number; recoveryBalance: number; leaveAccrued: number; leaveBalance: number; overtime: number };
   leaves: LeaveRequest[];
   cleaningPlaces: CleaningPlace[];
   collections: CollectionReportFull[];
@@ -135,6 +144,8 @@ export async function getWorkerReport(employeeId: string, from: string, to: stri
     leave: s?.leave_days ?? 0,
     recovery: s?.recovery_days ?? 0,
     recoveryBalance: s?.recovery_balance ?? 0,
+    leaveAccrued: s?.leave_accrued ?? 0,
+    leaveBalance: s?.leave_balance ?? 0,
     overtime: s?.overtime_total ?? 0,
   };
 

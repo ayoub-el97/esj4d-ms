@@ -805,4 +805,8 @@ export const ar: Messages = {
   "Jours de repos travaillés pas encore récupérés, à la fin de la période": "أيام راحة مشتغلة لم تُعوَّض بعد، في نهاية الفترة",
   "Récupération restante": "الأيام التعويضية المتبقية",
   "Récupérations prises": "الأيام التعويضية المستهلكة",
+  "Congé restant": "العطلة المتبقية",
+  "Congés acquis à la fin de la période (1,5 jour par mois complet de service)": "العطل المكتسبة في نهاية الفترة (1,5 يوم عن كل شهر خدمة كامل)",
+  "Congés acquis − congés pris + corrections, à la fin de la période": "العطل المكتسبة − العطل المستهلكة + التصحيحات، في نهاية الفترة",
+  "Total congés": "مجموع العطل",
 };

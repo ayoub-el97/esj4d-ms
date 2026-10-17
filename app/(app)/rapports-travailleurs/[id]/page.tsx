@@ -55,7 +55,7 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
 
       {report && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
             {(
               [
                 ["Jours travaillés", report.summary.worked],
@@ -63,7 +63,9 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                 ["Heures sup.", report.summary.overtime],
                 ["Absences", report.summary.absent],
                 ["Maladie", report.summary.sick],
+                ["Total congés", report.summary.leaveAccrued],
                 ["Congés pris", report.summary.leave],
+                ["Congé restant", report.summary.leaveBalance],
                 ["Récupérations prises", report.summary.recovery],
                 ["Récupération restante", report.summary.recoveryBalance],
               ] as const

@@ -805,4 +805,8 @@ export const en: Messages = {
   "Jours de repos travaillés pas encore récupérés, à la fin de la période": "Rest days worked not yet given back, at the end of the period",
   "Récupération restante": "Time off in lieu remaining",
   "Récupérations prises": "Days off in lieu taken",
+  "Congé restant": "Leave remaining",
+  "Congés acquis à la fin de la période (1,5 jour par mois complet de service)": "Leave earned at the end of the period (1.5 days per full month of service)",
+  "Congés acquis − congés pris + corrections, à la fin de la période": "Leave earned − leave taken + corrections, at the end of the period",
+  "Total congés": "Total leave",
 };
