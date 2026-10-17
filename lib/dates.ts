@@ -31,14 +31,22 @@ export function formatDateTimeFr(iso: string | null | undefined): string {
   return isValid(d) ? format(d, "dd/MM/yyyy HH:mm") : iso;
 }
 
-/** Date du jour au format ISO (yyyy-MM-dd), selon l'horloge locale du serveur/navigateur. */
+/** Fuseau de l'entreprise : le serveur (Vercel) tourne en UTC, la date du jour suit l'heure du Maroc. */
+export const APP_TIME_ZONE = "Africa/Casablanca";
+
+/** Date du jour au format ISO (yyyy-MM-dd), à l'heure du Maroc. */
 export function todayISO(): string {
-  return format(new Date(), "yyyy-MM-dd");
+  return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
-/** Mois courant au format yyyy-MM. */
+/** Mois courant au format yyyy-MM (heure du Maroc). */
 export function currentMonth(): string {
-  return format(new Date(), "yyyy-MM");
+  return todayISO().slice(0, 7);
+}
+
+/** Nombre de jours entre aujourd'hui et une date ISO (négatif si passée). */
+export function daysUntil(iso: string, today = todayISO()): number {
+  return Math.round((Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
 }
 
 /** Vérifie qu'une chaîne est une date ISO yyyy-MM-dd valide. */

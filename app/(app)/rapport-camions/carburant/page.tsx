@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Images, Pencil, Plus, Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, getTrucks } from "@/lib/data/employees";
-import { entriesTotals, fuelTotals, getFuelEntries, getFuelSummary, type FuelSummaryRow } from "@/lib/data/fuel";
-import { formatDateFr, formatMonthFr, isISODate } from "@/lib/dates";
+import { costPivot, entriesTotals, fuelTotals, getFuelEntries, getFuelSummary, type FuelSummaryRow } from "@/lib/data/fuel";
+import { formatDateFr, formatMonthFr, isISODate, todayISO } from "@/lib/dates";
+import { formatAmount, formatMoney } from "@/lib/money";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import type { Locale, TFunction } from "@/lib/i18n/config";
 import { DRIVER_POSITIONS } from "@/lib/types";
@@ -17,10 +18,11 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TruckTabs } from "../truck-tabs";
+import { CostStats, PERIOD_PARAM } from "./cost-stats";
 
 export const generateMetadata = pageTitle("Carburant");
 
-type SP = { from?: string; to?: string; truck?: string; driver?: string };
+type SP = { from?: string; to?: string; truck?: string; driver?: string; vue?: string };
 
 const n = (v: number | null | undefined, digits = 2) => (v == null ? "—" : v.toFixed(digits));
 
@@ -28,27 +30,41 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
   const [user, { t, locale }] = await Promise.all([requireModule("rapport_camions"), getI18n()]);
   const sp = await searchParams;
   const filters = { from: isISODate(sp.from) ? sp.from : undefined, to: isISODate(sp.to) ? sp.to : undefined, truck: sp.truck || undefined, driver: sp.driver || undefined };
-  const [entries, weekly, monthly, trucks, collecte] = await Promise.all([
+  // Statistiques des coûts : vue par jour / semaine / mois (par défaut : mois).
+  // Vue « jour » sans période choisie : 31 derniers jours, pour garder un tableau lisible.
+  const period = PERIOD_PARAM[sp.vue ?? ""] ?? "month";
+  const today = todayISO();
+  const last31 = new Date(Date.parse(`${today}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10);
+  const costFilters = period === "day" && !filters.from && !filters.to ? { ...filters, from: last31, to: today } : filters;
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const [entries, weekly, monthly, costRows, currentMonth, trucks, collecte] = await Promise.all([
     getFuelEntries(filters),
     getFuelSummary("week", filters),
     getFuelSummary("month", filters),
+    getFuelSummary(period, costFilters),
+    getFuelSummary("month", { truck: filters.truck, driver: filters.driver, from: monthStart, to: today }),
     getTrucks(),
     getEmployees({ team: "collecte" }),
   ]);
+  const unit = t("DH");
+  const monthSpend = currentMonth.reduce((s, r) => s + r.cost, 0);
   const drivers = collecte.filter((e) => DRIVER_POSITIONS.includes(e.position));
   const canEdit = user.permissions.rapport_camions.can_edit;
   const totals = entriesTotals(entries);
   const pdfParams: Record<string, string> = {};
   for (const [k, v] of Object.entries(filters)) if (v) pdfParams[k] = v;
   const query = new URLSearchParams(pdfParams).toString();
+  const costPdfParams: Record<string, string> = { ...pdfParams, vue: sp.vue && PERIOD_PARAM[sp.vue] ? sp.vue : "mois" };
+  if (costFilters !== filters) Object.assign(costPdfParams, { from: costFilters.from!, to: costFilters.to! });
 
   const kpis = [
+    { label: t("Dépense du mois en cours"), value: formatMoney(monthSpend, unit) },
     { label: t("Pleins"), value: String(totals.fills) },
     { label: t("Litres"), value: `${n(totals.liters)} L` },
-    { label: t("Coût total"), value: n(totals.cost) },
+    { label: t("Coût total"), value: formatMoney(totals.cost, unit) },
     { label: t("Km parcourus"), value: `${n(totals.distance_km, 0)} km` },
     { label: t("Consommation moyenne"), value: totals.l_per_100km == null ? "—" : `${n(totals.l_per_100km)} L/100 km` },
-    { label: t("Coût aux 100 km"), value: n(totals.cost_per_100km) },
+    { label: t("Coût aux 100 km"), value: formatMoney(totals.cost_per_100km, unit) },
   ];
 
   return (
@@ -106,7 +122,7 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
         </div>
       </form>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-xl border bg-card p-3">
             <p className="text-xs text-muted-foreground">{k.label}</p>
@@ -127,8 +143,8 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
               <TableHead>{t("Matricule")}</TableHead>
               <TableHead>{t("Chauffeur")}</TableHead>
               <TableHead className="text-end">{t("Litres")}</TableHead>
-              <TableHead className="text-end">{t("Coût")}</TableHead>
-              <TableHead className="text-end">{t("Prix / L")}</TableHead>
+              <TableHead className="text-end">{t("Coût ({unit})", { unit })}</TableHead>
+              <TableHead className="text-end">{t("Prix / L ({unit})", { unit })}</TableHead>
               <TableHead className="text-end">{t("Compteur (km)")}</TableHead>
               <TableHead className="text-end">{t("Km parcourus")}</TableHead>
               <TableHead className="text-end">{t("L/100 km")}</TableHead>
@@ -150,7 +166,7 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
                 <TableCell className="font-mono">{e.truck?.matricule}</TableCell>
                 <TableCell>{e.driver_name || "—"}</TableCell>
                 <TableCell className="text-end tabular-nums">{n(e.liters)}</TableCell>
-                <TableCell className="text-end tabular-nums">{n(e.cost)}</TableCell>
+                <TableCell className="text-end tabular-nums">{formatAmount(e.cost)}</TableCell>
                 <TableCell className="text-end tabular-nums">{n(e.price_per_liter, 3)}</TableCell>
                 <TableCell className="text-end tabular-nums">{n(e.odometer_km, 0)}</TableCell>
                 <TableCell className="text-end tabular-nums">{e.distance_km == null ? t("1er plein") : n(e.distance_km, 0)}</TableCell>
@@ -167,10 +183,27 @@ export default async function CarburantPage({ searchParams }: { searchParams: Pr
         </Table>
       </div>
 
+      <CostStats
+        pivot={costPivot(costRows)}
+        period={period}
+        baseQuery={pdfParams}
+        note={costFilters !== filters ? t("Vue par jour : 31 derniers jours (choisissez une période avec Du / Au pour en voir d'autres).") : undefined}
+        t={t}
+        locale={locale}
+      />
+
       <SummaryTable title={t("Consommation hebdomadaire")} rows={weekly} t={t} locale={locale} period="week" />
       <SummaryTable title={t("Consommation mensuelle")} rows={monthly} t={t} locale={locale} period="month" />
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="carburant" params={pdfParams} />} monthlyHref="/rapport-camions/mensuel" />
+      <ModuleButtons
+        pdfSlot={
+          <>
+            <PdfExportButton kind="carburant" params={pdfParams} />
+            <PdfExportButton kind="carburant-couts" params={costPdfParams} label="PDF des coûts" />
+          </>
+        }
+        monthlyHref="/rapport-camions/mensuel"
+      />
     </div>
   );
 }
@@ -190,10 +223,10 @@ function SummaryTable({ title, rows, t, locale, period }: { title: string; rows:
               <TableHead>{t("Matricule")}</TableHead>
               <TableHead className="text-end">{t("Pleins")}</TableHead>
               <TableHead className="text-end">{t("Litres")}</TableHead>
-              <TableHead className="text-end">{t("Coût")}</TableHead>
+              <TableHead className="text-end">{t("Coût ({unit})", { unit: t("DH") })}</TableHead>
               <TableHead className="text-end">{t("Km parcourus")}</TableHead>
               <TableHead className="text-end">{t("L/100 km")}</TableHead>
-              <TableHead className="text-end">{t("Coût aux 100 km")}</TableHead>
+              <TableHead className="text-end">{t("Coût aux 100 km ({unit})", { unit: t("DH") })}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -214,10 +247,10 @@ function SummaryTable({ title, rows, t, locale, period }: { title: string; rows:
                     <TableCell className="font-mono">{r.truck?.matricule}</TableCell>
                     <TableCell className="text-end tabular-nums">{r.fills}</TableCell>
                     <TableCell className="text-end tabular-nums">{n(r.liters)}</TableCell>
-                    <TableCell className="text-end tabular-nums">{n(r.cost)}</TableCell>
+                    <TableCell className="text-end tabular-nums">{formatAmount(r.cost)}</TableCell>
                     <TableCell className="text-end tabular-nums">{n(r.distance_km, 0)}</TableCell>
                     <TableCell className="text-end font-medium tabular-nums">{n(r.l_per_100km)}</TableCell>
-                    <TableCell className="text-end tabular-nums">{n(r.cost_per_100km)}</TableCell>
+                    <TableCell className="text-end tabular-nums">{formatAmount(r.cost_per_100km)}</TableCell>
                   </TableRow>
                 )),
                 list.length > 1 ? (
@@ -226,7 +259,7 @@ function SummaryTable({ title, rows, t, locale, period }: { title: string; rows:
                     <TableCell>{t("Tous les camions")}</TableCell>
                     <TableCell className="text-end tabular-nums">{tot.fills}</TableCell>
                     <TableCell className="text-end tabular-nums">{n(tot.liters)}</TableCell>
-                    <TableCell className="text-end tabular-nums">{n(tot.cost)}</TableCell>
+                    <TableCell className="text-end tabular-nums">{formatAmount(tot.cost)}</TableCell>
                     <TableCell className="text-end tabular-nums">{n(tot.distance_km, 0)}</TableCell>
                     <TableCell className="text-end tabular-nums">{n(tot.l_per_100km)}</TableCell>
                     <TableCell />

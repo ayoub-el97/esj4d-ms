@@ -6,6 +6,7 @@ import { getFuelPhotoArchive } from "@/lib/data/fuel";
 import { formatDateFr, isISODate } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import { DRIVER_POSITIONS } from "@/lib/types";
+import { formatMoney } from "@/lib/money";
 import { ModuleHeader } from "@/components/module-header";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { LinkButton } from "@/components/link-button";
@@ -81,7 +82,7 @@ export default async function FuelPhotosPage({ searchParams }: { searchParams: P
               </Link>
               <span className="text-muted-foreground">{e.driver_name || "—"}</span>
               <span className="text-muted-foreground">
-                {e.liters.toFixed(2)} L · {e.cost.toFixed(2)} · {e.odometer_km.toFixed(0)} km
+                {e.liters.toFixed(2)} L · {formatMoney(e.cost, t("DH"))} · {e.odometer_km.toFixed(0)} km
               </span>
             </div>
             <PhotoGallery photos={e.photos} />

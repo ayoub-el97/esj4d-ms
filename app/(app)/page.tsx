@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
+import { getReminders } from "@/lib/data/reminders";
+import { todayISO } from "@/lib/dates";
+import { isAlert, reminderState } from "@/lib/reminder-types";
+import { RemindersPanel } from "@/components/reminders-panel";
 import { ADMIN_MODULES, DASHBOARD_MODULES } from "@/lib/modules";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const [user, t] = await Promise.all([getCurrentUser(), getT()]);
+  const [user, t, reminders] = await Promise.all([getCurrentUser(), getT(), getReminders()]);
+  const today = todayISO();
+  // Tableau de bord : alertes d'abord, puis les 5 prochains rappels
+  const alerts = reminders.filter((r) => isAlert(reminderState(r, today).state));
+  const next = reminders.filter((r) => !isAlert(reminderState(r, today).state)).slice(0, 5);
   const { error } = await searchParams;
 
   const visible = DASHBOARD_MODULES.filter((m) => user.permissions[m.key].can_view);
@@ -24,6 +32,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <AlertDescription>{t("Accès refusé : vous n'avez pas la permission d'ouvrir ce module.")}</AlertDescription>
         </Alert>
       )}
+
+      <section className="space-y-2 rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-base font-semibold">{t("Rappels et alertes")}</h2>
+          {alerts.length > 0 && <span className="rounded-full bg-red-600 px-2 text-xs font-semibold text-white">{alerts.length}</span>}
+          <Link href="/rappels" className="ms-auto text-sm text-primary hover:underline">
+            {t("Tous les rappels")}
+          </Link>
+        </div>
+        <RemindersPanel reminders={[...alerts, ...next]} today={today} emptyText={t("Aucun rappel. Créez-en un pour être alerté à l'approche d'une date.")} />
+      </section>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {visible.map((m) => (

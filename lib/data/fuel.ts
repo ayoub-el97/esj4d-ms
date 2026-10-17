@@ -5,6 +5,7 @@ import { getPhotosFor } from "@/lib/data/photos";
 import type { PhotoItem } from "@/lib/photo-types";
 
 export type FuelFilters = { from?: string; to?: string; truck?: string; driver?: string };
+export type FuelPeriod = "day" | "week" | "month";
 
 /** Un plein, avec les valeurs calculées par la vue fuel_entries_calc. */
 export type FuelEntry = {
@@ -84,7 +85,7 @@ export async function getFuelEntry(id: string): Promise<FuelEntry | null> {
 }
 
 /** Synthèse par semaine (lundi) ou par mois, par camion (fonction SQL fuel_summary). */
-export async function getFuelSummary(period: "week" | "month", f: FuelFilters = {}): Promise<FuelSummaryRow[]> {
+export async function getFuelSummary(period: FuelPeriod, f: FuelFilters = {}): Promise<FuelSummaryRow[]> {
   const supabase = await createClient();
   const [{ data }, trucks] = await Promise.all([
     supabase.rpc("fuel_summary", { p_period: period, p_from: f.from || null, p_to: f.to || null, p_truck: f.truck || null, p_driver: f.driver || null }),
@@ -137,4 +138,39 @@ export function entriesTotals(entries: FuelEntry[]): FuelTotals {
 export async function getFuelPhotoArchive(f: FuelFilters = {}) {
   const entries = await getFuelEntries(f, 2000);
   return entries.filter((e) => e.photos.length > 0);
+}
+
+/** Tableau croisé des coûts : une ligne par période, une colonne par camion, total par période et général. */
+export type CostPivot = {
+  trucks: { id: string; matricule: string }[];
+  rows: { period: string; byTruck: Record<string, number>; total: number; liters: number; fills: number }[];
+  totalByTruck: Record<string, number>;
+  total: number;
+  liters: number;
+  fills: number;
+};
+
+export function costPivot(rows: FuelSummaryRow[]): CostPivot {
+  const trucks = new Map<string, string>();
+  const periods = new Map<string, CostPivot["rows"][number]>();
+  const totalByTruck: Record<string, number> = {};
+  for (const r of rows) {
+    trucks.set(r.truck_id, r.truck?.matricule ?? "?");
+    const p = periods.get(r.period_start) ?? { period: r.period_start, byTruck: {}, total: 0, liters: 0, fills: 0 };
+    p.byTruck[r.truck_id] = (p.byTruck[r.truck_id] ?? 0) + r.cost;
+    p.total += r.cost;
+    p.liters += r.liters;
+    p.fills += r.fills;
+    periods.set(r.period_start, p);
+    totalByTruck[r.truck_id] = (totalByTruck[r.truck_id] ?? 0) + r.cost;
+  }
+  const list = Array.from(periods.values()).sort((a, b) => b.period.localeCompare(a.period));
+  return {
+    trucks: Array.from(trucks, ([id, matricule]) => ({ id, matricule })).sort((a, b) => a.matricule.localeCompare(b.matricule)),
+    rows: list,
+    totalByTruck,
+    total: list.reduce((s, r) => s + r.total, 0),
+    liters: list.reduce((s, r) => s + r.liters, 0),
+    fills: list.reduce((s, r) => s + r.fills, 0),
+  };
 }

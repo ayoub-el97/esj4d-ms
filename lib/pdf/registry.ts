@@ -10,7 +10,7 @@ import { getEmployee } from "@/lib/data/employees";
 import { getWarnings } from "@/lib/data/warnings";
 import { getGreenWasteEntries } from "@/lib/data/green-waste";
 import { getTasks } from "@/lib/data/tasks";
-import { entriesTotals, getFuelEntries, getFuelEntry, getFuelSummary } from "@/lib/data/fuel";
+import { costPivot, entriesTotals, getFuelEntries, getFuelEntry, getFuelSummary, type FuelPeriod } from "@/lib/data/fuel";
 import { getMonthlyReport } from "@/lib/data/monthly";
 import { getWorkerReport, getWorkersPeriodReport } from "@/lib/data/worker";
 import { formatDateFr, isISODate, isMonth } from "@/lib/dates";
@@ -23,7 +23,7 @@ import { CleaningReportPdf, CollectionReportPdf, GlobalDailyPdf, TruckMonthlyPdf
 import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
 import { EmployeeLeavePdf, LeaveBalancesPdf, LeaveHistoryPdf, RecoveryBalancesPdf, RecoveryHistoryPdf, WorkersPeriodPdf } from "./leaves";
 import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
-import { FuelEntryPdf, FuelReportPdf } from "./fuel";
+import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
 
 export type BuiltPdf = {
   element: ReactElement;
@@ -111,6 +111,14 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const parts = [subtitle, entries.find((e) => e.truck_id === f.truck)?.truck?.matricule, f.driver ? entries.find((e) => e.driver_id === f.driver)?.driver_name : undefined].filter(Boolean);
       const sub = parts.join(" · ");
       return done("rapport_camions", `${t("Rapport camions — Carburant")} ${sub}`, `carburant-${slug}.pdf`, createElement(FuelReportPdf, { ...common, subtitle: sub, entries, totals: entriesTotals(entries), weekly, monthly }));
+    }
+    case "carburant-couts": {
+      const period = ({ jour: "day", semaine: "week", mois: "month" } as Record<string, FuelPeriod>)[params.vue ?? ""] ?? "month";
+      const f = { from: range.from, to: range.to, truck: params.truck || undefined, driver: params.driver || undefined };
+      const rows = await getFuelSummary(period, f);
+      const viewLabel = { day: t("Par jour"), week: t("Par semaine"), month: t("Par mois") }[period];
+      const sub = [viewLabel, subtitle, f.truck ? rows.find((r) => r.truck_id === f.truck)?.truck?.matricule : undefined].filter(Boolean).join(" · ");
+      return done("rapport_camions", `${t("Statistiques des coûts carburant")} ${sub}`, `carburant-couts-${params.vue ?? "mois"}-${slug}.pdf`, createElement(FuelCostsPdf, { ...common, subtitle: sub, period, pivot: costPivot(rows) }));
     }
     case "camions-mensuel": {
       const month = params.mois;

@@ -3,15 +3,18 @@ import { Building2, Home, LogOut, Settings, Users } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
 import { getBranding } from "@/lib/data/settings";
+import { getReminderAlerts } from "@/lib/data/reminders";
+import { todayISO } from "@/lib/dates";
 import { getT } from "@/lib/i18n/server";
 import { ROLE_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/link-button";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { NotificationBell } from "@/components/notification-bell";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [user, t, brand] = await Promise.all([getCurrentUser(), getT(), getBranding()]);
+  const [user, t, brand, alerts] = await Promise.all([getCurrentUser(), getT(), getBranding(), getReminderAlerts()]);
   const canSeeProfile = user.permissions.parametres.can_view || user.permissions.employes.can_view;
 
   return (
@@ -52,6 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </nav>
 
           <div className="ms-auto flex items-center gap-2">
+            <NotificationBell alerts={alerts} today={todayISO()} />
             <LanguageSwitcher />
             <div className="hidden text-end sm:block">
               <div className="text-sm font-medium leading-tight">{user.fullName}</div>

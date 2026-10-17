@@ -1,6 +1,7 @@
 import { Document, Page, Text, View } from "@react-pdf/renderer";
-import { fuelTotals, type FuelEntry, type FuelSummaryRow, type FuelTotals } from "@/lib/data/fuel";
+import { fuelTotals, type CostPivot, type FuelEntry, type FuelPeriod, type FuelSummaryRow, type FuelTotals } from "@/lib/data/fuel";
 import { formatDateFr, formatMonthFr } from "@/lib/dates";
+import { formatAmount, formatMoney } from "@/lib/money";
 import { PdfDocument, PdfFooter, PdfHeader, PdfTable, PhotoGrid, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
@@ -32,8 +33,8 @@ export function FuelReportPdf({
     { key: "brand", label: "Marque", width: 9 },
     { key: "driver", label: "Chauffeur", width: 16 },
     { key: "liters", label: "Litres", width: 8, align: "right" },
-    { key: "cost", label: "Coût", width: 9, align: "right" },
-    { key: "price", label: "Prix / L", width: 7, align: "right" },
+    { key: "cost", label: "Coût (DH)", width: 9, align: "right" },
+    { key: "price", label: "Prix / L (DH)", width: 7, align: "right" },
     { key: "odo", label: "Compteur (km)", width: 10, align: "right" },
     { key: "dist", label: "Km parcourus", width: 9, align: "right" },
     { key: "l100", label: "L/100 km", width: 7, align: "right" },
@@ -44,10 +45,10 @@ export function FuelReportPdf({
     { key: "mat", label: "Matricule", width: 16 },
     { key: "fills", label: "Pleins", width: 8, align: "right" },
     { key: "liters", label: "Litres", width: 11, align: "right" },
-    { key: "cost", label: "Coût", width: 12, align: "right" },
+    { key: "cost", label: "Coût (DH)", width: 12, align: "right" },
     { key: "dist", label: "Km parcourus", width: 11, align: "right" },
     { key: "l100", label: "L/100 km", width: 10, align: "right" },
-    { key: "c100", label: "Coût aux 100 km", width: 12, align: "right" },
+    { key: "c100", label: "Coût aux 100 km (DH)", width: 12, align: "right" },
   ];
   const sumRows = (rows: FuelSummaryRow[], label: (p: string) => string) =>
     Array.from(new Set(rows.map((r) => r.period_start))).flatMap((p) => {
@@ -57,14 +58,14 @@ export function FuelReportPdf({
         mat: r.truck?.matricule ?? "",
         fills: String(r.fills),
         liters: n(r.liters),
-        cost: n(r.cost),
+        cost: formatAmount(r.cost),
         dist: n(r.distance_km, 0),
         l100: n(r.l_per_100km),
-        c100: n(r.cost_per_100km),
+        c100: formatAmount(r.cost_per_100km),
       }));
       if (list.length > 1) {
         const tot = fuelTotals(list);
-        lines.push({ period: label(p), mat: t("Tous les camions"), fills: String(tot.fills), liters: n(tot.liters), cost: n(tot.cost), dist: n(tot.distance_km, 0), l100: n(tot.l_per_100km), c100: "" });
+        lines.push({ period: label(p), mat: t("Tous les camions"), fills: String(tot.fills), liters: n(tot.liters), cost: formatAmount(tot.cost), dist: n(tot.distance_km, 0), l100: n(tot.l_per_100km), c100: "" });
       }
       return lines;
     });
@@ -75,12 +76,12 @@ export function FuelReportPdf({
       <View style={styles.metaRow}>
         <View style={styles.metaBox}>
           <Text>
-            {t("Pleins")} : {totals.fills} · {t("Litres")} : {n(totals.liters)} L · {t("Coût total")} : {n(totals.cost)}
+            {t("Pleins")} : {totals.fills} · {t("Litres")} : {n(totals.liters)} L · {t("Coût total")} : {formatMoney(totals.cost, t("DH"))}
           </Text>
         </View>
         <View style={styles.metaBox}>
           <Text>
-            {t("Km parcourus")} : {n(totals.distance_km, 0)} · {t("Consommation moyenne")} : {totals.l_per_100km == null ? "—" : `${n(totals.l_per_100km)} L/100 km`} · {t("Coût aux 100 km")} : {n(totals.cost_per_100km)}
+            {t("Km parcourus")} : {n(totals.distance_km, 0)} · {t("Consommation moyenne")} : {totals.l_per_100km == null ? "—" : `${n(totals.l_per_100km)} L/100 km`} · {t("Coût aux 100 km")} : {formatMoney(totals.cost_per_100km, t("DH"))}
           </Text>
         </View>
       </View>
@@ -93,7 +94,7 @@ export function FuelReportPdf({
           brand: e.truck?.brand ?? "",
           driver: e.driver_name,
           liters: n(e.liters),
-          cost: n(e.cost),
+          cost: formatAmount(e.cost),
           price: n(e.price_per_liter, 3),
           odo: n(e.odometer_km, 0),
           dist: e.distance_km == null ? t("1er plein") : n(e.distance_km, 0),
@@ -128,8 +129,8 @@ export function FuelEntryPdf({ company, entry, generatedBy }: { company: string;
         {line("Camion (matricule)", `${entry.truck?.matricule ?? ""}${entry.truck?.brand ? ` — ${entry.truck.brand}` : ""}`)}
         {line("Chauffeur", entry.driver_name || "—")}
         {line("Litres", `${n(entry.liters)} L`)}
-        {line("Coût", n(entry.cost))}
-        {line("Prix au litre", n(entry.price_per_liter, 3))}
+        {line("Coût", formatMoney(entry.cost, t("DH")))}
+        {line("Prix au litre", entry.price_per_liter == null ? "—" : `${n(entry.price_per_liter, 3)} ${t("DH")}`)}
         {line("Kilométrage compteur (km)", n(entry.odometer_km, 0))}
         {line("Km parcourus depuis le plein précédent", entry.distance_km == null ? t("1er plein (référence)") : n(entry.distance_km, 0))}
         {line("Consommation", entry.l_per_100km == null ? "—" : `${n(entry.l_per_100km)} L/100 km`)}
@@ -139,5 +140,34 @@ export function FuelEntryPdf({ company, entry, generatedBy }: { company: string;
         <PdfFooter company={company} generatedBy={generatedBy} />
       </Page>
     </Document>
+  );
+}
+
+/** Statistiques des coûts (DH) : une ligne par jour / semaine / mois, une colonne par camion. */
+export function FuelCostsPdf({ company, subtitle, period, pivot, generatedBy }: { company: string; subtitle: string; period: FuelPeriod; pivot: CostPivot; generatedBy: string }) {
+  const { t, locale } = usePdf();
+  const title = t("Statistiques des coûts carburant");
+  const label = (iso: string) => (period === "month" ? formatMonthFr(iso.slice(0, 7), locale) : period === "week" ? t("Semaine du {date}", { date: formatDateFr(iso) }) : formatDateFr(iso));
+  const truckWidth = pivot.trucks.length ? Math.min(14, 66 / pivot.trucks.length) : 0;
+  const first = 100 - 14 - truckWidth * pivot.trucks.length;
+  const columns: Column[] = [
+    { key: "period", label: period === "day" ? "Jour" : period === "week" ? "Semaine" : "Mois", width: first },
+    ...pivot.trucks.map((tr) => ({ key: tr.id, label: tr.matricule, width: truckWidth, align: "right" as const })),
+    { key: "total", label: "Total (DH)", width: 14, align: "right" },
+  ];
+  const rows: Record<string, string>[] = pivot.rows.map((r) => ({
+    period: label(r.period),
+    ...Object.fromEntries(pivot.trucks.map((tr) => [tr.id, r.byTruck[tr.id] != null ? formatAmount(r.byTruck[tr.id]) : ""])),
+    total: formatAmount(r.total),
+  }));
+  rows.push({ period: t("Total de la période"), ...Object.fromEntries(pivot.trucks.map((tr) => [tr.id, formatAmount(pivot.totalByTruck[tr.id] ?? 0)])), total: formatAmount(pivot.total) });
+  return (
+    <PdfDocument title={`${title} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
+      <PdfHeader company={company} title={title} subtitle={subtitle} />
+      <Text style={{ marginBottom: 6 }}>
+        {t("Dépense totale")} : {formatMoney(pivot.total, t("DH"))} · {t("Pleins")} : {pivot.fills} · {t("Litres")} : {n(pivot.liters)} L
+      </Text>
+      <PdfTable columns={columns} rows={rows} />
+    </PdfDocument>
   );
 }

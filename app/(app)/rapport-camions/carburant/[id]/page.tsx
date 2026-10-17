@@ -53,7 +53,7 @@ export default async function PleinPage({ params, searchParams }: { params: Prom
               </div>
               <div>
                 <p className="text-muted-foreground">{t("Prix au litre")}</p>
-                <p className="text-lg font-semibold">{entry.price_per_liter == null ? "—" : entry.price_per_liter.toFixed(3)}</p>
+                <p className="text-lg font-semibold">{entry.price_per_liter == null ? "—" : `${entry.price_per_liter.toFixed(3)} ${t("DH")}`}</p>
               </div>
             </CardContent>
           </Card>

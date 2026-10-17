@@ -132,9 +132,9 @@ export function FuelForm({
               <Input id="liters" name="liters" type="number" step="0.01" min="0.01" inputMode="decimal" value={liters} onChange={(e) => setLiters(e.target.value)} required />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cost">{t("Coût")}</Label>
+              <Label htmlFor="cost">{t("Coût ({unit})", { unit: t("DH") })}</Label>
               <Input id="cost" name="cost" type="number" step="0.01" min="0" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} required />
-              {price && <p className="text-xs text-muted-foreground">{t("Prix au litre : {price}", { price })}</p>}
+              {price && <p className="text-xs text-muted-foreground">{t("Prix au litre : {price}", { price: `${price} ${t("DH")}` })}</p>}
             </div>
             <div className="space-y-1">
               <Label htmlFor="odometer_km">{t("Kilométrage compteur (km)")}</Label>

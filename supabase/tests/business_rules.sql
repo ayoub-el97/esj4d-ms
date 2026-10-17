@@ -277,6 +277,36 @@ begin
   assert r.fills = 1 and r.l_per_100km = 25, 'filtre chauffeur C002';
   assert public.photo_module('fuel_entry') = 'rapport_camions', 'photos des pleins : droits du module camions';
   raise notice 'OK 13 carburant : L/100 km par plein, semaine, mois, filtre chauffeur';
+
+  -- coûts par jour : une ligne par jour de plein
+  assert (select count(*) from public.fuel_summary('day', '2026-10-01', '2026-10-31', tr)) = 3, 'coûts par jour : 3 jours';
+  assert (select cost from public.fuel_summary('day', '2026-10-01', '2026-10-31', tr) where period_start = '2026-10-04') = 1440, 'coût du 04/10';
+  assert (select sum(cost) from public.fuel_summary('month', '2026-10-01', '2026-10-31')) >= 3890, 'dépense mensuelle totale';
+  raise notice 'OK 13b carburant : coûts par jour et dépense mensuelle';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 14. Rappels : personnels ou partagés
+-- ---------------------------------------------------------------------------
+do $$
+declare me uuid := auth.uid();
+begin
+  assert me is not null, 'test 14 : utilisateur connecté requis';
+  insert into public.reminders (title, remind_date, notify_days_before) values ('Visite technique 77027', current_date + 2, 3);
+  insert into public.reminders (title, remind_date, shared) values ('Réunion mensuelle', current_date + 10, true);
+  assert (select created_by from public.reminders where title = 'Visite technique 77027') = me, 'auteur du rappel enregistré automatiquement';
+  begin
+    insert into public.reminders (title, remind_date) values ('   ', current_date);
+    raise exception 'ÉCHEC : rappel sans titre accepté';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.reminders (title, remind_date, created_by) values ('Usurpation', current_date, '22222222-2222-2222-2222-222222222222');
+    raise exception 'ÉCHEC : rappel créé au nom d''un autre utilisateur';
+  exception when others then
+    if sqlerrm not like '%row-level security%' and sqlerrm not like '%foreign key%' then raise; end if;
+  end;
+  raise notice 'OK 14 rappels : auteur, titre obligatoire, pas de création au nom d''autrui';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -305,6 +335,15 @@ end $$;
 do $$ begin
   assert (select count(*) from public.leave_balances('2026-10-31')) > 0, 'consultation des soldes impossible';
   raise notice 'OK 11d lecture seule : consultation des soldes';
+end $$;
+
+-- Rappels vus par un autre utilisateur : le partagé oui, le personnel non
+do $$ begin
+  assert (select count(*) from public.reminders where title = 'Réunion mensuelle') = 1, 'rappel partagé invisible pour un autre utilisateur';
+  assert (select count(*) from public.reminders where title = 'Visite technique 77027') = 0, 'rappel personnel visible par un autre utilisateur';
+  delete from public.reminders where title = 'Réunion mensuelle';
+  assert (select count(*) from public.reminders where title = 'Réunion mensuelle') = 1, 'rappel partagé supprimé par un non-administrateur';
+  raise notice 'OK 14b rappels : personnel privé, partagé visible par tous, suppression réservée';
 end $$;
 
 reset role;
