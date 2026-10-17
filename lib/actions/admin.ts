@@ -6,6 +6,7 @@ import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { moroccoHolidays } from "@/lib/holidays-ma";
 import { MODULES, ROLES, type ActionResult, type AppModule, type AppRole } from "@/lib/types";
 
 const roleSchema = z.enum(ROLES as [AppRole, ...AppRole[]]);
@@ -170,4 +171,85 @@ export async function deleteHoliday(date: string): Promise<ActionResult> {
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/parametres/feries");
   return { ok: true, message: t("Jour férié supprimé.") };
+}
+
+// ---------------------------------------------------------------------------
+// Jours fériés du Maroc : synchronisation du calendrier
+// ---------------------------------------------------------------------------
+type HolidayRow = { date: string; label: string; sync_key: string | null; estimated: boolean };
+
+/**
+ * Ajoute les jours fériés officiels du Maroc pour une année (fêtes nationales + fêtes
+ * religieuses estimées). Ne supprime rien, ne modifie jamais une date confirmée ni un
+ * férié saisi à la main ; une date encore estimée est réajustée si le calcul change.
+ */
+export async function syncMoroccoHolidays(year: number): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("parametres", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return { ok: false, error: t("Année invalide.") };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("holidays")
+    .select("date, label, sync_key, estimated")
+    .or(`and(date.gte.${year}-01-01,date.lte.${year}-12-31),sync_key.like.${year}:*`);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  const rows = (data ?? []) as HolidayRow[];
+  const byKey = new Map(rows.filter((r) => r.sync_key).map((r) => [r.sync_key!, r]));
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+
+  let added = 0;
+  let updated = 0;
+  let kept = 0;
+  for (const h of moroccoHolidays(year)) {
+    const linked = byKey.get(h.sync_key);
+    if (linked) {
+      if (!linked.estimated || linked.date === h.date || byDate.has(h.date)) {
+        kept++;
+        continue;
+      }
+      const { error: e } = await supabase.from("holidays").update({ date: h.date }).eq("sync_key", h.sync_key);
+      if (e) return { ok: false, error: t(friendlyError(e.message)) };
+      byDate.delete(linked.date);
+      byDate.set(h.date, { ...linked, date: h.date });
+      updated++;
+      continue;
+    }
+    const sameDate = byDate.get(h.date);
+    if (sameDate) {
+      // Férié déjà saisi à cette date : on le rattache sans changer son libellé
+      if (!sameDate.sync_key) await supabase.from("holidays").update({ sync_key: h.sync_key }).eq("date", h.date);
+      kept++;
+      continue;
+    }
+    const { error: e } = await supabase.from("holidays").insert(h);
+    if (e) return { ok: false, error: t(friendlyError(e.message)) };
+    byDate.set(h.date, { ...h });
+    added++;
+  }
+  revalidatePath("/parametres/feries");
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: t("Année {year} : {added} férié(s) ajouté(s), {updated} date(s) estimée(s) mise(s) à jour, {kept} déjà présent(s).", { year, added, updated, kept }) };
+}
+
+/** Confirme la date d'un férié estimé (après l'annonce officielle), éventuellement en la corrigeant. */
+export async function confirmHoliday(date: string, newDate?: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("parametres", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const d = z.string().date().safeParse(date);
+  const nd = z.string().date().optional().safeParse(newDate || undefined);
+  if (!d.success || !nd.success) return { ok: false, error: t("Date invalide.") };
+  const supabase = await createClient();
+  const target = nd.data ?? d.data;
+  if (target !== d.data) {
+    const { data: clash } = await supabase.from("holidays").select("date").eq("date", target).maybeSingle();
+    if (clash) return { ok: false, error: t("Un jour férié existe déjà à cette date.") };
+  }
+  const { error } = await supabase.from("holidays").update({ date: target, estimated: false }).eq("date", d.data);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  revalidatePath("/parametres/feries");
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: target !== d.data ? t("Date corrigée et confirmée.") : t("Date confirmée.") };
 }

@@ -1989,3 +1989,16 @@ create trigger attendance_clear_times before insert or update on public.attendan
 grant execute on function public.is_holiday(date) to authenticated;
 grant execute on function public.recovery_credits(date, date) to authenticated;
 
+-- ===== supabase/migrations/013_feries_maroc.sql =====
+-- =============================================================================
+-- 013 — Calendrier des jours fériés du Maroc (synchronisation)
+--   sync_key  : identifiant du férié synchronisé (ex. « 2026:fitr:1 »), unique ;
+--               vide pour un férié saisi à la main.
+--   estimated : date estimée (fêtes religieuses, calendrier lunaire) à confirmer
+--               à l'annonce officielle ; une resynchronisation ne modifie jamais
+--               une date confirmée.
+-- =============================================================================
+alter table public.holidays add column if not exists estimated boolean not null default false;
+alter table public.holidays add column if not exists sync_key text;
+create unique index if not exists holidays_sync_key_uniq on public.holidays (sync_key) where sync_key is not null;
+
