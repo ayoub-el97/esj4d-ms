@@ -132,8 +132,8 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
       continue;
     }
     await supabase.from("collection_reports").delete().eq("id", r.id);
-    const { data: tr } = await supabase.from("truck_daily_reports").select("id, ticket1, ticket2, tonnage1, tonnage2, km, fuel").eq("activity_date", date).eq("truck_id", r.truck_id).maybeSingle();
-    if (tr && !tr.ticket1 && !tr.ticket2 && tr.tonnage1 == null && tr.tonnage2 == null && tr.km == null && tr.fuel == null) {
+    const { data: tr } = await supabase.from("truck_daily_reports").select("id, ticket1, ticket2, tonnage1, tonnage2, km, km_start, km_end, fuel").eq("activity_date", date).eq("truck_id", r.truck_id).maybeSingle();
+    if (tr && !tr.ticket1 && !tr.ticket2 && tr.tonnage1 == null && tr.tonnage2 == null && tr.km == null && tr.km_start == null && tr.km_end == null && tr.fuel == null) {
       await supabase.from("truck_daily_reports").delete().eq("id", tr.id);
     }
   }

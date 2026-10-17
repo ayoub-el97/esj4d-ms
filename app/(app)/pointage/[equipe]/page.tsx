@@ -58,7 +58,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         date={date}
         team={team}
         initialRows={sheet.rows}
-        initialTeamLead={sheet.teamLead}
+        initialTeamLead={sheet.teamLead || Array.from(new Set(sheet.rows.filter((r) => r.position === "chef_equipe").map((r) => r.name))).join(", ")}
         teamLeadOptions={leads.filter((l) => !l.team_type || l.team_type === team).map((l) => l.full_name)}
         options={sheet.options}
         canEdit={canEdit}

@@ -68,7 +68,7 @@ export const TEAM_LABELS: Record<TeamType, string> = {
 };
 export const TEAM_SLUGS: Record<string, TeamType> = { collecte: "collecte", nettoiement: "nettoiement" };
 
-export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant" | "superviseur";
+export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant" | "superviseur" | "chef_equipe" | "agent_securite";
 /** Ordre d'affichage des postes */
 export const POSITION_LABELS: Record<Position, string> = {
   balayeur: "Balayeur",
@@ -77,7 +77,15 @@ export const POSITION_LABELS: Record<Position, string> = {
   chauffeur_remplacant: "Chauffeur remplaçant",
   rippeur_remplacant: "Rippeur remplaçant",
   superviseur: "Superviseur",
+  chef_equipe: "Chef d'équipe",
+  agent_securite: "Agent de sécurité",
 };
+/** Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre */
+export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placement: "top" | "after" }[] = [
+  { position: "chef_equipe", title: "Chef d'équipe", placement: "top" },
+  { position: "superviseur", title: "Superviseur", placement: "top" },
+  { position: "agent_securite", title: "Sécurité", placement: "after" },
+];
 export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];
 /** Postes de conduite (titulaire ou remplaçant) : peuvent conduire un camion */
 export const DRIVER_POSITIONS: Position[] = ["chauffeur", "chauffeur_remplacant"];

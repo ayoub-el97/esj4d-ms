@@ -1085,4 +1085,12 @@ export const ar: Messages = {
   "Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).": "تُحتسب « الأشهر » ابتداءً من هذا التاريخ، للموظفين وللتقارير الشهرية: البداية في 08/10/2026 ← الشهر الأول من 08/10/2026 إلى 07/11/2026. اتركه فارغًا لاعتماد الأشهر الميلادية (من اليوم الأول إلى الأخير).",
   "Superviseur": "المشرف",
   "aucun (ajoutez un employé au poste Superviseur)": "لا أحد (أضف موظفًا بمنصب مشرف)",
+  "Agent de sécurité": "عون الأمن",
+  "Km départ": "كم الانطلاق",
+  "Km fin": "كم النهاية",
+  "Km parcourus : {km}": "الكيلومترات المقطوعة: {km}",
+  "Le km de fin doit être supérieur ou égal au km de départ.": "يجب أن يكون كم النهاية أكبر من أو يساوي كم الانطلاق.",
+  "Sécurité": "الأمن",
+  "Tonnage total": "مجموع الحمولة",
+  "Total ({count} ligne(s))": "المجموع ({count} سطر)",
 };

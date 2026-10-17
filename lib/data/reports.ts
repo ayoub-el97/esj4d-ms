@@ -46,6 +46,9 @@ export type TruckDailyReport = {
   dumps_count: number;
   rippers_count: number;
   km: number | null;
+  /** Kilométrage au départ et à la fin de la journée ; km = fin − départ (calculé par la base) */
+  km_start: number | null;
+  km_end: number | null;
   fuel: number | null;
   observations: string;
   updated_at: string;

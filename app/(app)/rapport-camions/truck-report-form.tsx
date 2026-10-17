@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
@@ -34,6 +34,8 @@ export function TruckReportForm({
   const router = useRouter();
   const [state, action] = useActionState(saveTruckReport, null);
   const [pending, start] = useTransition();
+  const [kmStart, setKmStart] = useState(report?.km_start != null ? String(report.km_start) : "");
+  const [kmEnd, setKmEnd] = useState(report?.km_end != null ? String(report.km_end) : "");
 
   return (
     <form action={action}>
@@ -95,8 +97,17 @@ export function TruckReportForm({
               <Input id="dumps_count" name="dumps_count" type="number" min="0" defaultValue={report?.dumps_count ?? 0} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="km">{t("Kilométrage")}</Label>
-              <Input id="km" name="km" type="number" step="0.1" min="0" defaultValue={report?.km ?? ""} />
+              <Label htmlFor="km_start">{t("Km départ")}</Label>
+              <Input id="km_start" name="km_start" type="number" step="0.1" min="0" inputMode="decimal" value={kmStart} onChange={(e) => setKmStart(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="km_end">{t("Km fin")}</Label>
+              <Input id="km_end" name="km_end" type="number" step="0.1" min="0" inputMode="decimal" value={kmEnd} onChange={(e) => setKmEnd(e.target.value)} />
+              {kmStart !== "" && kmEnd !== "" && (
+                <p className={Number(kmEnd) < Number(kmStart) ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                  {Number(kmEnd) < Number(kmStart) ? t("Le km de fin doit être supérieur ou égal au km de départ.") : t("Km parcourus : {km}", { km: (Number(kmEnd) - Number(kmStart)).toFixed(1) })}
+                </p>
+              )}
             </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-4">
               <Label htmlFor="observations">{t("Observations")}</Label>

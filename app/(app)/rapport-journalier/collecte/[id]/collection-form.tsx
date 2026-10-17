@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useTransition, useState } from "react";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { deleteCollectionReport, saveCollectionReport } from "@/lib/actions/reports";
@@ -18,6 +18,9 @@ import { PhotoUploader } from "@/components/photo-uploader";
 
 export function CollectionForm({ report, canEdit }: { report: CollectionReportFull; canEdit: boolean }) {
   const { t } = useT();
+  const tr0 = report.truckReport;
+  const [kmStart, setKmStart] = useState(tr0?.km_start != null ? String(tr0.km_start) : "");
+  const [kmEnd, setKmEnd] = useState(tr0?.km_end != null ? String(tr0.km_end) : "");
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
   const tr = report.truckReport;
@@ -97,8 +100,17 @@ export function CollectionForm({ report, canEdit }: { report: CollectionReportFu
                 <Input value={report.rippers.length} disabled />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="km">{t("Kilométrage")}</Label>
-                <Input id="km" name="km" type="number" step="0.1" min="0" defaultValue={tr?.km ?? ""} />
+                <Label htmlFor="km_start">{t("Km départ")}</Label>
+                <Input id="km_start" name="km_start" type="number" step="0.1" min="0" inputMode="decimal" value={kmStart} onChange={(e) => setKmStart(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="km_end">{t("Km fin")}</Label>
+                <Input id="km_end" name="km_end" type="number" step="0.1" min="0" inputMode="decimal" value={kmEnd} onChange={(e) => setKmEnd(e.target.value)} />
+                {kmStart !== "" && kmEnd !== "" && (
+                  <p className={Number(kmEnd) < Number(kmStart) ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                    {Number(kmEnd) < Number(kmStart) ? t("Le km de fin doit être supérieur ou égal au km de départ.") : t("Km parcourus : {km}", { km: (Number(kmEnd) - Number(kmStart)).toFixed(1) })}
+                  </p>
+                )}
               </div>
               <div className="col-span-2 space-y-1">
                 <Label htmlFor="observations">{t("Observations / commentaires")}</Label>

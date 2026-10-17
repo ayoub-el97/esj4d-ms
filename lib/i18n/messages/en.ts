@@ -1085,4 +1085,12 @@ export const en: Messages = {
   "Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).": "\"Months\" are counted from this date, for employees and monthly reports: start on 08/10/2026 → 1st month from 08/10/2026 to 07/11/2026. Leave empty for calendar months (1st to last day).",
   "Superviseur": "Supervisor",
   "aucun (ajoutez un employé au poste Superviseur)": "none (add an employee with the Supervisor position)",
+  "Agent de sécurité": "Security guard",
+  "Km départ": "Start km",
+  "Km fin": "End km",
+  "Km parcourus : {km}": "Km driven: {km}",
+  "Le km de fin doit être supérieur ou égal au km de départ.": "The end km must be greater than or equal to the start km.",
+  "Sécurité": "Security",
+  "Tonnage total": "Total tonnage",
+  "Total ({count} ligne(s))": "Total ({count} row(s))",
 };

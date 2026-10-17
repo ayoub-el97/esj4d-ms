@@ -111,17 +111,20 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
 }
 
 const TRUCK_COLUMNS: Column[] = [
-  { key: "brand", label: "Marque", width: 8 },
-  { key: "mat", label: "Matricule", width: 10 },
-  { key: "chauffeur", label: "Chauffeur", width: 13 },
-  { key: "t1", label: "N° ticket", width: 8 },
-  { key: "ton1", label: "Tonnage", width: 7, align: "right" },
-  { key: "t2", label: "2e ticket", width: 8 },
-  { key: "ton2", label: "2e tonnage", width: 7, align: "right" },
-  { key: "dumps", label: "Vidages", width: 6, align: "right" },
-  { key: "rip", label: "Équipe (rippeurs)", width: 16 },
-  { key: "km", label: "Km", width: 6, align: "right" },
-  { key: "obs", label: "Observations", width: 11 },
+  { key: "brand", label: "Marque", width: 6 },
+  { key: "mat", label: "Matricule", width: 9 },
+  { key: "chauffeur", label: "Chauffeur", width: 11 },
+  { key: "t1", label: "N° ticket", width: 7 },
+  { key: "ton1", label: "Tonnage", width: 6, align: "right" },
+  { key: "t2", label: "2e ticket", width: 7 },
+  { key: "ton2", label: "2e tonnage", width: 6, align: "right" },
+  { key: "tont", label: "Tonnage total", width: 7, align: "right" },
+  { key: "dumps", label: "Vidages", width: 5, align: "right" },
+  { key: "rip", label: "Équipe (rippeurs)", width: 12 },
+  { key: "kmd", label: "Km départ", width: 6, align: "right" },
+  { key: "kmf", label: "Km fin", width: 6, align: "right" },
+  { key: "km", label: "Km parcourus", width: 6, align: "right" },
+  { key: "obs", label: "Observations", width: 6 },
 ];
 
 const truckRow = (tr: TruckReportRow) => ({
@@ -132,6 +135,9 @@ const truckRow = (tr: TruckReportRow) => ({
   ton1: tr.tonnage1 == null ? "" : String(tr.tonnage1),
   t2: tr.ticket2,
   ton2: tr.tonnage2 == null ? "" : String(tr.tonnage2),
+  tont: tr.tonnage1 == null && tr.tonnage2 == null ? "" : (Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0)).toFixed(2),
+  kmd: tr.km_start == null ? "" : String(tr.km_start),
+  kmf: tr.km_end == null ? "" : String(tr.km_end),
   dumps: String(tr.dumps_count),
   rip: tr.crew.length ? tr.crew.join(", ") : tr.rippers_count ? String(tr.rippers_count) : "",
   km: tr.km == null ? "" : String(tr.km),
@@ -194,7 +200,18 @@ export function TruckReportsPdf({ company, subtitle, rows, generatedBy }: { comp
   return (
     <PdfDocument title={`${t("Rapport camions")} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
       <PdfHeader company={company} title={t("Rapport camions")} subtitle={subtitle} />
-      <PdfTable columns={columns} rows={rows.map((tr) => ({ date: formatDateFr(tr.activity_date), ...truckRow(tr) }))} />
+      <PdfTable
+        columns={columns}
+        rows={[
+          ...rows.map((tr) => ({ date: formatDateFr(tr.activity_date), ...truckRow(tr) })),
+          {
+            date: t("Total"),
+            tont: rows.reduce((s, tr) => s + Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0), 0).toFixed(2),
+            dumps: String(rows.reduce((s, tr) => s + tr.dumps_count, 0)),
+            km: rows.reduce((s, tr) => s + Number(tr.km ?? 0), 0).toFixed(1),
+          },
+        ]}
+      />
     </PdfDocument>
   );
 }

@@ -10,7 +10,7 @@ import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import type { TFunction } from "@/lib/i18n/config";
 import { formatDateTimeFr } from "@/lib/dates";
-import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType } from "@/lib/types";
+import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,10 +150,13 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (team === "nettoiement") return [{ key: "all", title: null, chauffeurId: null, idx: rows.map((_, i) => i) }] as Group[];
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<number>();
-    const supervisorIdx = rows.map((r, i) => (r.position === "superviseur" ? i : -1)).filter((i) => i >= 0);
-    supervisorIdx.forEach((i) => used.add(i));
     const result: Group[] = [];
-    if (supervisorIdx.length) result.push({ key: "superviseurs", title: t("Superviseur"), chauffeurId: null, idx: supervisorIdx });
+    const staffGroup = (g: (typeof COLLECTE_STAFF_GROUPS)[number]) => {
+      const idx = rows.map((r, i) => (r.position === g.position ? i : -1)).filter((i) => i >= 0);
+      idx.forEach((i) => used.add(i));
+      if (idx.length) result.push({ key: g.position, title: t(g.title), chauffeurId: null, idx });
+    };
+    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "top").forEach(staffGroup);
     result.push(...chauffeurs.map((c) => {
       const idx = rows.map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1)).filter((i) => i >= 0);
       idx.forEach((i) => used.add(i));
@@ -162,6 +165,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
       const title = plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name });
       return { key: c.employee_id, title, chauffeurId: c.employee_id, idx };
     }));
+    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "after").forEach(staffGroup);
     const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
     const freeSubstitutes = rest.filter((i) => isSubstitutePosition(rows[i].position));
     const others = rest.filter((i) => !isSubstitutePosition(rows[i].position));

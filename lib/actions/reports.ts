@@ -169,8 +169,9 @@ const collectionSchema = z.object({
   ticket2: z.string().max(50).default(""),
   tonnage2: optionalNumber,
   dumps_count: intField,
-  km: optionalNumber,
-});
+  km_start: optionalNumber,
+  km_end: optionalNumber,
+}).refine((d) => d.km_start == null || d.km_end == null || d.km_end >= d.km_start, { message: "Le km de fin doit être supérieur ou égal au km de départ.", path: ["km_end"] });
 
 export async function saveCollectionReport(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
@@ -188,7 +189,8 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
     ticket2: formData.get("ticket2") ?? "",
     tonnage2: formData.get("tonnage2"),
     dumps_count: formData.get("dumps_count"),
-    km: formData.get("km"),
+    km_start: formData.get("km_start"),
+    km_end: formData.get("km_end"),
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const d = parsed.data;
@@ -221,7 +223,9 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
       tonnage2: d.tonnage2,
       dumps_count: d.dumps_count,
       rippers_count: d.rippers.length,
-      km: d.km,
+      km_start: d.km_start,
+      km_end: d.km_end,
+      km: null,
       observations: d.observations,
     },
     { onConflict: "activity_date,truck_id" },
@@ -261,9 +265,10 @@ const truckReportSchema = z.object({
   tonnage2: optionalNumber,
   dumps_count: intField,
   rippers_count: intField,
-  km: optionalNumber,
+  km_start: optionalNumber,
+  km_end: optionalNumber,
   observations: z.string().max(2000).default(""),
-});
+}).refine((d) => d.km_start == null || d.km_end == null || d.km_end >= d.km_start, { message: "Le km de fin doit être supérieur ou égal au km de départ.", path: ["km_end"] });
 
 export async function saveTruckReport(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
@@ -271,7 +276,8 @@ export async function saveTruckReport(_prev: ActionResult | null, formData: Form
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   const parsed = truckReportSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
-  const { id, ...values } = parsed.data;
+  const { id, ...rest } = parsed.data;
+  const values = { ...rest, km: null }; // km parcourus recalculés par la base (fin − départ)
 
   const supabase = await createClient();
   const { error } = id

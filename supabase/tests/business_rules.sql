@@ -402,6 +402,35 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 17. Chef d'équipe, agent de sécurité (collecte) ; km départ / fin
+-- ---------------------------------------------------------------------------
+do $$
+declare ce uuid; ag uuid; tr uuid;
+begin
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day) values ('CE01', 'Chef', 'Equipe', 'chef_equipe', 'collecte', 0) returning id into ce;
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day) values ('AS01', 'Agent', 'Securite', 'agent_securite', 'collecte', 0) returning id into ag;
+  insert into public.attendance (activity_date, employee_id, status, position, team_type) values
+    ('2026-10-22', ce, 'present', 'chef_equipe', 'collecte'), ('2026-10-22', ag, 'absent_maladie', 'agent_securite', 'collecte');
+  assert (select worked_days from public.attendance_summary('2026-10-22', '2026-10-22') where employee_id = ce) = 1, 'chef d''équipe pointé';
+  assert (select sick_days from public.attendance_summary('2026-10-22', '2026-10-22') where employee_id = ag) = 1, 'agent de sécurité pointé';
+  begin
+    insert into public.employees (matricule, last_name, first_name, position, team_type) values ('AS02', 'X', 'Y', 'agent_securite', 'nettoiement');
+    raise exception 'ÉCHEC : agent de sécurité hors collecte accepté';
+  exception when check_violation then null;
+  end;
+
+  select id into tr from public.trucks where matricule = '77041-A-1';
+  insert into public.truck_daily_reports (activity_date, truck_id, km_start, km_end) values ('2026-10-22', tr, 15200, 15287.5);
+  assert (select km from public.truck_daily_reports where activity_date = '2026-10-22' and truck_id = tr) = 87.5, 'km parcourus = fin − départ';
+  begin
+    update public.truck_daily_reports set km_end = 15000 where activity_date = '2026-10-22' and truck_id = tr;
+    raise exception 'ÉCHEC : km fin inférieur au km départ accepté';
+  exception when check_violation then null;
+  end;
+  raise notice 'OK 17 chef d''équipe et agent de sécurité pointés ; km parcourus calculés';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);

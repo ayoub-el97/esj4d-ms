@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TruckTabs } from "./truck-tabs";
 
 export const generateMetadata = pageTitle("Rapport camions");
@@ -27,6 +27,7 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
   const filters = { date: isISODate(sp.date) ? sp.date : undefined, from: sp.from, to: sp.to, truck: sp.truck };
   const [rows, trucks] = await Promise.all([getTruckReports(filters), getTrucks()]);
   const canEdit = user.permissions.rapport_camions.can_edit;
+  const totals = rows.reduce((a, r) => ({ tonnage: a.tonnage + Number(r.tonnage1 ?? 0) + Number(r.tonnage2 ?? 0), dumps: a.dumps + r.dumps_count, km: a.km + Number(r.km ?? 0) }), { tonnage: 0, dumps: 0, km: 0 });
   const pdfParams: Record<string, string> = {};
   for (const [k, v] of Object.entries(filters)) if (v) pdfParams[k] = v;
 
@@ -93,9 +94,12 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
               <TableHead className="text-end">{t("Tonnage")}</TableHead>
               <TableHead>{t("2e ticket")}</TableHead>
               <TableHead className="text-end">{t("2e tonnage")}</TableHead>
+              <TableHead className="text-end">{t("Tonnage total")}</TableHead>
               <TableHead className="text-end">{t("Vidages")}</TableHead>
               <TableHead>{t("Équipe (rippeurs)")}</TableHead>
-              <TableHead className="text-end">{t("Km")}</TableHead>
+              <TableHead className="text-end">{t("Km départ")}</TableHead>
+              <TableHead className="text-end">{t("Km fin")}</TableHead>
+              <TableHead className="text-end">{t("Km parcourus")}</TableHead>
               <TableHead>{t("Observations")}</TableHead>
               {canEdit && <TableHead />}
             </TableRow>
@@ -103,7 +107,7 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={13} className="text-center text-muted-foreground">
+                <TableCell colSpan={16} className="text-center text-muted-foreground">
                   {t("Aucune ligne.")}
                 </TableCell>
               </TableRow>
@@ -118,9 +122,12 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
                 <TableCell className="text-end">{r.tonnage1 ?? ""}</TableCell>
                 <TableCell>{r.ticket2}</TableCell>
                 <TableCell className="text-end">{r.tonnage2 ?? ""}</TableCell>
+                <TableCell className="text-end font-semibold">{r.tonnage1 == null && r.tonnage2 == null ? "" : (Number(r.tonnage1 ?? 0) + Number(r.tonnage2 ?? 0)).toFixed(2)}</TableCell>
                 <TableCell className="text-end">{r.dumps_count}</TableCell>
                 <TableCell className="min-w-40 text-xs">{r.crew.length ? r.crew.join(", ") : r.rippers_count ? t("{count} rippeur(s)", { count: r.rippers_count }) : "—"}</TableCell>
-                <TableCell className="text-end">{r.km ?? ""}</TableCell>
+                <TableCell className="text-end">{r.km_start ?? ""}</TableCell>
+                <TableCell className="text-end">{r.km_end ?? ""}</TableCell>
+                <TableCell className="text-end font-semibold">{r.km ?? ""}</TableCell>
                 <TableCell className="max-w-48 truncate">{r.observations}</TableCell>
                 {canEdit && (
                   <TableCell>
@@ -132,6 +139,18 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
               </TableRow>
             ))}
           </TableBody>
+          {rows.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={9}>{t("Total ({count} ligne(s))", { count: rows.length })}</TableCell>
+                <TableCell className="text-end">{totals.tonnage.toFixed(2)}</TableCell>
+                <TableCell className="text-end">{totals.dumps}</TableCell>
+                <TableCell colSpan={3} />
+                <TableCell className="text-end">{totals.km.toFixed(1)}</TableCell>
+                <TableCell colSpan={canEdit ? 2 : 1} />
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </div>
 

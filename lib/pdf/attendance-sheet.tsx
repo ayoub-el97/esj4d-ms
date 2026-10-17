@@ -1,7 +1,7 @@
 import { Text, View } from "@react-pdf/renderer";
 import type { SheetRow } from "@/lib/attendance-types";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
-import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
+import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
@@ -56,13 +56,16 @@ export function AttendanceSheetPdf({
   if (team === "collecte") {
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<string>();
-    if (supervisors.length) {
-      tableRows.push({ _group: t("Superviseur") });
-      for (const r of supervisors) {
+    const staffGroup = (g: (typeof COLLECTE_STAFF_GROUPS)[number]) => {
+      const list = rows.filter((r) => r.position === g.position);
+      if (!list.length) return;
+      tableRows.push({ _group: t(g.title) });
+      for (const r of list) {
         tableRows.push(toRow(r));
         used.add(`${r.employee_id}:${r.shift}`);
       }
-    }
+    };
+    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "top").forEach(staffGroup);
     for (const c of chauffeurs) {
       const teamRows = rows.filter((r) => r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id);
       const driver = teamRows.find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && WORKED_STATUSES.includes(r.status) && r.truck_id) ?? c;
@@ -75,6 +78,7 @@ export function AttendanceSheetPdf({
         }
       }
     }
+    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "after").forEach(staffGroup);
     const rest = rows.filter((r) => !used.has(`${r.employee_id}:${r.shift}`));
     const freeSubs = rest.filter((r) => isSubstitutePosition(r.position));
     const others = rest.filter((r) => !isSubstitutePosition(r.position));
