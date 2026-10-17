@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/native-select";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { PhotoStatusBadge, needsAfterPhotos } from "@/components/photo-status-badge";
 
 export function CleaningReportUI({
   date,
@@ -37,6 +38,9 @@ export function CleaningReportUI({
   const [adding, setAdding] = useState(false);
   const [newAgent, setNewAgent] = useState("");
   const [observations, setObservations] = useState(report?.observations ?? "");
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const missingAfter = agents.filter((a) => needsAfterPhotos(a.photosAvant.length, a.photosApres.length)).length;
+  const shownAgents = onlyMissing ? agents.filter((a) => needsAfterPhotos(a.photosAvant.length, a.photosApres.length)) : agents;
 
   if (!report) {
     return (
@@ -65,7 +69,22 @@ export function CleaningReportUI({
     <div className="space-y-4">
       {agents.length === 0 && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">{t("Aucun agent dans ce rapport. Ajoutez-en avec le bouton ci-dessous.")}</p>}
 
-      {agents.map((a) => (
+      {agents.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {missingAfter > 0 ? (
+            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800 dark:bg-orange-950 dark:text-orange-300">{t("{count} agent(s) : photos APRÈS à ajouter", { count: missingAfter })}</span>
+          ) : (
+            <span className="text-muted-foreground">{t("Photos APRÈS : rien en attente.")}</span>
+          )}
+          {(missingAfter > 0 || onlyMissing) && (
+            <label className="ms-auto inline-flex items-center gap-2">
+              <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} className="size-4 accent-indigo-600" />
+              {t("Afficher seulement les agents sans photos APRÈS")}
+            </label>
+          )}
+        </div>
+      )}
+      {shownAgents.map((a) => (
         <AgentCard key={a.id} agent={a} date={date} canEdit={canEdit} />
       ))}
 
@@ -171,6 +190,7 @@ function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: strin
         <CardTitle>
           <span className="me-2 text-muted-foreground">#{agent.order_number}</span>
           {agent.name}
+          <PhotoStatusBadge before={agent.photosAvant.length} after={agent.photosApres.length} className="ms-2 align-middle" />
         </CardTitle>
         {canEdit && (
           <Button

@@ -6,12 +6,12 @@ import { getGreenWasteEntries } from "@/lib/data/green-waste";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
+import { PhotoStatusBadge } from "@/components/photo-status-badge";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { GreenWasteForm } from "./green-waste-form";
 
 export const generateMetadata = pageTitle("Déchet vert");
@@ -41,9 +41,7 @@ export default async function DechetVertPage({ searchParams }: { searchParams: P
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     {e.location || t("Lieu non précisé")}
-                    <Badge variant="secondary" className="ms-auto">
-                      {t("{before} avant · {after} après", { before: e.photosAvant.length, after: e.photosApres.length })}
-                    </Badge>
+                    <PhotoStatusBadge before={e.photosAvant.length} after={e.photosApres.length} className="ms-auto" />
                   </CardTitle>
                 </CardHeader>
                 {e.comment && <CardContent className="text-sm text-muted-foreground">{e.comment}</CardContent>}

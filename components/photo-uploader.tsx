@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { deletePhoto } from "@/lib/actions/photos";
@@ -41,6 +42,7 @@ export function PhotoUploader({
   title?: string;
 }) {
   const { t } = useT();
+  const router = useRouter();
   const [items, setItems] = useState<Item[]>(photos.map((p) => ({ ...p, status: "done" })));
   const [viewer, setViewer] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -51,6 +53,7 @@ export function PhotoUploader({
     try {
       const saved = await uploadPhotoFile(file, { entityType, entityId, phase, activityDate, employeeId, location });
       setItems((prev) => prev.map((i) => (i.id === tempId ? { ...saved, status: "done" } : i)));
+      router.refresh(); // met à jour les compteurs avant / après de la page
     } catch (e) {
       const message = (e as Error).message || t("Échec de l'envoi");
       setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, status: "error", error: message } : i)));
@@ -78,6 +81,7 @@ export function PhotoUploader({
     if (r.ok) {
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       toast.success(r.message);
+      router.refresh();
     } else toast.error(r.error);
   };
 
@@ -112,6 +116,11 @@ export function PhotoUploader({
                 className={cn("size-full cursor-zoom-in object-cover", item.status !== "done" && "opacity-50")}
                 onClick={() => item.status === "done" && setViewer(doneItems.findIndex((d) => d.id === item.id))}
               />
+              {item.status === "done" && item.created_at && (
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-1 text-center text-[10px] leading-4 text-white tabular-nums">
+                  {new Date(item.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Casablanca" })}
+                </span>
+              )}
               {item.status === "uploading" && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Loader2 className="size-6 animate-spin text-white drop-shadow" />
@@ -123,7 +132,7 @@ export function PhotoUploader({
                 </button>
               )}
               {canEdit && (
-                <button type="button" aria-label={t("Supprimer")} className="absolute end-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100" onClick={() => remove(item)}>
+                <button type="button" aria-label={t("Supprimer")} className="absolute end-1 top-1 rounded-full bg-black/60 p-1.5 text-white transition sm:p-1 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" onClick={() => remove(item)}>
                   {item.status === "done" ? <Trash2 className="size-3.5" /> : <X className="size-3.5" />}
                 </button>
               )}

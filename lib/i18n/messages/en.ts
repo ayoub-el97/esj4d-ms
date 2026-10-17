@@ -982,4 +982,8 @@ export const en: Messages = {
   "À venir": "Upcoming",
   "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.": "{count} photo(s) not sent: add them again on the record page.",
   "Les photos sont envoyées lors de l'enregistrement.": "Photos are sent when you save.",
+  "{before} avant · après à ajouter": "{before} before · after to add",
+  "{count} agent(s) : photos APRÈS à ajouter": "{count} worker(s): AFTER photos to add",
+  "Photos APRÈS : rien en attente.": "AFTER photos: nothing pending.",
+  "Afficher seulement les agents sans photos APRÈS": "Show only workers without AFTER photos",
 };

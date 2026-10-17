@@ -982,4 +982,8 @@ export const ar: Messages = {
   "À venir": "القادمة",
   "{count} photo(s) non envoyée(s) : ajoutez-les à nouveau sur la fiche.": "لم يتم إرسال {count} صورة: أضفها مجددًا في الصفحة.",
   "Les photos sont envoyées lors de l'enregistrement.": "تُرسل الصور عند الحفظ.",
+  "{before} avant · après à ajouter": "{before} قبل · صور بعد للإضافة",
+  "{count} agent(s) : photos APRÈS à ajouter": "{count} عامل: صور بعد للإضافة",
+  "Photos APRÈS : rien en attente.": "صور بعد: لا شيء في الانتظار.",
+  "Afficher seulement les agents sans photos APRÈS": "عرض العمال بدون صور بعد فقط",
 };

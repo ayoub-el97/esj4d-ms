@@ -8,6 +8,7 @@ import { TASK_STATUS_LABELS } from "@/lib/module-types";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
+import { PhotoStatusBadge } from "@/components/photo-status-badge";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
 import { PdfExportButton } from "@/components/pdf-export-button";
@@ -52,7 +53,7 @@ export default async function ProgrammePage({ searchParams }: { searchParams: Pr
                   <p className="text-muted-foreground">
                     {t("Agents")} : {agentNames(task) || "—"}
                   </p>
-                  <p className="text-xs text-muted-foreground">{t("{before} photo(s) avant · {after} photo(s) après", { before: task.photosAvant.length, after: task.photosApres.length })}</p>
+                  <PhotoStatusBadge before={task.photosAvant.length} after={task.photosApres.length} />
                 </CardContent>
               </Card>
             </Link>

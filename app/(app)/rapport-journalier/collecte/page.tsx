@@ -7,12 +7,12 @@ import { getCollectionReports } from "@/lib/data/reports";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
+import { PhotoStatusBadge } from "@/components/photo-status-badge";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { NewCollectionReport } from "./new-collection-report";
 import { SyncReportsButton } from "@/components/sync-reports-button";
 import { LinkButton } from "@/components/link-button";
@@ -55,9 +55,7 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
                   <CardTitle className="flex items-center gap-2">
                     <span className="font-mono">{r.truck?.matricule ?? "?"}</span>
                     <span className="text-sm font-normal text-muted-foreground">{r.truck?.brand}</span>
-                    <Badge variant="secondary" className="ms-auto">
-                      {t("{count} photo(s)", { count: r.photosAvant.length + r.photosApres.length })}
-                    </Badge>
+                    <PhotoStatusBadge before={r.photosAvant.length} after={r.photosApres.length} className="ms-auto" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm">
