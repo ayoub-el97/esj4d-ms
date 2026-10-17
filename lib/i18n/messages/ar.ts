@@ -914,4 +914,11 @@ export const ar: Messages = {
   "{count} photo(s) enregistrée(s).": "تم حفظ {count} صورة.",
   "Les photos sont envoyées lors de l'enregistrement du plein.": "تُرسل الصور عند حفظ التعبئة.",
   "Plein enregistré. Vous pouvez ajouter ou retirer des photos ci-dessous.": "تم حفظ التعبئة. يمكنك إضافة صور أو حذفها أدناه.",
+  "Prendre des photos": "التقاط صور",
+  "Prendre la photo": "التقاط الصورة",
+  "Prendre une autre photo": "التقاط صورة أخرى",
+  "Ouvrir l'appareil photo": "فتح الكاميرا",
+  "Changer de caméra": "تبديل الكاميرا",
+  "Terminé ({count})": "تم ({count})",
+  "Caméra non accessible dans l'application (autorisation refusée ou navigateur non compatible). Utilisez l'appareil photo du téléphone : une photo à chaque appui, autant de fois que nécessaire.": "الكاميرا غير متاحة داخل التطبيق (تم رفض الإذن أو المتصفح غير متوافق). استخدم كاميرا الهاتف: صورة واحدة في كل ضغطة، بعدد المرات اللازمة.",
 };

@@ -3,13 +3,14 @@
 import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Camera, ImagePlus, Trash2, X } from "lucide-react";
+import { ImagePlus, Trash2, X } from "lucide-react";
 import { deleteFuelEntry, saveFuelEntry } from "@/lib/actions/fuel";
 import { uploadPhotoFile } from "@/lib/photo-upload";
 import type { Employee, Truck } from "@/lib/data/employees";
 import type { FuelEntry } from "@/lib/data/fuel";
 import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
+import { CameraCaptureButton } from "@/components/camera-capture";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,9 +36,8 @@ export function FuelForm({
   const router = useRouter();
   // Photos choisies avant l'enregistrement (création) : envoyées juste après la création du plein
   const [pendingPhotos, setPendingPhotos] = useState<{ key: string; file: File; url: string }[]>([]);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const addFiles = (files: FileList | null) => {
+  const addFiles = (files: FileList | File[] | null) => {
     if (!files) return;
     setPendingPhotos((prev) => [...prev, ...Array.from(files).map((file) => ({ key: crypto.randomUUID(), file, url: URL.createObjectURL(file) }))]);
   };
@@ -156,15 +156,12 @@ export function FuelForm({
                 <span className="text-sm font-semibold">{t("Photos (ticket, compteur, pompe)")}</span>
                 <span className="text-xs text-muted-foreground">({pendingPhotos.length})</span>
                 <div className="ms-auto flex gap-1">
-                  <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()}>
-                    <Camera /> {t("Prendre une photo")}
-                  </Button>
+                  <CameraCaptureButton onCapture={addFiles} />
                   <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
                     <ImagePlus /> {t("Importer")}
                   </Button>
                 </div>
                 {/* sans attribut name : les fichiers ne partent pas avec le formulaire, ils sont envoyés après la création */}
-                <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
                 <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
               </div>
               {pendingPhotos.length === 0 ? (

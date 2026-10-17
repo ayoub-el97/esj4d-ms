@@ -914,4 +914,11 @@ export const en: Messages = {
   "{count} photo(s) enregistrée(s).": "{count} photo(s) saved.",
   "Les photos sont envoyées lors de l'enregistrement du plein.": "Photos are sent when the fill-up is saved.",
   "Plein enregistré. Vous pouvez ajouter ou retirer des photos ci-dessous.": "Fill-up saved. You can add or remove photos below.",
+  "Prendre des photos": "Take photos",
+  "Prendre la photo": "Take the photo",
+  "Prendre une autre photo": "Take another photo",
+  "Ouvrir l'appareil photo": "Open the camera",
+  "Changer de caméra": "Switch camera",
+  "Terminé ({count})": "Done ({count})",
+  "Caméra non accessible dans l'application (autorisation refusée ou navigateur non compatible). Utilisez l'appareil photo du téléphone : une photo à chaque appui, autant de fois que nécessaire.": "Camera not available in the app (permission denied or browser not supported). Use the phone's camera: one photo per tap, as many times as needed.",
 };

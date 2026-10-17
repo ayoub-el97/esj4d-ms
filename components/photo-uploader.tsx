@@ -2,12 +2,13 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Camera, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { deletePhoto } from "@/lib/actions/photos";
 import { useT } from "@/lib/i18n/client";
 import { uploadPhotoFile } from "@/lib/photo-upload";
 import { PHOTO_PHASE_LABELS, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
 import { Button } from "@/components/ui/button";
+import { CameraCaptureButton } from "@/components/camera-capture";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,6 @@ export function PhotoUploader({
   const { t } = useT();
   const [items, setItems] = useState<Item[]>(photos.map((p) => ({ ...p, status: "done" })));
   const [viewer, setViewer] = useState<number | null>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const phaseLabel = t(PHOTO_PHASE_LABELS[phase]);
 
@@ -58,7 +58,7 @@ export function PhotoUploader({
     }
   };
 
-  const onFiles = (files: FileList | null) => {
+  const onFiles = (files: FileList | File[] | null) => {
     if (!files) return;
     for (const file of Array.from(files)) {
       const tempId = `tmp-${crypto.randomUUID()}`;
@@ -90,13 +90,10 @@ export function PhotoUploader({
         <span className="text-xs text-muted-foreground">({doneItems.length})</span>
         {canEdit && (
           <div className="ms-auto flex gap-1">
-            <Button type="button" variant="outline" size="sm" onClick={() => cameraRef.current?.click()}>
-              <Camera /> {t("Prendre une photo")}
-            </Button>
+            <CameraCaptureButton onCapture={onFiles} />
             <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
               <ImagePlus /> {t("Importer")}
             </Button>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
           </div>
         )}
