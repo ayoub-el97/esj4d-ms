@@ -1,7 +1,7 @@
 import { Text, View } from "@react-pdf/renderer";
 import type { SheetRow } from "@/lib/attendance-types";
 import { formatDateFr, formatMonthFr } from "@/lib/dates";
-import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, type TeamType } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
@@ -63,9 +63,15 @@ export function AttendanceSheetPdf({
       }
     }
     const rest = rows.filter((r) => !used.has(`${r.employee_id}:${r.shift}`));
-    if (rest.length) {
+    const freeSubs = rest.filter((r) => isSubstitutePosition(r.position));
+    const others = rest.filter((r) => !isSubstitutePosition(r.position));
+    if (freeSubs.length) {
+      tableRows.push({ _group: t("Remplaçants sans remplacement ce jour") });
+      freeSubs.forEach((r) => tableRows.push(toRow(r)));
+    }
+    if (others.length) {
       tableRows.push({ _group: t("Sans équipe affectée") });
-      rest.forEach((r) => tableRows.push(toRow(r)));
+      others.forEach((r) => tableRows.push(toRow(r)));
     }
   } else {
     rows.forEach((r) => tableRows.push(toRow(r)));

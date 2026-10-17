@@ -10,7 +10,7 @@ import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import type { TFunction } from "@/lib/i18n/config";
 import { formatDateTimeFr } from "@/lib/dates";
-import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, type AttendanceStatus, type TeamType } from "@/lib/types";
+import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,17 +96,38 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         planned: null,
         replacing_employee_id: replacingId,
         chauffeur_id: team === "collecte" && o.position !== "chauffeur" ? chauffeurId : null,
-        position: team === "nettoiement" ? "balayeur" : o.position === "chauffeur" ? "chauffeur" : "rippeur",
+        // Un employé de la collecte garde son poste ; un employé d'une autre équipe renforce comme rippeur
+        position: team === "nettoiement" ? "balayeur" : o.team_type === "collecte" ? o.position : "rippeur",
         team_type: team,
         order_number: o.order_number,
         name: o.name,
         matricule: o.matricule,
         rest_day: o.rest_day,
         is_extra: true,
+        substitute_id: o.substitute_id,
       },
     ]);
     setDirty(true);
     setAdding(null);
+  };
+
+  /** Fait remplacer un titulaire (en repos, absent…) par son remplaçant attitré. */
+  const assignSubstitute = (titularIndex: number) => {
+    const titular = rows[titularIndex];
+    if (!titular.substitute_id) return;
+    const crewChauffeur = titular.position === "chauffeur" ? titular.employee_id : titular.chauffeur_id;
+    const subIndex = rows.findIndex((r) => r.employee_id === titular.substitute_id && r.shift === 1);
+    if (subIndex < 0) return addEmployee(titular.substitute_id, titular.employee_id, crewChauffeur);
+    const sub = rows[subIndex];
+    if (sub.replacing_employee_id && sub.replacing_employee_id !== titular.employee_id) {
+      const other = optionsById.get(sub.replacing_employee_id);
+      if (!window.confirm(t("{name} remplace déjà {other} ce jour. Le réaffecter ?", { name: sub.name, other: other?.name ?? "?" }))) return;
+    }
+    update(subIndex, {
+      replacing_employee_id: titular.employee_id,
+      chauffeur_id: crewChauffeur,
+      status: isWorked(sub.status) ? sub.status : sub.rest_day === dow ? "repos_travaille" : "present",
+    });
   };
 
   const save = () =>
@@ -131,7 +152,10 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
       return { key: c.employee_id, title: t("Équipe {name}", { name: c.name }), chauffeurId: c.employee_id, idx };
     });
     const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
-    if (rest.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: rest });
+    const freeSubstitutes = rest.filter((i) => isSubstitutePosition(rows[i].position));
+    const others = rest.filter((i) => !isSubstitutePosition(rows[i].position));
+    if (freeSubstitutes.length) result.push({ key: "subs", title: t("Remplaçants sans remplacement ce jour"), chauffeurId: null, idx: freeSubstitutes });
+    if (others.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: others });
     return result;
   }, [rows, team, t]);
 
@@ -214,6 +238,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 onUpdate={update}
                 onRemove={remove}
                 onAddShift={addShift}
+                onAssignSubstitute={assignSubstitute}
                 onAddMember={team === "collecte" && g.chauffeurId ? () => setAdding({ chauffeurId: g.chauffeurId }) : undefined}
               />
             ))}
@@ -268,6 +293,7 @@ function GroupRows({
   onUpdate,
   onRemove,
   onAddShift,
+  onAssignSubstitute,
   onAddMember,
 }: {
   t: TFunction;
@@ -280,6 +306,7 @@ function GroupRows({
   onUpdate: (i: number, patch: Partial<SheetRow>) => void;
   onRemove: (i: number) => void;
   onAddShift: (i: number) => void;
+  onAssignSubstitute: (i: number) => void;
   onAddMember?: () => void;
 }) {
   return (
@@ -299,6 +326,9 @@ function GroupRows({
       {idx.map((i) => {
         const r = rows[i];
         const replacing = r.replacing_employee_id ? optionsById.get(r.replacing_employee_id) : null;
+        const substitute = r.substitute_id ? optionsById.get(r.substitute_id) : null;
+        const substituteRow = substitute ? rows.find((x) => x.employee_id === substitute.id && x.shift === 1) : undefined;
+        const coveredBySubstitute = substituteRow?.replacing_employee_id === r.employee_id;
         return (
           <tr key={`${r.employee_id}-${r.shift}`} className={cn("border-t", STATUS_COLORS[r.status], r.is_extra && "italic")}>
             <td className="px-2 py-1 text-muted-foreground">{r.order_number || "—"}</td>
@@ -308,6 +338,12 @@ function GroupRows({
               {r.shift > 1 && <span className="ms-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">{t("service {n}", { n: r.shift })}</span>}
               {replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("remplace {name}", { name: replacing.name })}</div>}
               {r.is_extra && !replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("ajouté pour la journée")}</div>}
+              {substitute && r.shift === 1 && (
+                <div className="text-[11px] font-normal text-muted-foreground">
+                  {t("Remplaçant : {name}", { name: substitute.name })}
+                  {coveredBySubstitute && <span className="ms-1 text-emerald-700">✓ {t("remplace aujourd'hui")}</span>}
+                </div>
+              )}
             </td>
             <td className="px-2 py-1 text-muted-foreground">{r.rest_day == null ? "—" : t(WEEKDAY_SHORT[r.rest_day])}</td>
             <td className="px-2 py-1">
@@ -326,6 +362,11 @@ function GroupRows({
                   onClick={() => onUpdate(i, { status: "repos_travaille" })}
                 >
                   {t("Jour de repos habituel : marquer « Jour de repos travaillé » ?")}
+                </button>
+              )}
+              {substitute && r.shift === 1 && !isWorked(r.status) && !coveredBySubstitute && canEdit && (
+                <button type="button" className="mt-0.5 block text-start text-[11px] text-indigo-700 underline-offset-2 hover:underline" onClick={() => onAssignSubstitute(i)}>
+                  {t("Faire remplacer par {name}", { name: substitute.name })}
                 </button>
               )}
               {r.planned && r.status !== r.planned && (

@@ -66,6 +66,7 @@ export function toOption(e: Employee): EmployeeOption {
     team_type: e.team_type,
     rest_day: e.rest_day,
     chauffeur_id: e.chauffeur_id,
+    substitute_id: e.substitute_id,
   };
 }
 
@@ -112,6 +113,7 @@ export async function buildSheet(date: string, team: TeamType) {
       rest_day: e?.rest_day ?? null,
       is_extra: !!e && (e.team_type !== team || !e.is_active || !!a.replacing_employee_id),
       entered_at: a.updated_at,
+      substitute_id: e?.substitute_id ?? null,
       planned: onLeave.has(a.employee_id) ? "conge" : onRecovery.has(a.employee_id) ? "recuperation" : null,
     });
   }
@@ -147,8 +149,22 @@ export async function buildSheet(date: string, team: TeamType) {
       rest_day: e.rest_day,
       is_extra: false,
       entered_at: null,
+      substitute_id: e.substitute_id,
       planned: onLeave.has(e.id) ? "conge" : onRecovery.has(e.id) ? "recuperation" : null,
     });
+  }
+
+  // Remplaçants attitrés : le jour de repos (ou d'absence prévue) d'un titulaire, son remplaçant
+  // est placé dans son équipe. Seules les lignes non encore enregistrées sont préremplies.
+  const NOT_WORKING: AttendanceStatus[] = ["repos", "conge", "recuperation"];
+  for (const titular of rows) {
+    if (titular.id !== null || titular.shift !== 1 || !titular.substitute_id || !NOT_WORKING.includes(titular.status)) continue;
+    const sub = rows.find((r) => r.employee_id === titular.substitute_id && r.shift === 1);
+    if (!sub || sub.id !== null || sub.replacing_employee_id) continue; // remplaçant absent, déjà pointé ou déjà affecté
+    const subEmployee = byId.get(sub.employee_id);
+    sub.replacing_employee_id = titular.employee_id;
+    sub.chauffeur_id = titular.position === "chauffeur" ? titular.employee_id : titular.chauffeur_id;
+    sub.status = subEmployee?.rest_day === dow ? "repos_travaille" : "present";
   }
 
   rows.sort((a, b) => a.order_number - b.order_number || a.shift - b.shift);

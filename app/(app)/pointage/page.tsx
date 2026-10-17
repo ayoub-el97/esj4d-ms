@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Brush, Truck, UserPlus } from "lucide-react";
+import { Brush, CalendarClock, Truck, UserPlus } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getSheetCounts, getWorkDay } from "@/lib/data/attendance";
 import { isISODate, todayISO, formatDateLongFr } from "@/lib/dates";
@@ -33,6 +33,7 @@ export default async function PointagePage({ searchParams }: { searchParams: Pro
         <ActionTile href={`/pointage/nettoiement?date=${date}`} label={t("Feuille de présence des équipes de nettoiement")} description={status(counts.nettoiement)} icon={<Brush />} />
         <ActionTile href={`/pointage/collecte?date=${date}`} label={t("Feuille de présence des équipes de collecte")} description={status(counts.collecte)} icon={<Truck />} />
         {user.permissions.employes.can_edit && <ActionTile href="/employes/nouveau" label={t("Nouvel équipier")} description={t("Ajouter un employé")} icon={<UserPlus />} className="border-dashed" />}
+        <ActionTile href="/pointage/repos" label={t("Jours de repos et remplaçants")} description={t("Modifier le jour de repos et le remplaçant de chaque employé")} icon={<CalendarClock />} />
       </TileGrid>
 
       <ModuleButtons

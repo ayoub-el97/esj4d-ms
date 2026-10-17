@@ -20,13 +20,15 @@ export type Employee = {
   rest_day: number | null;
   truck_id: string | null;
   chauffeur_id: string | null;
+  /** Remplaçant attitré (chauffeur remplaçant ou rippeur remplaçant) */
+  substitute_id: string | null;
   hire_date: string | null;
   phone: string;
   is_active: boolean;
 };
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, hire_date, phone, is_active";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();
@@ -56,7 +58,7 @@ export async function getEmployee(id: string): Promise<Employee | null> {
 }
 
 export type EmployeeFilters = { equipe?: string; poste?: string; statut?: string; q?: string };
-export type EmployeeRow = Employee & { truck_label: string; chauffeur_label: string };
+export type EmployeeRow = Employee & { truck_label: string; chauffeur_label: string; substitute_label: string };
 
 /** Liste filtrée des employés avec libellés d'affectation (page Employés et Profil). */
 export async function getEmployeeRows(f: EmployeeFilters): Promise<{ rows: EmployeeRow[]; total: number; active: number }> {
@@ -73,6 +75,7 @@ export async function getEmployeeRows(f: EmployeeFilters): Promise<{ rows: Emplo
       ...e,
       truck_label: e.truck_id ? (trucksById.get(e.truck_id) ?? "") : "",
       chauffeur_label: e.chauffeur_id ? (namesById.get(e.chauffeur_id) ?? "") : "",
+      substitute_label: e.substitute_id ? (namesById.get(e.substitute_id) ?? "") : "",
     }));
   return { rows, total: employees.length, active: employees.filter((e) => e.is_active).length };
 }

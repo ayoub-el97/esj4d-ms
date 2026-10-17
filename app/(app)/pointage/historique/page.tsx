@@ -5,7 +5,7 @@ import { getAttendanceHistory } from "@/lib/data/attendance";
 import { getEmployees, employeeName } from "@/lib/data/employees";
 import { formatDateFr, formatDateTimeFr } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus, type Position, type TeamType } from "@/lib/types";
+import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITIONS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus, type Position, type TeamType } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { Button } from "@/components/ui/button";
@@ -61,9 +61,11 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
           <Label htmlFor="position">{t("Poste")}</Label>
           <NativeSelect id="position" name="position" defaultValue={sp.position ?? ""}>
             <option value="">{t("Tous")}</option>
-            <option value="chauffeur">{t("Chauffeur")}</option>
-            <option value="rippeur">{t("Rippeur")}</option>
-            <option value="balayeur">{t("Balayeur")}</option>
+            {POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {t(POSITION_LABELS[p])}
+              </option>
+            ))}
           </NativeSelect>
         </div>
         <div className="space-y-1">

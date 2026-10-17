@@ -6,10 +6,11 @@ import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
-import type { ActionResult } from "@/lib/types";
+import { POSITIONS, teamOfPosition, type ActionResult, type Position } from "@/lib/types";
 
 const optionalUuid = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().uuid().nullable());
 const optionalDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date().nullable());
+const restDaySchema = z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().int().min(0).max(6).nullable());
 
 const employeeSchema = z
   .object({
@@ -17,19 +18,23 @@ const employeeSchema = z
     matricule: z.string().trim().min(1, "Matricule requis."),
     last_name: z.string().trim().min(1, "Nom requis."),
     first_name: z.string().trim().min(1, "Prénom requis."),
-    position: z.enum(["chauffeur", "rippeur", "balayeur"]),
-    rest_day: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().int().min(0).max(6).nullable()),
+    position: z.enum(POSITIONS as [Position, ...Position[]]),
+    rest_day: restDaySchema,
     truck_id: optionalUuid,
     chauffeur_id: optionalUuid,
+    substitute_id: optionalUuid,
     hire_date: optionalDate,
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
   })
   .transform((d) => ({
     ...d,
-    team_type: d.position === "balayeur" ? ("nettoiement" as const) : ("collecte" as const),
+    team_type: teamOfPosition(d.position),
+    // Camion : chauffeur titulaire uniquement ; rattachement à une équipe : rippeur titulaire uniquement
     truck_id: d.position === "chauffeur" ? d.truck_id : null,
     chauffeur_id: d.position === "rippeur" ? d.chauffeur_id : null,
+    // Remplaçant attitré : pour les titulaires (chauffeur, rippeur) uniquement
+    substitute_id: d.position === "chauffeur" || d.position === "rippeur" ? d.substitute_id : null,
   }));
 
 const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
@@ -48,6 +53,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     rest_day: formData.get("rest_day"),
     truck_id: formData.get("truck_id"),
     chauffeur_id: formData.get("chauffeur_id"),
+    substitute_id: formData.get("substitute_id"),
     hire_date: formData.get("hire_date"),
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
@@ -61,6 +67,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
 
   revalidatePath("/employes");
   revalidatePath("/profil");
+  revalidatePath("/pointage");
   const returnTo = String(formData.get("return_to") ?? "");
   const base = RETURN_TARGETS.includes(returnTo) ? returnTo : "/employes";
   redirect(`${base}${base.includes("?") ? "&" : "?"}ok=${id ? "modifie" : "cree"}`);
@@ -76,6 +83,36 @@ export async function setEmployeeActive(id: string, isActive: boolean): Promise<
   revalidatePath("/employes");
   revalidatePath("/profil");
   return { ok: true, message: isActive ? t("Employé réactivé.") : t("Employé désactivé.") };
+}
+
+/** Modifie le jour de repos habituel d'un employé (historisé par la base avec l'utilisateur et la date). */
+export async function setRestDay(id: string, restDay: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const parsed = restDaySchema.safeParse(restDay);
+  if (!z.string().uuid().safeParse(id).success || !parsed.success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { error } = await supabase.from("employees").update({ rest_day: parsed.data }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+  revalidatePath("/pointage", "layout");
+  revalidatePath("/employes");
+  return { ok: true, message: t("Jour de repos modifié.") };
+}
+
+/** Affecte (ou retire) le remplaçant attitré d'un chauffeur ou d'un rippeur. */
+export async function setSubstitute(id: string, substituteId: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const parsed = optionalUuid.safeParse(substituteId);
+  if (!z.string().uuid().safeParse(id).success || !parsed.success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { error } = await supabase.from("employees").update({ substitute_id: parsed.data }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+  revalidatePath("/pointage", "layout");
+  revalidatePath("/employes");
+  return { ok: true, message: parsed.data ? t("Remplaçant affecté.") : t("Remplaçant retiré.") };
 }
 
 // ---------------------------------------------------------------------------
@@ -123,5 +160,7 @@ export async function setTruckActive(id: string, isActive: boolean): Promise<Act
 
 function friendlyDbError(message: string): string {
   if (message.includes("duplicate key") && message.includes("matricule")) return "Ce matricule existe déjà.";
+  if (message.includes("REMPLACANT_INVALIDE")) return "Le remplaçant d'un chauffeur doit être un chauffeur remplaçant, celui d'un rippeur un rippeur remplaçant.";
+  if (message.includes("employees_substitute_not_self")) return "Un employé ne peut pas être son propre remplaçant.";
   return friendlyError(message);
 }

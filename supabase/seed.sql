@@ -38,6 +38,17 @@ values
   ('R006', 'Ouazzani','Mehdi',   'rippeur', 'collecte', null, null, current_date - interval '1 month')
 on conflict (matricule) do nothing;
 
+-- Remplaçants (migration 008) : un chauffeur remplaçant et un rippeur remplaçant,
+-- attitrés aux titulaires pour leurs jours de repos
+insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date) values
+  ('CR01', 'Naciri', 'Hassan', 'chauffeur_remplacant', 'collecte', 3, current_date - interval '1 year'),
+  ('RR01', 'Kettani', 'Yassine', 'rippeur_remplacant', 'collecte', 3, current_date - interval '1 year')
+on conflict (matricule) do nothing;
+update public.employees set substitute_id = (select id from public.employees where matricule = 'CR01')
+ where position = 'chauffeur' and substitute_id is null;
+update public.employees set substitute_id = (select id from public.employees where matricule = 'RR01')
+ where position = 'rippeur' and substitute_id is null;
+
 -- Équipe de nettoiement : balayeurs
 insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date) values
   ('B001', 'El Amrani', 'Fatima',  'balayeur', 'nettoiement', 0, current_date - interval '3 years'),

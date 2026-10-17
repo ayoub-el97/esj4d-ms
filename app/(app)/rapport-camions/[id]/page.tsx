@@ -5,6 +5,7 @@ import { getWorkDay } from "@/lib/data/attendance";
 import { getEmployees, getTrucks } from "@/lib/data/employees";
 import type { TruckDailyReport } from "@/lib/data/reports";
 import { formatDateLongFr } from "@/lib/dates";
+import { DRIVER_POSITIONS } from "@/lib/types";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { DayStatusBadge } from "@/components/day-status-badge";
@@ -26,7 +27,7 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
       <ModuleHeader title={t("Ligne camion")} subtitle={formatDateLongFr(report.activity_date, locale)} backHref="/rapport-camions">
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
-      <TruckReportForm report={report} defaultDate={report.activity_date} trucks={trucks} chauffeurs={collecte.filter((e) => e.position === "chauffeur")} canEdit={canEdit} />
+      <TruckReportForm report={report} defaultDate={report.activity_date} trucks={trucks} chauffeurs={collecte.filter((e) => DRIVER_POSITIONS.includes(e.position))} canEdit={canEdit} />
     </div>
   );
 }

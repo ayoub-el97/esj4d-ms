@@ -5,7 +5,7 @@ import { getEmployees, employeeName } from "@/lib/data/employees";
 import { getWorkersPeriodReport } from "@/lib/data/worker";
 import { currentMonth, formatDateFr, isISODate, isMonth, monthRange } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
+import { POSITIONS, POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
@@ -71,9 +71,11 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
           <Label htmlFor="poste">{t("Poste")}</Label>
           <NativeSelect id="poste" name="poste" defaultValue={sp.poste ?? ""}>
             <option value="">{t("Tous")}</option>
-            <option value="chauffeur">{t("Chauffeur")}</option>
-            <option value="rippeur">{t("Rippeur")}</option>
-            <option value="balayeur">{t("Balayeur")}</option>
+            {POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {t(POSITION_LABELS[p])}
+              </option>
+            ))}
           </NativeSelect>
         </div>
         <div className="space-y-1">

@@ -16,7 +16,7 @@ export default async function NouvelEquipierPage({ searchParams }: { searchParam
   return (
     <div>
       <ModuleHeader title={t("Nouvel équipier")} backHref={returnTo} />
-      <EmployeeForm employee={null} trucks={trucks} chauffeurs={collecte.filter((e) => e.position === "chauffeur")} returnTo={returnTo} />
+      <EmployeeForm employee={null} trucks={trucks} collecte={collecte} returnTo={returnTo} />
     </div>
   );
 }

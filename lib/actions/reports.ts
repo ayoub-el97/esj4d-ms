@@ -107,19 +107,24 @@ export async function createCollectionReport(date: string, truckId: string): Pro
   if (!dateSchema.safeParse(date).success || !uuid.safeParse(truckId).success) return { ok: false, error: t("Paramètres invalides.") };
 
   const supabase = await createClient();
-  const { data: chauffeur } = await supabase.from("employees").select("id").eq("truck_id", truckId).eq("position", "chauffeur").eq("is_active", true).limit(1).maybeSingle();
+  const { data: titular } = await supabase.from("employees").select("id").eq("truck_id", truckId).eq("position", "chauffeur").eq("is_active", true).limit(1).maybeSingle();
 
+  // Équipe du jour d'après le pointage : si le chauffeur titulaire est remplacé, le remplaçant conduit
+  let chauffeur = titular;
   let ripperIds: string[] = [];
-  if (chauffeur) {
+  if (titular) {
     const { data: att } = await supabase
       .from("attendance")
-      .select("employee_id")
+      .select("employee_id, position, status, replacing_employee_id")
       .eq("activity_date", date)
-      .eq("chauffeur_id", chauffeur.id)
-      .eq("status", "present");
-    ripperIds = Array.from(new Set((att ?? []).map((a) => a.employee_id)));
-    if (!ripperIds.length) {
-      const { data: emps } = await supabase.from("employees").select("id").eq("chauffeur_id", chauffeur.id).eq("is_active", true);
+      .eq("chauffeur_id", titular.id)
+      .in("status", ["present", "repos_travaille"]);
+    const rows = att ?? [];
+    const driverSub = rows.find((a) => a.position === "chauffeur_remplacant" && a.replacing_employee_id === titular.id);
+    if (driverSub) chauffeur = { id: driverSub.employee_id };
+    ripperIds = Array.from(new Set(rows.filter((a) => a.position !== "chauffeur" && a.position !== "chauffeur_remplacant").map((a) => a.employee_id)));
+    if (!rows.length) {
+      const { data: emps } = await supabase.from("employees").select("id").eq("chauffeur_id", titular.id).eq("is_active", true);
       ripperIds = (emps ?? []).map((e) => e.id);
     }
   }
@@ -136,7 +141,7 @@ export async function createCollectionReport(date: string, truckId: string): Pro
   }
   await supabase
     .from("truck_daily_reports")
-    .upsert({ activity_date: date, truck_id: truckId, chauffeur_id: chauffeur?.id ?? null, rippers_count: ripperIds.length }, { onConflict: t("activity_date,truck_id") });
+    .upsert({ activity_date: date, truck_id: truckId, chauffeur_id: chauffeur?.id ?? null, rippers_count: ripperIds.length }, { onConflict: "activity_date,truck_id" });
 
   revalidatePath("/rapport-journalier/collecte");
   revalidatePath("/rapport-camions");
@@ -212,7 +217,7 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
       fuel: d.fuel,
       observations: d.observations,
     },
-    { onConflict: t("activity_date,truck_id") },
+    { onConflict: "activity_date,truck_id" },
   );
   if (e3) return { ok: false, error: t(friendlyError(e3.message)) };
 
@@ -265,7 +270,7 @@ export async function saveTruckReport(_prev: ActionResult | null, formData: Form
   const supabase = await createClient();
   const { error } = id
     ? await supabase.from("truck_daily_reports").update(values).eq("id", id)
-    : await supabase.from("truck_daily_reports").upsert(values, { onConflict: t("activity_date,truck_id") });
+    : await supabase.from("truck_daily_reports").upsert(values, { onConflict: "activity_date,truck_id" });
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/rapport-camions");
   revalidatePath("/rapport-journalier/global");

@@ -68,12 +68,22 @@ export const TEAM_LABELS: Record<TeamType, string> = {
 };
 export const TEAM_SLUGS: Record<string, TeamType> = { collecte: "collecte", nettoiement: "nettoiement" };
 
-export type Position = "chauffeur" | "rippeur" | "balayeur";
+export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant";
+/** Ordre d'affichage des postes */
 export const POSITION_LABELS: Record<Position, string> = {
-  chauffeur: "Chauffeur",
-  rippeur: "Rippeur",
   balayeur: "Balayeur",
+  rippeur: "Rippeur",
+  chauffeur: "Chauffeur",
+  chauffeur_remplacant: "Chauffeur remplaçant",
+  rippeur_remplacant: "Rippeur remplaçant",
 };
+export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];
+/** Postes de conduite (titulaire ou remplaçant) : peuvent conduire un camion */
+export const DRIVER_POSITIONS: Position[] = ["chauffeur", "chauffeur_remplacant"];
+/** Remplaçant attendu pour un titulaire */
+export const SUBSTITUTE_POSITION: Partial<Record<Position, Position>> = { chauffeur: "chauffeur_remplacant", rippeur: "rippeur_remplacant" };
+export const isSubstitutePosition = (p: Position) => p === "chauffeur_remplacant" || p === "rippeur_remplacant";
+export const teamOfPosition = (p: Position): TeamType => (p === "balayeur" ? "nettoiement" : "collecte");
 
 export type AttendanceStatus = "present" | "repos_travaille" | "absent" | "absent_maladie" | "conge" | "recuperation" | "repos" | "ferie";
 /** Ordre d'affichage des statuts dans la feuille de présence */

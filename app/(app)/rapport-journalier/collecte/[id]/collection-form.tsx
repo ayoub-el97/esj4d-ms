@@ -7,7 +7,7 @@ import { deleteCollectionReport, saveCollectionReport } from "@/lib/actions/repo
 import type { Employee } from "@/lib/data/employees";
 import type { CollectionReportFull } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
-import { POSITION_LABELS } from "@/lib/types";
+import { DRIVER_POSITIONS, POSITION_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,8 @@ export function CollectionForm({ report, employees, canEdit }: { report: Collect
   const { t } = useT();
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
-  const chauffeurs = employees.filter((e) => e.position === "chauffeur");
-  const crew = employees.filter((e) => e.position !== "chauffeur" || e.id !== report.chauffeur_id);
+  const chauffeurs = employees.filter((e) => DRIVER_POSITIONS.includes(e.position));
+  const crew = employees.filter((e) => !DRIVER_POSITIONS.includes(e.position));
   const selected = new Set(report.rippers.map((r) => r.id));
   const tr = report.truckReport;
 

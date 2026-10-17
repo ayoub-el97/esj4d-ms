@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
-import { POSITION_LABELS, WEEKDAY_LABELS, type Position } from "@/lib/types";
+import { POSITIONS, POSITION_LABELS, SUBSTITUTE_POSITION, WEEKDAY_LABELS, teamOfPosition, type Position } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,18 +15,25 @@ import { LinkButton } from "@/components/link-button";
 export function EmployeeForm({
   employee,
   trucks,
-  chauffeurs,
+  collecte,
   returnTo = "/employes",
 }: {
   employee: Employee | null;
   trucks: Truck[];
-  chauffeurs: Employee[];
+  /** Employés actifs de la collecte (chauffeurs, rippeurs, remplaçants) */
+  collecte: Employee[];
   /** Page de retour après enregistrement (/employes ou /profil?onglet=employes) */
   returnTo?: string;
 }) {
   const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
+
+  const others = collecte.filter((e) => e.id !== employee?.id);
+  const chauffeurs = others.filter((e) => e.position === "chauffeur");
+  const substitutePosition = SUBSTITUTE_POSITION[position];
+  const substitutes = substitutePosition ? others.filter((e) => e.position === substitutePosition) : [];
+  const dayName = (d: number | null) => (d == null ? t("— Non défini —") : t(WEEKDAY_LABELS[d]));
 
   return (
     <form action={action}>
@@ -58,14 +65,14 @@ export function EmployeeForm({
             <div className="space-y-1">
               <Label htmlFor="position">{t("Poste")}</Label>
               <NativeSelect id="position" name="position" value={position} onChange={(e) => setPosition(e.target.value as Position)}>
-                {(Object.keys(POSITION_LABELS) as Position[]).map((p) => (
+                {POSITIONS.map((p) => (
                   <option key={p} value={p}>
                     {t(POSITION_LABELS[p])}
                   </option>
                 ))}
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
-                {t("Équipe : {team} (déduite du poste)", { team: position === "balayeur" ? t("Nettoiement") : t("Collecte") })}
+                {t("Équipe : {team} (déduite du poste)", { team: teamOfPosition(position) === "nettoiement" ? t("Nettoiement") : t("Collecte") })}
               </p>
             </div>
             {position === "chauffeur" && (
@@ -92,6 +99,24 @@ export function EmployeeForm({
                     </option>
                   ))}
                 </NativeSelect>
+              </div>
+            )}
+            {substitutePosition && (
+              <div className="space-y-1">
+                <Label htmlFor="substitute_id">{t("Remplaçant attitré (jours de repos)")}</Label>
+                <NativeSelect id="substitute_id" name="substitute_id" defaultValue={employee?.substitute_id ?? ""}>
+                  <option value="">{t("— Aucun —")}</option>
+                  {substitutes.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.last_name} {s.first_name} ({t("repos")} : {dayName(s.rest_day)})
+                    </option>
+                  ))}
+                </NativeSelect>
+                <p className="text-xs text-muted-foreground">
+                  {substitutes.length === 0
+                    ? t("Aucun {poste} : créez-en un avec le poste correspondant.", { poste: t(POSITION_LABELS[substitutePosition]).toLowerCase() })
+                    : t("Il est proposé automatiquement sur la feuille de présence les jours de repos de cet employé.")}
+                </p>
               </div>
             )}
             <div className="space-y-1">

@@ -25,6 +25,8 @@ export type SheetRow = {
   entered_at: string | null;
   /** Congé ou récupération accepté pour cette date */
   planned: "conge" | "recuperation" | null;
+  /** Remplaçant attitré du titulaire (jours de repos) */
+  substitute_id: string | null;
 };
 
 export type SheetPayload = {
@@ -43,4 +45,5 @@ export type EmployeeOption = {
   team_type: TeamType;
   rest_day: number | null;
   chauffeur_id: string | null;
+  substitute_id: string | null;
 };

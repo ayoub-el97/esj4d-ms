@@ -211,6 +211,40 @@ do $$ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 12. Remplaçants attitrés (migration 008)
+-- ---------------------------------------------------------------------------
+do $$
+declare ch uuid; rp uuid; cr uuid; rr uuid;
+begin
+  select id into ch from public.employees where matricule = 'C001';
+  select id into rp from public.employees where matricule = 'R001';
+  select id into cr from public.employees where matricule = 'CR01';
+  select id into rr from public.employees where matricule = 'RR01';
+  assert cr is not null and rr is not null, 'remplaçants de démonstration absents';
+  assert (select team_type from public.employees where id = cr) = 'collecte', 'un remplaçant appartient à la collecte';
+  assert (select substitute_id from public.employees where id = ch) = cr, 'chauffeur : remplaçant attitré non enregistré';
+  assert (select substitute_id from public.employees where id = rp) = rr, 'rippeur : remplaçant attitré non enregistré';
+  -- un rippeur remplaçant ne peut pas remplacer un chauffeur
+  begin
+    update public.employees set substitute_id = rr where id = ch;
+    raise exception 'ÉCHEC : rippeur remplaçant accepté pour un chauffeur';
+  exception when others then
+    if sqlerrm not like '%REMPLACANT_INVALIDE%' then raise; end if;
+  end;
+  -- un remplaçant n'a pas lui-même de remplaçant attitré
+  update public.employees set substitute_id = cr where id = cr;
+  assert (select substitute_id from public.employees where id = cr) is null, 'un remplaçant ne doit pas avoir de remplaçant';
+  -- jour de repos modifiable pour un remplaçant aussi, et historisé
+  update public.employees set rest_day = 4 where id = rr;
+  assert (select new_rest_day from public.employee_rest_day_history where employee_id = rr order by id desc limit 1) = 4, 'repos du remplaçant non historisé';
+  -- pointage d'un remplaçant qui couvre un titulaire
+  insert into public.attendance (activity_date, employee_id, status, position, team_type, replacing_employee_id, chauffeur_id)
+  values ('2026-10-20', cr, 'present', 'chauffeur_remplacant', 'collecte', ch, ch);
+  assert (select worked_days from public.attendance_summary('2026-10-01', '2026-10-31') where employee_id = cr) = 1, 'jour du remplaçant non compté';
+  raise notice 'OK 12 remplaçants : postes, contrôle du type, jour de repos et pointage';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);

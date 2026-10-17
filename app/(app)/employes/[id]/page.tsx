@@ -25,7 +25,7 @@ export default async function EmployePage({ params, searchParams }: { params: Pr
   return (
     <div className="space-y-6">
       <ModuleHeader title={t("Fiche employé")} subtitle={t("NB {nb} · {matricule}", { nb: employee.order_number, matricule: employee.matricule })} backHref={returnTo} />
-      <EmployeeForm employee={employee} trucks={trucks} chauffeurs={collecte.filter((e) => e.position === "chauffeur" && e.id !== employee.id)} returnTo={returnTo} />
+      <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} />
 
       <Card>
         <CardHeader>

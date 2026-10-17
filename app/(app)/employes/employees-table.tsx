@@ -8,7 +8,7 @@ import { Pencil, Search, UserCheck, UserX } from "lucide-react";
 import { setEmployeeActive } from "@/lib/actions/employees";
 import type { EmployeeRow } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
-import { POSITION_LABELS, TEAM_LABELS, WEEKDAY_LABELS } from "@/lib/types";
+import { POSITIONS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_LABELS } from "@/lib/types";
 import { formatDateFr } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,9 +58,11 @@ export function EmployeesTable({
         </NativeSelect>
         <NativeSelect className="w-auto" value={filters.poste ?? ""} onChange={(e) => setFilter("poste", e.target.value)}>
           <option value="">{t("Tous les postes")}</option>
-          <option value="chauffeur">{t("Chauffeur")}</option>
-          <option value="rippeur">{t("Rippeur")}</option>
-          <option value="balayeur">{t("Balayeur")}</option>
+          {POSITIONS.map((p) => (
+            <option key={p} value={p}>
+              {t(POSITION_LABELS[p])}
+            </option>
+          ))}
         </NativeSelect>
         <NativeSelect className="w-auto" value={filters.statut ?? ""} onChange={(e) => setFilter("statut", e.target.value)}>
           <option value="">{t("Actifs")}</option>
@@ -107,7 +109,8 @@ export function EmployeesTable({
                 <TableCell className="text-muted-foreground">
                   {e.position === "chauffeur" && (e.truck_label ? t("Camion {matricule}", { matricule: e.truck_label }) : "—")}
                   {e.position === "rippeur" && (e.chauffeur_label ? t("Équipe {name}", { name: e.chauffeur_label }) : "—")}
-                  {e.position === "balayeur" && "—"}
+                  {(e.position === "balayeur" || e.position === "chauffeur_remplacant" || e.position === "rippeur_remplacant") && "—"}
+                  {e.substitute_label && <div className="text-xs">{t("Remplaçant : {name}", { name: e.substitute_label })}</div>}
                 </TableCell>
                 <TableCell>{e.rest_day == null ? "—" : t(WEEKDAY_LABELS[e.rest_day])}</TableCell>
                 <TableCell>{e.hire_date ? formatDateFr(e.hire_date) : "—"}</TableCell>

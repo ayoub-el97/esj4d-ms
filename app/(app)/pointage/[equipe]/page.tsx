@@ -12,6 +12,8 @@ import { DateField } from "@/components/date-field";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LinkButton } from "@/components/link-button";
+import { CalendarClock } from "lucide-react";
 import { SheetForm } from "./sheet-form";
 
 export const generateMetadata = pageTitle("Feuille de présence");
@@ -35,6 +37,9 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
           <DateField value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
+        <LinkButton href="/pointage/repos" variant="outline" size="sm" className="ms-auto">
+          <CalendarClock /> {t("Jours de repos et remplaçants")}
+        </LinkButton>
       </ModuleHeader>
 
       {closed && (
