@@ -176,15 +176,20 @@ const loadsSchema = z.preprocess(
 
 const collectionSchema = z.object({
   id: uuid,
+  truck_id: uuid,
   chauffeur_id: optionalUuid,
   sectors: z.string().max(1000).default(""),
   observations: z.string().max(2000).default(""),
   rippers: z.array(uuid),
-  loads: loadsSchema,
-  km_start: optionalNumber,
-  km_end: optionalNumber,
-}).refine((d) => d.km_start == null || d.km_end == null || d.km_end >= d.km_start, { message: "Le km de fin doit être supérieur ou égal au km de départ.", path: ["km_end"] });
+});
 
+/**
+ * Enregistre le rapport de collecte. Il reste modifiable toute la journée (photos AVANT vers 6 h,
+ * APRÈS vers 10 h, corrections) jusqu'à la clôture manuelle de la journée.
+ * Camion, chauffeur et équipe corrigés ici : le rapport est marqué « corrigé à la main » et la
+ * mise à jour depuis le pointage ne les écrase plus. Les données camion (tickets, tonnage, km)
+ * se saisissent dans le module Rapport camions.
+ */
 export async function saveCollectionReport(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
   const auth = await assertModule("rapport_journalier", "edit");
@@ -192,55 +197,66 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
 
   const parsed = collectionSchema.safeParse({
     id: formData.get("id"),
+    truck_id: formData.get("truck_id"),
     chauffeur_id: formData.get("chauffeur_id"),
     sectors: formData.get("sectors") ?? "",
     observations: formData.get("observations") ?? "",
     rippers: formData.getAll("rippers"),
-    loads: formData.get("loads") ?? "",
-    km_start: formData.get("km_start"),
-    km_end: formData.get("km_end"),
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const d = parsed.data;
 
   const supabase = await createClient();
-  const { data: existing } = await supabase.from("collection_reports").select("activity_date, truck_id").eq("id", d.id).maybeSingle();
+  const { data: existing } = await supabase.from("collection_reports").select("activity_date, truck_id, chauffeur_id, manual_team").eq("id", d.id).maybeSingle();
   if (!existing) return { ok: false, error: t("Rapport introuvable.") };
+  const { data: oldCrew } = await supabase.from("collection_report_rippers").select("employee_id").eq("report_id", d.id);
+  const sameCrew = new Set((oldCrew ?? []).map((x) => x.employee_id)).size === new Set(d.rippers).size && d.rippers.every((id) => (oldCrew ?? []).some((x) => x.employee_id === id));
+  const teamChanged = existing.truck_id !== d.truck_id || (existing.chauffeur_id ?? null) !== d.chauffeur_id || !sameCrew;
 
   const { error } = await supabase
     .from("collection_reports")
-    .update({ chauffeur_id: d.chauffeur_id, sectors: d.sectors, observations: d.observations })
+    .update({ truck_id: d.truck_id, chauffeur_id: d.chauffeur_id, sectors: d.sectors, observations: d.observations, manual_team: existing.manual_team || teamChanged })
     .eq("id", d.id);
-  if (error) return { ok: false, error: t(friendlyError(error.message)) };
-
-  await supabase.from("collection_report_rippers").delete().eq("report_id", d.id);
-  if (d.rippers.length) {
-    const { error: e2 } = await supabase.from("collection_report_rippers").insert(d.rippers.map((employee_id) => ({ report_id: d.id, employee_id })));
-    if (e2) return { ok: false, error: t(friendlyError(e2.message)) };
+  if (error) {
+    if (error.message.includes("duplicate key")) return { ok: false, error: t("Un autre rapport de collecte existe déjà pour ce camion à cette date.") };
+    return { ok: false, error: t(friendlyError(error.message)) };
   }
 
-  // Rapport camions alimenté automatiquement (pas de double saisie) : ligne Matin n° 1 du camion
-  const { error: e3 } = await supabase.from("truck_daily_reports").upsert(
-    {
-      activity_date: existing.activity_date,
-      truck_id: existing.truck_id,
-      shift: "matin",
-      line_no: 1,
-      chauffeur_id: d.chauffeur_id,
-      loads: d.loads,
-      rippers_count: d.rippers.length,
-      km_start: d.km_start,
-      km_end: d.km_end,
-      km: null,
-      observations: d.observations,
-    },
-    { onConflict: "activity_date,truck_id,shift,line_no" },
-  );
-  if (e3) return { ok: false, error: t(friendlyError(e3.message)) };
+  if (!sameCrew) {
+    await supabase.from("collection_report_rippers").delete().eq("report_id", d.id);
+    if (d.rippers.length) {
+      const { error: e2 } = await supabase.from("collection_report_rippers").insert(Array.from(new Set(d.rippers)).map((employee_id) => ({ report_id: d.id, employee_id })));
+      if (e2) return { ok: false, error: t(friendlyError(e2.message)) };
+    }
+  }
 
-  revalidatePath("/rapport-journalier");
+  // Lien avec le rapport camions (ligne Matin n° 1) : chauffeur et nombre de rippeurs seulement
+  await supabase
+    .from("truck_daily_reports")
+    .upsert({ activity_date: existing.activity_date, truck_id: d.truck_id, shift: "matin", line_no: 1, chauffeur_id: d.chauffeur_id, rippers_count: new Set(d.rippers).size }, { onConflict: "activity_date,truck_id,shift,line_no" });
+
+  revalidatePath("/rapport-journalier", "layout");
   revalidatePath("/rapport-camions");
-  return { ok: true, message: t("Rapport de collecte enregistré (rapport camions mis à jour).") };
+  return { ok: true, message: t("Rapport enregistré. Vous pouvez y revenir et le compléter jusqu'à la clôture de la journée.") };
+}
+
+/** Annule les corrections manuelles : camion, chauffeur et équipe reviennent à ceux du pointage. */
+export async function resetCollectionToAttendance(id: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("rapport_journalier", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const supabase = await createClient();
+  const { data: r } = await supabase.from("collection_reports").select("activity_date").eq("id", id).maybeSingle();
+  if (!r) return { ok: false, error: t("Rapport introuvable.") };
+  const { error } = await supabase.from("collection_reports").update({ manual_team: false }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  try {
+    await syncCollectionReports(supabase, r.activity_date);
+  } catch (e) {
+    return { ok: false, error: t(friendlyError((e as Error).message)) };
+  }
+  revalidatePath("/rapport-journalier", "layout");
+  return { ok: true, message: t("Équipe reprise du pointage.") };
 }
 
 export async function deleteCollectionReport(id: string): Promise<ActionResult> {

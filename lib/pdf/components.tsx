@@ -91,22 +91,33 @@ export function PdfFooter({ company, generatedBy }: { company: string; generated
   );
 }
 
-/** Grille de photos (titre = clé de traduction). */
-export function PhotoGrid({ title, photos }: { title: string; photos: PhotoItem[] }) {
+/**
+ * Grille de photos (titre = clé de traduction). Images entières (proportions conservées, jamais
+ * coupées entre deux pages), deux par ligne ; les photos non chargées sont signalées.
+ */
+export function PhotoGrid({ title, photos }: { title: string; photos: (PhotoItem & { failed?: boolean })[] }) {
   const { t } = usePdf();
+  const ok = photos.filter((p) => p.url && !p.failed);
+  const failed = photos.length - ok.length;
   return (
     <View style={{ marginTop: 8 }}>
-      <Text style={styles.section}>{t(title)}</Text>
+      <Text style={styles.section} minPresenceAhead={120}>
+        {t(title)} ({photos.length})
+      </Text>
       {photos.length === 0 ? (
         <Text style={styles.small}>{t("Aucune photo")}</Text>
       ) : (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          {photos.map((p) => (
-            // eslint-disable-next-line jsx-a11y/alt-text
-            <Image key={p.id} src={p.url} style={{ width: 160, height: 120, objectFit: "cover", borderWidth: 1, borderColor: "#999" }} />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {ok.map((p) => (
+            <View key={p.id} wrap={false} style={{ width: 252, height: 196, borderWidth: 1, borderColor: "#bbb", padding: 2, alignItems: "center", justifyContent: "center" }}>
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
+              <Image src={p.url} style={{ maxWidth: 246, maxHeight: 176, objectFit: "contain" }} />
+              <Text style={{ fontSize: 6.5, color: "#555", marginTop: 1 }}>{new Date(p.created_at).toLocaleString("fr-FR", { timeZone: "Africa/Casablanca", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</Text>
+            </View>
           ))}
         </View>
       )}
+      {failed > 0 && <Text style={[styles.small, { color: "#b45309", marginTop: 3 }]}>{t("{count} photo(s) n'ont pas pu être incluses (image indisponible ou format non lisible) ; elles restent consultables dans l'application.", { count: failed })}</Text>}
     </View>
   );
 }

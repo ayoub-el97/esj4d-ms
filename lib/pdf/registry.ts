@@ -18,6 +18,7 @@ import { makeT, type TFunction } from "@/lib/i18n/config";
 import { getLocale, getMessages, pdfLocale } from "@/lib/i18n/server";
 import { TEAM_LABELS, TEAM_SLUGS, type AppModule } from "@/lib/types";
 import { runWithPdfContext, type PdfContextValue } from "./context";
+import { embedPhotos } from "./embed-photos";
 import { AttendanceSheetPdf, MonthlyAttendancePdf } from "./attendance-sheet";
 import { CleaningReportPdf, CollectionReportPdf, GlobalDailyPdf, TruckMonthlyPdf, TruckReportsPdf } from "./reports";
 import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
@@ -256,6 +257,8 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
 
 /** Rend le document avec le contexte PDF (traduction + logo). */
 export async function renderPdf(built: BuiltPdf): Promise<Buffer> {
+  // Photos intégrées au document (téléchargées depuis le stockage privé avant le rendu)
+  const { element } = await embedPhotos(built.element);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return runWithPdfContext(built.context, () => renderToBuffer(built.element as any));
+  return runWithPdfContext(built.context, () => renderToBuffer(element as any));
 }

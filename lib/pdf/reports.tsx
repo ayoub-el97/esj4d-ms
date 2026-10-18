@@ -4,6 +4,7 @@ import { employeeName } from "@/lib/data/employees";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { PdfDocument, PdfFooter, PdfHeader, PdfTable, PhotoGrid, styles, type Column } from "./components";
 import { usePdf } from "./context";
+import { COLLECTION_STATUS_LABELS } from "@/lib/collection-status";
 
 /** Rapport nettoiement : une page par agent (date, nom, lieu, photos AVANT / APRÈS). */
 export function CleaningReportPdf({ company, date, agents, observations, generatedBy }: { company: string; date: string; agents: CleaningAgent[]; observations: string; generatedBy: string }) {
@@ -84,25 +85,22 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
             </View>
           </View>
           <Text style={{ marginBottom: 3 }}>
-            {t("Rippeurs")} : {r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}
+            {t("Statut")} : {t(COLLECTION_STATUS_LABELS[r.status])}
+            {r.missing.length && !r.day_closed ? ` — ${t("à compléter : {items}", { items: r.missing.map((m) => t(m)).join(", ") })}` : ""}
+          </Text>
+          <Text style={{ marginBottom: 3 }}>
+            {t("Équipe")} : {r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}
           </Text>
           <Text style={{ marginBottom: 3 }}>
             {t("Lieux / secteurs")} : {r.sectors || "—"}
           </Text>
-          {r.truckReport && (
-            <Text style={{ marginBottom: 3 }}>
-              {t("Vidages (matin)")} : {r.truckReport.loads?.length ? r.truckReport.loads.map((l, i) => `${i + 1}. ${l.ticket || "—"} — ${l.tonnage ?? "—"} t`).join(" · ") : "—"} · {t("Tonnage total")} : {Number(r.truckReport.tonnage_total ?? 0).toFixed(2)} t · {t("Vidages")} : {r.truckReport.dumps_count}
-              {r.truckReport.km != null ? ` · ${t("Km")} : ${r.truckReport.km}` : ""}
-              {r.truckReport.fuel != null ? ` · ${t("Carburant")} : ${r.truckReport.fuel} L` : ""}
-            </Text>
-          )}
           {r.observations ? (
             <Text style={{ marginBottom: 3 }}>
               {t("Observations")} : {r.observations}
             </Text>
           ) : null}
-          <PhotoGrid title="Photos AVANT" photos={r.photosAvant} />
-          <PhotoGrid title="Photos APRÈS" photos={r.photosApres} />
+          <PhotoGrid title="Photos Avant" photos={r.photosAvant} />
+          <PhotoGrid title="Photos Après" photos={r.photosApres} />
           <PdfFooter company={company} generatedBy={generatedBy} />
         </Page>
       ))}
@@ -221,6 +219,11 @@ export function TruckReportsPdf({ company, subtitle, rows, generatedBy }: { comp
     <PdfDocument title={`${t("Rapport camions")} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
       <PdfHeader company={company} title={t("Rapport camions")} subtitle={subtitle} />
       <PdfTable columns={columns} rows={truckPdfRows(rows, t, true)} />
+      {rows
+        .filter((r) => r.photos.length)
+        .map((r) => (
+          <PhotoGrid key={r.id} title={`${t("Photos")} — ${r.truck?.matricule ?? ""} — ${formatDateFr(r.activity_date)} — ${r.shift === "soir" ? t("Soir") : t("Matin")}`} photos={r.photos} />
+        ))}
     </PdfDocument>
   );
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { PHOTO_BUCKET, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
+import { PHOTO_BUCKET, PHOTO_URL_TTL, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
 
 type PhotoRow = { id: string; storage_path: string; entity_id: string; phase: PhotoPhase; caption: string; created_at: string };
 
@@ -29,7 +29,7 @@ export async function getPhotosFor(entityType: PhotoEntityType, entityIds: strin
   return result;
 }
 
-export async function signPaths(paths: string[], expiresIn = 3600): Promise<Map<string, string>> {
+export async function signPaths(paths: string[], expiresIn = PHOTO_URL_TTL): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (paths.length === 0) return map;
   const supabase = await createClient();

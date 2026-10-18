@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
-import { PHOTO_BUCKET, type PhotoEntityType, type PhotoItem } from "@/lib/photo-types";
+import { PHOTO_BUCKET, PHOTO_URL_TTL, type PhotoEntityType, type PhotoItem } from "@/lib/photo-types";
 import type { ActionResult, AppModule } from "@/lib/types";
 
 const ENTITY_MODULE: Record<PhotoEntityType, AppModule> = {
@@ -50,8 +50,23 @@ export async function registerPhoto(input: RegisterPhotoInput): Promise<ActionRe
     await supabase.storage.from(PHOTO_BUCKET).remove([d.storage_path]);
     return { ok: false, error: t(friendlyError(error.message)) };
   }
-  const { data: signed } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(d.storage_path, 3600);
+  const { data: signed } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(d.storage_path, PHOTO_URL_TTL);
   return { ok: true, data: { ...data, url: signed?.signedUrl ?? "" } };
+}
+
+/**
+ * Nouveaux liens signés pour des photos déjà affichées (lien expiré, page restée ouverte).
+ * Seules les photos que l'utilisateur a le droit de voir sont renvoyées (sécurité de la base).
+ */
+export async function refreshPhotoUrls(ids: string[]): Promise<Record<string, string>> {
+  const parsed = z.array(z.string().uuid()).max(200).safeParse(ids);
+  if (!parsed.success || parsed.data.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase.from("photos").select("id, storage_path").in("id", parsed.data);
+  if (!data?.length) return {};
+  const { data: signed } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(data.map((p) => p.storage_path), PHOTO_URL_TTL);
+  const byPath = new Map((signed ?? []).filter((s) => s.path && s.signedUrl).map((s) => [s.path!, s.signedUrl]));
+  return Object.fromEntries(data.map((p) => [p.id, byPath.get(p.storage_path) ?? ""]).filter(([, u]) => u));
 }
 
 export async function deletePhoto(id: string): Promise<ActionResult> {

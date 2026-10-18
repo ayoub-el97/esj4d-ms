@@ -104,7 +104,12 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
     teams.set(truckId, { truckId, chauffeurId: driver.employee_id, crew });
   }
 
+  // Rapports corrigés à la main dans le rapport (camion, chauffeur ou équipe) : jamais écrasés
+  const { data: manualRows } = await supabase.from("collection_reports").select("id, truck_id, chauffeur_id").eq("activity_date", date).eq("manual_team", true);
+  const manual = manualRows ?? [];
+
   for (const team of teams.values()) {
+    if (manual.some((m) => m.truck_id === team.truckId || m.chauffeur_id === team.chauffeurId)) continue;
     const { data: report, error: e1 } = await supabase
       .from("collection_reports")
       .upsert({ activity_date: date, truck_id: team.truckId, chauffeur_id: team.chauffeurId }, { onConflict: "activity_date,truck_id" })
@@ -123,8 +128,8 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
   }
 
   // Rapports du jour dont le camion n'est plus utilisé (camion échangé) : retirés s'ils sont vides
-  const { data: existing } = await supabase.from("collection_reports").select("id, truck_id, sectors, observations").eq("activity_date", date);
-  const orphans = (existing ?? []).filter((r) => !teams.has(r.truck_id));
+  const { data: existing } = await supabase.from("collection_reports").select("id, truck_id, sectors, observations, manual_team").eq("activity_date", date);
+  const orphans = (existing ?? []).filter((r) => !teams.has(r.truck_id) && !r.manual_team);
   const photos = await photoCounts(supabase, "collection_report", orphans.map((r) => r.id));
   for (const r of orphans) {
     if (r.sectors || r.observations || photos.get(r.id)) {

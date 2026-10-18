@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, getTrucks, type Employee, type Truck } from "@/lib/data/employees";
 import { getPhotosFor } from "@/lib/data/photos";
 import type { PhotoItem } from "@/lib/photo-types";
+import { collectionMissing, collectionStatus, type CollectionStatus } from "@/lib/collection-status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +32,9 @@ export type CollectionReport = {
   chauffeur_id: string | null;
   sectors: string;
   observations: string;
+  /** Camion, chauffeur ou équipe corrigés dans le rapport : la mise à jour depuis le pointage ne les écrase plus */
+  manual_team: boolean;
+  created_at: string;
   updated_at: string;
 };
 
@@ -114,15 +118,25 @@ export async function getCleaningReport(date: string): Promise<{ report: Cleanin
   };
 }
 
-export async function getCleaningReportDates(limit = 60): Promise<{ activity_date: string; agents: number }[]> {
+export async function getCleaningReportDates(limit = 60): Promise<{ activity_date: string; agents: number; photos_avant: number; photos_apres: number }[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("cleaning_reports").select("id, activity_date").order("activity_date", { ascending: false }).limit(limit);
   const reports = data ?? [];
   if (!reports.length) return [];
-  const { data: agents } = await supabase.from("cleaning_report_agents").select("report_id").in("report_id", reports.map((r) => r.id));
+  const [{ data: agents }, { data: photos }] = await Promise.all([
+    supabase.from("cleaning_report_agents").select("report_id").in("report_id", reports.map((r) => r.id)),
+    supabase.from("photos").select("activity_date, phase").eq("entity_type", "cleaning_report_agent").in("activity_date", reports.map((r) => r.activity_date)),
+  ]);
   const counts = new Map<string, number>();
   for (const a of agents ?? []) counts.set(a.report_id, (counts.get(a.report_id) ?? 0) + 1);
-  return reports.map((r) => ({ activity_date: r.activity_date, agents: counts.get(r.id) ?? 0 }));
+  const ph = new Map<string, { avant: number; apres: number }>();
+  for (const p of photos ?? []) {
+    const c = ph.get(p.activity_date) ?? { avant: 0, apres: 0 };
+    if (p.phase === "avant") c.avant++;
+    else if (p.phase === "apres") c.apres++;
+    ph.set(p.activity_date, c);
+  }
+  return reports.map((r) => ({ activity_date: r.activity_date, agents: counts.get(r.id) ?? 0, photos_avant: ph.get(r.activity_date)?.avant ?? 0, photos_apres: ph.get(r.activity_date)?.apres ?? 0 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +149,11 @@ export type CollectionReportFull = CollectionReport & {
   truckReport: TruckDailyReport | null;
   photosAvant: PhotoItem[];
   photosApres: PhotoItem[];
+  /** Journée clôturée : rapport en lecture seule */
+  day_closed: boolean;
+  status: CollectionStatus;
+  /** Éléments manquants (clés de traduction) */
+  missing: string[];
 };
 
 export async function getCollectionReports(filters: { date?: string; from?: string; to?: string; truck?: string }, limit = 200): Promise<CollectionReportFull[]> {
@@ -148,16 +167,25 @@ export async function getCollectionReports(filters: { date?: string; from?: stri
   const reports = data ?? [];
   if (!reports.length) return [];
   const ids = reports.map((r) => r.id);
-  const [{ data: rippers }, { data: truckReports }, photos] = await Promise.all([
+  const dates = Array.from(new Set(reports.map((r) => r.activity_date)));
+  const [{ data: rippers }, { data: truckReports }, photos, { data: days }] = await Promise.all([
     supabase.from("collection_report_rippers").select("report_id, employee_id").in("report_id", ids),
     supabase.from("truck_daily_reports").select("*").in("activity_date", Array.from(new Set(reports.map((r) => r.activity_date)))).returns<TruckDailyReport[]>(),
     getPhotosFor("collection_report", ids),
+    supabase.from("work_days").select("activity_date, status").in("activity_date", dates),
   ]);
+  const closed = new Set((days ?? []).filter((d) => d.status === "closed").map((d) => d.activity_date));
   const empById = new Map(employees.map((e) => [e.id, e]));
   const truckById = new Map(trucks.map((t) => [t.id, t]));
   return reports.map((r) => {
     const ph = photos.get(r.id) ?? [];
+    const before = ph.filter((p) => p.phase === "avant").length;
+    const after = ph.filter((p) => p.phase === "apres").length;
+    const day_closed = closed.has(r.activity_date);
     return {
+      day_closed,
+      status: collectionStatus({ sectors: r.sectors, before, after, dayClosed: day_closed }),
+      missing: collectionMissing({ sectors: r.sectors, before, after }),
       ...r,
       truck: truckById.get(r.truck_id) ?? null,
       chauffeur: r.chauffeur_id ? (empById.get(r.chauffeur_id) ?? null) : null,

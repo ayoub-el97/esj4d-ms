@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PhotoGallery } from "@/components/photo-gallery";
 
 export const generateMetadata = pageTitle("Historique des tâches");
 
@@ -59,13 +60,14 @@ export default async function ProgrammeHistoriquePage({ searchParams }: { search
               <TableHead>{t("Description")}</TableHead>
               <TableHead>{t("Agents")}</TableHead>
               <TableHead>{t("Statut")}</TableHead>
-              <TableHead className="text-end">{t("Photos")}</TableHead>
+              <TableHead>{t("Photos Avant")}</TableHead>
+              <TableHead>{t("Photos Après")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   {t("Aucune tâche.")}
                 </TableCell>
               </TableRow>
@@ -83,7 +85,12 @@ export default async function ProgrammeHistoriquePage({ searchParams }: { search
                 <TableCell>
                   <Badge variant={task.status === "realisee" ? "default" : "secondary"}>{t(TASK_STATUS_LABELS[task.status])}</Badge>
                 </TableCell>
-                <TableCell className="text-end">{task.photosAvant.length + task.photosApres.length}</TableCell>
+                <TableCell>
+                  <PhotoGallery photos={task.photosAvant} compact />
+                </TableCell>
+                <TableCell>
+                  <PhotoGallery photos={task.photosApres} compact />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

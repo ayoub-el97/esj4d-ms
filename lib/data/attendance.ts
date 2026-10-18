@@ -297,13 +297,52 @@ export async function getMonthlyAttendance(month: string, team?: TeamType) {
 }
 
 /** Résumé d'une journée pour l'écran de clôture. */
+/** Contrôle d'un rapport du jour avant clôture (libellés = clés de traduction + variables). */
+type Msg = { key: string; vars?: Record<string, string | number> };
+export type DayReportCheck = { key: string; label: Msg; href: string; missing: Msg[] };
+const m = (key: string, vars?: Msg["vars"]): Msg => ({ key, vars });
+
 export async function getDaySummary(date: string) {
   const supabase = await createClient();
-  const { data } = await supabase.from("attendance").select("team_type, status").eq("activity_date", date);
+  const [{ data }, { data: collections }, { data: cleaning }, { data: green }, { data: tasks }, { data: photos }, { data: trucks }] = await Promise.all([
+    supabase.from("attendance").select("team_type, status").eq("activity_date", date),
+    supabase.from("collection_reports").select("id, truck_id, sectors").eq("activity_date", date),
+    supabase.from("cleaning_report_agents").select("id, employee_id, location, excluded").eq("activity_date", date),
+    supabase.from("green_waste_entries").select("id, location").eq("activity_date", date),
+    supabase.from("work_tasks").select("id, location, status").eq("planned_date", date),
+    supabase.from("photos").select("entity_type, entity_id, phase").eq("activity_date", date),
+    supabase.from("trucks").select("id, matricule"),
+  ]);
   const summary: Record<TeamType, Record<string, number>> = { collecte: {}, nettoiement: {} };
   for (const r of data ?? []) {
     const t = r.team_type as TeamType;
     summary[t][r.status] = (summary[t][r.status] ?? 0) + 1;
   }
-  return { attendance: summary, total: (data ?? []).length };
+  // Photos avant / après par enregistrement
+  const count = (type: string, id: string, phase: string) => (photos ?? []).filter((p) => p.entity_type === type && p.entity_id === id && p.phase === phase).length;
+  const plate = new Map((trucks ?? []).map((tr) => [tr.id, tr.matricule as string]));
+  const checks: DayReportCheck[] = [];
+  for (const r of collections ?? []) {
+    const missing = [!r.sectors?.trim() && m("lieux / secteurs"), !count("collection_report", r.id, "avant") && m("photos AVANT"), !count("collection_report", r.id, "apres") && m("photos APRÈS")].filter(Boolean) as Msg[];
+    checks.push({ key: r.id, label: m("Rapport de collecte — camion {plate}", { plate: plate.get(r.truck_id) ?? "?" }), href: `/rapport-journalier/collecte/${r.id}`, missing });
+  }
+  const agents = (cleaning ?? []).filter((a) => !a.excluded);
+  const agentsNoBefore = agents.filter((a) => !count("cleaning_report_agent", a.id, "avant")).length;
+  const agentsNoAfter = agents.filter((a) => !count("cleaning_report_agent", a.id, "apres")).length;
+  if (agents.length)
+    checks.push({
+      key: "nettoiement",
+      label: m("Rapport de nettoiement — {count} agent(s)", { count: agents.length }),
+      href: `/rapport-journalier/nettoiement?date=${date}`,
+      missing: [agentsNoBefore && m("photos AVANT manquantes pour {count} agent(s)", { count: agentsNoBefore }), agentsNoAfter && m("photos APRÈS manquantes pour {count} agent(s)", { count: agentsNoAfter })].filter(Boolean) as Msg[],
+    });
+  for (const g of green ?? []) {
+    const missing = [!count("green_waste", g.id, "avant") && m("photos AVANT"), !count("green_waste", g.id, "apres") && m("photos APRÈS")].filter(Boolean) as Msg[];
+    checks.push({ key: g.id, label: m("Déchet vert — {place}", { place: g.location || "—" }), href: `/dechet-vert/${g.id}`, missing });
+  }
+  for (const tk of tasks ?? []) {
+    const missing = [tk.status !== "realisee" && m("tâche non marquée réalisée"), !count("work_task", tk.id, "apres") && m("photos APRÈS")].filter(Boolean) as Msg[];
+    checks.push({ key: tk.id, label: m("Programme de travail — {place}", { place: tk.location || "—" }), href: `/programme/${tk.id}`, missing });
+  }
+  return { attendance: summary, total: (data ?? []).length, checks };
 }

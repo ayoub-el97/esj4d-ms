@@ -19,3 +19,5 @@ export type PhotoItem = {
 };
 
 export const PHOTO_BUCKET = "photos";
+/** Durée de validité des liens signés : une journée de travail (la page peut rester ouverte de 6 h à 10 h). */
+export const PHOTO_URL_TTL = 6 * 3600;

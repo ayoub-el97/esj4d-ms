@@ -18,6 +18,7 @@ import { NativeSelect } from "@/components/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PhotoGallery } from "@/components/photo-gallery";
 
 export const generateMetadata = pageTitle("Avertissements");
 
@@ -98,7 +99,7 @@ export default async function AvertissementsPage({ searchParams }: { searchParam
                 <TableHead>{t("Employé")}</TableHead>
                 <TableHead>{t("Description")}</TableHead>
                 <TableHead>{t("Statut")}</TableHead>
-                <TableHead className="text-end">{t("Photos")}</TableHead>
+                <TableHead>{t("Photos")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -121,7 +122,9 @@ export default async function AvertissementsPage({ searchParams }: { searchParam
                   <TableCell>
                     <Badge variant={w.status === "clos" ? "secondary" : "destructive"}>{t(WARNING_STATUS_LABELS[w.status])}</Badge>
                   </TableCell>
-                  <TableCell className="text-end">{w.photos.length}</TableCell>
+                  <TableCell>
+                    <PhotoGallery photos={w.photos} compact />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -523,6 +523,55 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 20. Rapport de collecte : modifiable tant que la journée est ouverte,
+--     photos conservées après clôture / réouverture, traçabilité
+-- ---------------------------------------------------------------------------
+do $$
+declare d date := current_date - 3; tr uuid; rep uuid; ch uuid; r record;
+begin
+  select id into tr from public.trucks where matricule = '77041-A-1';
+  select id into ch from public.employees where matricule = 'C003';
+  -- 06:00 : création + photos avant
+  insert into public.collection_reports (activity_date, truck_id, chauffeur_id, sectors) values (d, tr, ch, 'Secteur 3') returning id into rep;
+  insert into public.photos (storage_path, entity_type, entity_id, phase, activity_date, uploaded_by)
+  values ('collection_report/' || rep || '/a1.jpg', 'collection_report', rep, 'avant', d, auth.uid()),
+         ('collection_report/' || rep || '/a2.jpg', 'collection_report', rep, 'avant', d, auth.uid());
+  -- 10:00 : photos après + correction
+  insert into public.photos (storage_path, entity_type, entity_id, phase, activity_date, uploaded_by)
+  values ('collection_report/' || rep || '/p1.jpg', 'collection_report', rep, 'apres', d, auth.uid());
+  update public.collection_reports set sectors = 'Secteur 3 et 4', observations = 'RAS', manual_team = true where id = rep;
+  select * into r from public.record_audit_info('collection_reports', array[rep]);
+  assert r.created_at is not null and r.updated_at is not null and r.photos_added = 3, format('traçabilité : création, modification, 3 photos (%s)', r.photos_added);
+
+  -- Clôture : plus de modification ni d'ajout de photo
+  perform public.close_day(d);
+  begin
+    update public.collection_reports set observations = 'X' where id = rep;
+    raise exception 'ÉCHEC : rapport modifié après clôture';
+  exception when others then
+    if sqlerrm not like '%JOURNEE_CLOTUREE%' then raise; end if;
+  end;
+  begin
+    insert into public.photos (storage_path, entity_type, entity_id, phase, activity_date, uploaded_by)
+    values ('collection_report/' || rep || '/p2.jpg', 'collection_report', rep, 'apres', d, auth.uid());
+    raise exception 'ÉCHEC : photo ajoutée après clôture';
+  exception when others then
+    if sqlerrm not like '%JOURNEE_CLOTUREE%' then raise; end if;
+  end;
+  assert (select count(*) from public.photos where entity_type = 'collection_report' and entity_id = rep) = 3, 'photos conservées après clôture';
+
+  -- Réouverture avec motif : à nouveau modifiable, rien n'est perdu
+  perform public.reopen_day(d, 'Photo après manquante');
+  insert into public.photos (storage_path, entity_type, entity_id, phase, activity_date, uploaded_by)
+  values ('collection_report/' || rep || '/p2.jpg', 'collection_report', rep, 'apres', d, auth.uid());
+  update public.collection_reports set observations = 'RAS — complété' where id = rep;
+  assert (select count(*) from public.photos where entity_type = 'collection_report' and entity_id = rep) = 4, 'photo ajoutée après réouverture';
+  assert (select sectors from public.collection_reports where id = rep) = 'Secteur 3 et 4', 'données conservées après réouverture';
+  assert exists (select 1 from public.audit_log where table_name = 'work_days' and action = 'REOPEN_DAY' and new_data ->> 'reason' = 'Photo après manquante'), 'réouverture journalisée avec motif';
+  raise notice 'OK 20 collecte : modifiable jusqu''à la clôture, figée après, réouverture sans perte, traçabilité';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);

@@ -8,6 +8,8 @@ import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { PhotoStatusBadge } from "@/components/photo-status-badge";
+import { COLLECTION_STATUS_LABELS, COLLECTION_STATUS_STYLES } from "@/lib/collection-status";
+import { cn } from "@/lib/utils";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
 import { DayStatusBadge } from "@/components/day-status-badge";
@@ -55,7 +57,8 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
                   <CardTitle className="flex items-center gap-2">
                     <span className="font-mono">{r.truck?.matricule ?? "?"}</span>
                     <span className="text-sm font-normal text-muted-foreground">{r.truck?.brand}</span>
-                    <PhotoStatusBadge before={r.photosAvant.length} after={r.photosApres.length} className="ms-auto" />
+                    <span className={cn("ms-auto rounded-full px-2 py-0.5 text-xs font-semibold", COLLECTION_STATUS_STYLES[r.status])}>{t(COLLECTION_STATUS_LABELS[r.status])}</span>
+                    <PhotoStatusBadge before={r.photosAvant.length} after={r.photosApres.length} />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm">

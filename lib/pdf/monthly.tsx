@@ -163,16 +163,21 @@ export function WorkerReportPdf({ company, report, generatedBy }: { company: str
         <Page size="A4" style={styles.page}>
           <PdfHeader company={company} title={t("Photos — {name}", { name: employeeName(e) })} subtitle={period} />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {report.photos.map((p) => (
-              <View key={p.id} style={{ width: 160 }}>
+            {report.photos.filter((p) => p.url).map((p) => (
+              <View key={p.id} wrap={false} style={{ width: 166, borderWidth: 1, borderColor: "#bbb", padding: 2 }}>
                 {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                <Image src={p.url} style={{ width: 160, height: 120, objectFit: "cover", borderWidth: 1, borderColor: "#999" }} />
+                <Image src={p.url} style={{ width: 160, height: 120, objectFit: "contain" }} />
                 <Text style={styles.small}>
                   {formatDateFr(p.activity_date)} · {t(PHOTO_PHASE_LABELS[p.phase as keyof typeof PHOTO_PHASE_LABELS] ?? p.phase)} {p.location ? `· ${p.location}` : ""}
                 </Text>
               </View>
             ))}
           </View>
+          {report.photos.some((p) => !p.url) && (
+            <Text style={[styles.small, { color: "#b45309", marginTop: 4 }]}>
+              {t("{count} photo(s) n'ont pas pu être incluses (image indisponible ou format non lisible) ; elles restent consultables dans l'application.", { count: report.photos.filter((p) => !p.url).length })}
+            </Text>
+          )}
           <PdfFooter company={company} generatedBy={generatedBy} />
         </Page>
       )}

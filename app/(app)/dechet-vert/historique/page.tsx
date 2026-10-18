@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PhotoGallery } from "@/components/photo-gallery";
 
 export const generateMetadata = pageTitle("Historique — Déchet vert");
 
@@ -50,13 +51,14 @@ export default async function DechetVertHistoriquePage({ searchParams }: { searc
               <TableHead>{t("Date")}</TableHead>
               <TableHead>{t("Lieu")}</TableHead>
               <TableHead>{t("Commentaire")}</TableHead>
-              <TableHead className="text-end">{t("Photos avant / après")}</TableHead>
+              <TableHead>{t("Photos Avant")}</TableHead>
+              <TableHead>{t("Photos Après")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   {t("Aucune intervention.")}
                 </TableCell>
               </TableRow>
@@ -70,8 +72,11 @@ export default async function DechetVertHistoriquePage({ searchParams }: { searc
                 </TableCell>
                 <TableCell>{e.location || "—"}</TableCell>
                 <TableCell className="max-w-72 truncate">{e.comment}</TableCell>
-                <TableCell className="text-end">
-                  {e.photosAvant.length} / {e.photosApres.length}
+                <TableCell>
+                  <PhotoGallery photos={e.photosAvant} compact />
+                </TableCell>
+                <TableCell>
+                  <PhotoGallery photos={e.photosApres} compact />
                 </TableCell>
               </TableRow>
             ))}

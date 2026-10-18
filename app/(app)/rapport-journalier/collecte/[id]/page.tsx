@@ -9,6 +9,10 @@ import { ModuleButtons } from "@/components/module-buttons";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { CollectionForm } from "./collection-form";
+import { getEmployees, getTrucks } from "@/lib/data/employees";
+import { getRecordAuditInfo } from "@/lib/data/audit-info";
+import { DRIVER_POSITIONS } from "@/lib/types";
+import { AuditLine } from "@/components/audit-line";
 
 export const generateMetadata = pageTitle("Rapport de collecte");
 
@@ -17,7 +21,13 @@ export default async function CollectionReportPage({ params }: { params: Promise
   const { id } = await params;
   const report = await getCollectionReport(id);
   if (!report) notFound();
-  const workDay = await getWorkDay(report.activity_date);
+  const [workDay, trucks, collecte, audit] = await Promise.all([
+    getWorkDay(report.activity_date),
+    getTrucks(true),
+    getEmployees({ team: "collecte", onlyActive: true }),
+    getRecordAuditInfo("collection_reports", [report.id]),
+  ]);
+  const info = audit.get(report.id);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
 
   return (
@@ -30,7 +40,14 @@ export default async function CollectionReportPage({ params }: { params: Promise
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
 
-      <CollectionForm report={report} canEdit={canEdit} />
+      <CollectionForm
+        report={report}
+        canEdit={canEdit}
+        trucks={trucks}
+        drivers={collecte.filter((e) => DRIVER_POSITIONS.includes(e.position))}
+        crewOptions={collecte.filter((e) => ["rippeur", "rippeur_remplacant"].includes(e.position))}
+      />
+      {info && <AuditLine info={info} t={t} />}
 
       <ModuleButtons pdfSlot={<PdfExportButton kind="rapport-collecte" params={{ date: report.activity_date, id: report.id }} />} historyHref="/rapport-journalier/collecte/historique" />
     </div>

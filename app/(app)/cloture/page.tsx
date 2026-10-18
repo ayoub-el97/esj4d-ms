@@ -69,7 +69,7 @@ export default async function CloturePage({ searchParams }: { searchParams: Prom
           </CardContent>
         </Card>
 
-        <CloseDayPanel date={date} closed={closed} canClose={user.permissions.cloture.can_edit} canReopen={user.role === "admin"} />
+        <CloseDayPanel date={date} closed={closed} canClose={user.permissions.cloture.can_edit} canReopen={user.role === "admin"} checks={summary.checks} />
       </div>
 
       <Card className="mt-6">
