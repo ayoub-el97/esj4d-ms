@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, RotateCcw, X } from "lucide-react";
+import { Ban, Check, RotateCcw, X } from "lucide-react";
 import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest } from "@/lib/actions/leaves";
 import { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
 import { todayISO } from "@/lib/dates";
@@ -193,7 +193,7 @@ export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { e
 // ---------------------------------------------------------------------------
 export function StatusBadge({ status }: { status: LeaveStatus }) {
   const { t } = useT();
-  const variant = status === "acceptee" ? "default" : status === "refusee" ? "destructive" : "secondary";
+  const variant = status === "acceptee" ? "default" : status === "refusee" ? "destructive" : status === "annulee" ? "outline" : "secondary";
   return <Badge variant={variant}>{t(LEAVE_STATUS_LABELS[status])}</Badge>;
 }
 
@@ -226,6 +226,21 @@ export function DecisionButtons({ id, status, kind, canEdit }: { id: string; sta
       {status !== "en_attente" && (
         <Button size="icon-sm" variant="outline" title={t("Remettre en attente")} aria-label={t("Remettre en attente")} disabled={pending} onClick={() => run(() => decide(id, "en_attente"))}>
           <RotateCcw />
+        </Button>
+      )}
+      {kind === "conge" && status === "acceptee" && (
+        <Button
+          size="icon-sm"
+          variant="outline"
+          title={t("Annuler la demande")}
+          aria-label={t("Annuler la demande")}
+          disabled={pending}
+          onClick={() => {
+            const reason = window.prompt(t("Motif de l'annulation (obligatoire) — le congé sera retiré du pointage, la demande reste dans l'historique :"));
+            if (reason && reason.trim()) run(() => decide(id, "annulee", reason));
+          }}
+        >
+          <Ban />
         </Button>
       )}
     </div>

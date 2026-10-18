@@ -86,10 +86,13 @@ export async function buildSheet(date: string, team: TeamType) {
     supabase.from("attendance_sheet_meta").select("team_lead").eq("activity_date", date).eq("team_type", team).maybeSingle<{ team_lead: string }>(),
     supabase.from("holidays").select("label").eq("date", date).maybeSingle<{ label: string }>(),
     // Congés et récupérations acceptés pour cette date : proposés par défaut
-    supabase.from("leave_requests").select("employee_id").eq("status", "acceptee").lte("start_date", date).gte("end_date", date),
+    supabase.from("leave_requests").select("id, employee_id").eq("status", "acceptee").lte("start_date", date).gte("end_date", date),
     supabase.from("recovery_requests").select("employee_id").eq("status", "acceptee").eq("recovery_date", date),
   ]);
   const onLeave = new Set((leaves ?? []).map((l) => l.employee_id as string));
+  const leaveByEmployee = new Map((leaves ?? []).map((l) => [l.employee_id as string, l.id as string]));
+  const { data: overrides } = await supabase.from("attendance_leave_overrides").select("id, employee_id, reason, created_at").eq("activity_date", date).eq("revoked", false);
+  const overrideByEmployee = new Map((overrides ?? []).map((o) => [o.employee_id as string, { id: o.id as string, reason: o.reason as string, at: o.created_at as string }]));
   const onRecovery = new Set((recoveries ?? []).map((r) => r.employee_id as string));
 
   const byId = new Map(employees.map((e) => [e.id, e]));
@@ -174,6 +177,16 @@ export async function buildSheet(date: string, team: TeamType) {
     sub.status = subEmployee?.rest_day === dow ? "repos_travaille" : "present";
     // Le chauffeur remplaçant prend le camion du titulaire
     if (titular.position === "chauffeur") sub.truck_id = titular.truck_id;
+  }
+
+  // Congé approuvé : statut verrouillé sur « Congé », sauf modification autorisée
+  for (const r of rows) {
+    const req = leaveByEmployee.get(r.employee_id);
+    r.leave_lock = req ? { request_id: req } : null;
+    r.leave_override = req ? (overrideByEmployee.get(r.employee_id) ?? null) : null;
+    if (req && !r.leave_override) {
+      r.status = "conge";
+    }
   }
 
   rows.sort((a, b) => a.order_number - b.order_number || a.shift - b.shift);

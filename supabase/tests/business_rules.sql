@@ -88,22 +88,22 @@ end $$;
 -- ---------------------------------------------------------------------------
 insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, reason, status)
 select b2, '2026-10-01', '2026-10-05', '2026-10-06', 2, 'test', 'acceptee' from ids;
-insert into public.attendance (activity_date, employee_id, status, position, team_type)
-select '2026-10-05', b2, 'conge', 'balayeur', 'nettoiement' from ids;
+-- (migration 020) l'acceptation pointe automatiquement les 05 et 06/10 en « Congé »
 do $$
 declare b record;
 begin
   assert (select count(*) from public.leave_requests where employee_id = (select b2 from ids)) = 1, 'demande absente de l''historique';
+  assert (select count(*) from public.attendance where employee_id = (select b2 from ids) and activity_date in ('2026-10-05', '2026-10-06') and status::text = 'conge') = 2, 'congé accepté non reporté au pointage';
   select * into b from public.leave_balances('2026-10-31') where employee_id = (select b2 from ids);
-  -- 05/10 pointé Congé (+ demande) = 1 ; 06/10 non pointé mais demande acceptée = 1 ; total 2, pas 3
+  -- 05/10 et 06/10 pointés Congé (+ demande) : 2 jours, jamais 4
   assert b.taken = 2, format('congés pris = %s, attendu 2', b.taken);
   raise notice 'OK 6  demande de congé dans l''historique';
   raise notice 'OK 7  congé pointé + demande : une seule déduction par jour';
 end $$;
 
--- Pointage corrigé : le 06/10 l'employé est finalement venu travailler -> plus de déduction ce jour-là
-insert into public.attendance (activity_date, employee_id, status, position, team_type)
-select '2026-10-06', b2, 'present', 'balayeur', 'nettoiement' from ids;
+-- Pointage corrigé : le 06/10 l'employé est finalement venu travailler -> dérogation autorisée, plus de déduction ce jour-là
+insert into public.attendance_leave_overrides (employee_id, activity_date, reason) select b2, '2026-10-06', 'Rappelé pour une urgence' from ids;
+update public.attendance set status = 'present' where employee_id = (select b2 from ids) and activity_date = '2026-10-06';
 do $$ begin
   assert (select taken from public.leave_balances('2026-10-31') where employee_id = (select b2 from ids)) = 1, 'correction du pointage non prise en compte';
   assert exists (select 1 from public.audit_log where table_name = 'attendance' and action = 'INSERT'), 'correction non journalisée';
@@ -617,6 +617,76 @@ begin
   assert (select count(*) from public.purchase_history(a)) >= 4, 'historique de l''achat et de ses paiements';
   assert public.photo_can_view('material_purchase'), 'photos des achats visibles par l''administrateur';
   raise notice 'OK 21 achats : total = quantité × prix, paiements échelonnés, reste dû, annulation, journal';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 22. Congé ↔ Pointage : application automatique, blocage, dérogation, recalcul
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid; req uuid; req2 uuid; ov uuid; taken0 numeric; r record;
+begin
+  select id into e from public.employees where matricule = 'B003';
+  -- Pointage déjà saisi le 21/11 (présent) avant la demande
+  insert into public.attendance (activity_date, employee_id, status, position, team_type, time_in) values ('2026-11-21', e, 'present', 'balayeur', 'nettoiement', '07:00');
+  taken0 := (select taken from public.leave_balances('2026-11-30') where employee_id = e);
+
+  -- 1. En attente : pas de congé au pointage
+  insert into public.leave_requests (employee_id, start_date, end_date, requested_days, status) values (e, '2026-11-20', '2026-11-22', 3, 'en_attente') returning id into req;
+  assert (select count(*) from public.attendance where employee_id = e and status::text = 'conge' and activity_date between '2026-11-20' and '2026-11-22') = 0, '1. en attente : rien au pointage';
+
+  -- 2. Acceptée : les 3 dates en « Congé », le pointage existant converti (ancien statut gardé)
+  update public.leave_requests set status = 'acceptee' where id = req;
+  assert (select count(*) from public.attendance where employee_id = e and status::text = 'conge' and activity_date between '2026-11-20' and '2026-11-22') = 3, '2. acceptée : 3 dates en congé';
+  assert (select pre_leave_status from public.attendance where employee_id = e and activity_date = '2026-11-21') = 'present', '2. ancien statut conservé';
+  assert (select taken from public.leave_balances('2026-11-30') where employee_id = e) = taken0 + 3, '7. 3 jours déduits, une seule fois';
+
+  -- 3. Passer le 21/11 en Absent : refusé
+  begin
+    update public.attendance set status = 'absent' where employee_id = e and activity_date = '2026-11-21';
+    raise exception 'ÉCHEC : statut modifié sur un congé approuvé';
+  exception when others then
+    if sqlerrm not like 'CONGE_APPROUVE|%' then raise; end if;
+  end;
+  -- Suppression de la ligne de congé : refusée aussi
+  begin
+    delete from public.attendance where employee_id = e and activity_date = '2026-11-20';
+    raise exception 'ÉCHEC : ligne de congé supprimée';
+  exception when others then
+    if sqlerrm not like 'CONGE_APPROUVE|%' then raise; end if;
+  end;
+
+  -- 4-5. Dérogation autorisée (motif obligatoire), journalisée, puis changement accepté
+  begin
+    insert into public.attendance_leave_overrides (employee_id, activity_date, reason) values (e, '2026-11-21', 'ok');
+    raise exception 'ÉCHEC : dérogation sans motif suffisant';
+  exception when check_violation then null;
+  end;
+  insert into public.attendance_leave_overrides (employee_id, activity_date, leave_request_id, reason) values (e, '2026-11-21', req, 'Rappelé pour un événement exceptionnel') returning id into ov;
+  update public.attendance set status = 'absent' where employee_id = e and activity_date = '2026-11-21';
+  assert exists (select 1 from public.audit_log where table_name = 'attendance_leave_overrides' and record_id = ov::text and action = 'INSERT' and user_email is not null and new_data ->> 'reason' = 'Rappelé pour un événement exceptionnel'), '5. dérogation journalisée (qui, quand, motif)';
+  -- Une nouvelle synchronisation ne revient pas sur la dérogation
+  perform public.sync_leave_attendance(req);
+  assert (select status::text from public.attendance where employee_id = e and activity_date = '2026-11-21') = 'absent', '4. dérogation respectée par la synchronisation';
+  assert (select taken from public.leave_balances('2026-11-30') where employee_id = e) = taken0 + 2, '7. jour dérogé non déduit';
+  -- Révocation : le congé s'applique de nouveau
+  update public.attendance_leave_overrides set revoked = true where id = ov;
+  assert (select status::text from public.attendance where employee_id = e and activity_date = '2026-11-21') = 'conge', 'révocation : retour au congé';
+
+  -- 6. Annulation : congé automatique retiré, pointage d'origine restauré ; demande conservée
+  update public.leave_requests set status = 'annulee' where id = req;
+  assert (select count(*) from public.attendance where employee_id = e and activity_date in ('2026-11-20', '2026-11-22')) = 0, '6. lignes créées par le congé retirées';
+  select * into r from public.attendance where employee_id = e and activity_date = '2026-11-21';
+  assert r.status::text = 'present' and r.pre_leave_status is null and r.leave_request_id is null, '6. pointage d''origine restauré';
+  assert exists (select 1 from public.leave_requests where id = req), '8. demande conservée';
+  assert (select taken from public.leave_balances('2026-11-30') where employee_id = e) = taken0, '7. solde rétabli après annulation';
+
+  -- Deux demandes : refuser l'une garde le congé couvert par l'autre
+  update public.leave_requests set status = 'acceptee' where id = req;
+  insert into public.leave_requests (employee_id, start_date, end_date, requested_days, status) values (e, '2026-11-22', '2026-11-23', 2, 'acceptee') returning id into req2;
+  update public.leave_requests set status = 'refusee' where id = req;
+  assert (select status::text from public.attendance where employee_id = e and activity_date = '2026-11-22') = 'conge', '6. date couverte par une autre demande acceptée : reste en congé';
+  assert (select count(*) from public.attendance where employee_id = e and activity_date = '2026-11-20') = 0, '6. refus : 20/11 retiré';
+  raise notice 'OK 22 congé ↔ pointage : automatique, blocage, dérogation motivée, recalcul, solde exact';
 end $$;
 
 -- ---------------------------------------------------------------------------

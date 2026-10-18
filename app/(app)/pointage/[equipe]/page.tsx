@@ -66,6 +66,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         company={settings.company_name}
         logo={logoUrl(settings.company_logo_path)}
         trucks={sheet.trucks}
+        canAuthorize={user.permissions.conges.can_edit && user.permissions.pointage.can_edit}
       />
 
       <ModuleButtons

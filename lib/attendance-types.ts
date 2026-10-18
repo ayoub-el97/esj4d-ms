@@ -29,6 +29,10 @@ export type SheetRow = {
   planned: "conge" | "recuperation" | null;
   /** Remplaçant attitré du titulaire (jours de repos) */
   substitute_id: string | null;
+  /** Congé approuvé couvrant cette date : le statut est verrouillé sur « Congé » */
+  leave_lock?: { request_id: string } | null;
+  /** Modification autorisée (dérogation motivée) sur une date de congé approuvé */
+  leave_override?: { id: string; reason: string; at: string } | null;
 };
 
 export type SheetPayload = {

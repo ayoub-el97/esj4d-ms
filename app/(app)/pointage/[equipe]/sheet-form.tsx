@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Plus, Save, Trash2, UserPlus } from "lucide-react";
-import { saveSheet } from "@/lib/actions/attendance";
+import { Copy, Lock, Plus, Save, Trash2, UserPlus } from "lucide-react";
+import { authorizeLeaveOverride, revokeLeaveOverride, saveSheet } from "@/lib/actions/attendance";
 import type { EmployeeOption, SheetRow } from "@/lib/attendance-types";
 import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
@@ -14,6 +14,7 @@ import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, P
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/native-select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,12 @@ type Props = {
   logo: string | null;
   /** Camions actifs (camion du jour des chauffeurs) */
   trucks: { id: string; matricule: string; brand: string }[];
+  /** Peut autoriser une modification sur une date de congé approuvé (droits congés + pointage) */
+  canAuthorize?: boolean;
 };
+
+const LEAVE_WARNING =
+  "Attention : cet employé bénéficie d'un congé approuvé pour cette date. Le pointage est automatiquement défini sur « Congé ». Toute modification nécessite une autorisation.";
 
 const STATUS_COLORS: Record<AttendanceStatus, string> = {
   present: "",
@@ -48,7 +54,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -56,6 +62,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState<{ chauffeurId: string | null } | null>(null);
+  const [overrideFor, setOverrideFor] = useState<number | null>(null);
 
   const optionsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
   const dow = new Date(`${date}T12:00:00`).getDay();
@@ -267,6 +274,20 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 onRemove={remove}
                 onAddShift={addShift}
                 onAssignSubstitute={assignSubstitute}
+                canAuthorize={canAuthorize}
+                onAuthorize={(i) => setOverrideFor(i)}
+                onRevoke={(i) => {
+                  const ov = rows[i].leave_override;
+                  if (!ov || !window.confirm(t("Retirer l'autorisation ? Le pointage repassera en « Congé ».")))
+                    return;
+                  start(async () => {
+                    const r = await revokeLeaveOverride(ov.id);
+                    if (r.ok) {
+                      update(i, { leave_override: null, status: "conge", time_in: "", time_out: "", overtime_hours: 0 });
+                      toast.success(r.message);
+                    } else toast.error(r.error);
+                  });
+                }}
                 trucks={trucks}
                 teams={team === "collecte" ? rows.filter((x) => x.position === "chauffeur" && x.shift === 1).map((x) => ({ id: x.employee_id, name: x.name })) : []}
                 onAddMember={team === "collecte" && g.chauffeurId ? () => setAdding({ chauffeurId: g.chauffeurId }) : undefined}
@@ -307,6 +328,25 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         )}
       </div>
 
+      {overrideFor != null && rows[overrideFor] && (
+        <LeaveOverrideDialog
+          name={rows[overrideFor].name}
+          date={date}
+          onClose={() => setOverrideFor(null)}
+          onConfirm={(reason) =>
+            start(async () => {
+              const r = await authorizeLeaveOverride(rows[overrideFor].employee_id, date, reason);
+              if (r.ok && r.data) {
+                update(overrideFor, { leave_override: r.data });
+                toast.success(r.message, { duration: 7000 });
+                setOverrideFor(null);
+              } else if (!r.ok) toast.error(r.error, { duration: 8000 });
+            })
+          }
+          pending={pending}
+        />
+      )}
+
       {adding && <AddEmployeeDialog date={date} team={team} options={options} rows={rows} defaultChauffeurId={adding.chauffeurId} onClose={() => setAdding(null)} onAdd={addEmployee} />}
     </div>
   );
@@ -324,6 +364,9 @@ function GroupRows({
   onRemove,
   onAddShift,
   onAssignSubstitute,
+  canAuthorize,
+  onAuthorize,
+  onRevoke,
   trucks,
   teams,
   onAddMember,
@@ -339,6 +382,9 @@ function GroupRows({
   onRemove: (i: number) => void;
   onAddShift: (i: number) => void;
   onAssignSubstitute: (i: number) => void;
+  canAuthorize: boolean;
+  onAuthorize: (i: number) => void;
+  onRevoke: (i: number) => void;
   trucks: { id: string; matricule: string; brand: string }[];
   teams: { id: string; name: string }[];
   onAddMember?: () => void;
@@ -410,7 +456,20 @@ function GroupRows({
             </td>
             <td className="px-2 py-1 text-muted-foreground">{r.rest_day == null ? "—" : t(WEEKDAY_SHORT[r.rest_day])}</td>
             <td className="px-2 py-1">
-              <NativeSelect value={r.status} disabled={!canEdit} onChange={(e) => onUpdate(i, { status: e.target.value as AttendanceStatus })} className="min-w-32">
+              <NativeSelect
+                value={r.status}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  const next = e.target.value as AttendanceStatus;
+                  // Congé approuvé : changement bloqué, sauf modification autorisée
+                  if (r.leave_lock && !r.leave_override && next !== "conge") {
+                    toast.warning(t(LEAVE_WARNING), { duration: 9000 });
+                    return;
+                  }
+                  onUpdate(i, { status: next });
+                }}
+                className={cn("min-w-32", r.leave_lock && !r.leave_override && "border-emerald-400 font-medium")}
+              >
                 {ATTENDANCE_STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {t(ATTENDANCE_STATUS_LABELS[s])}
@@ -432,7 +491,31 @@ function GroupRows({
                   {t("Faire remplacer par {name}", { name: substitute.name })}
                 </button>
               )}
-              {r.planned && r.status !== r.planned && (
+              {r.leave_lock && !r.leave_override && (
+                <div className="mt-0.5 space-y-0.5 text-[11px]">
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-800">
+                    <Lock className="size-3" /> {t("Congé approuvé")}
+                  </span>
+                  {canEdit && canAuthorize && (
+                    <button type="button" className="block text-start text-indigo-700 underline-offset-2 hover:underline" onClick={() => onAuthorize(i)}>
+                      {t("Autoriser la modification")}
+                    </button>
+                  )}
+                </div>
+              )}
+              {r.leave_lock && r.leave_override && (
+                <div className="mt-0.5 space-y-0.5 text-[11px]">
+                  <span className="block font-semibold text-orange-700" title={r.leave_override.reason}>
+                    {t("Modification autorisée : {reason}", { reason: r.leave_override.reason })}
+                  </span>
+                  {canEdit && canAuthorize && (
+                    <button type="button" className="block text-start text-indigo-700 underline-offset-2 hover:underline" onClick={() => onRevoke(i)}>
+                      {t("Rétablir le congé")}
+                    </button>
+                  )}
+                </div>
+              )}
+              {r.planned && r.status !== r.planned && !r.leave_lock && (
                 <div className="mt-0.5 text-[11px] text-emerald-700">
                   {r.planned === "conge" ? t("Congé accepté pour cette date") : t("Récupération acceptée pour cette date")}
                 </div>
@@ -455,10 +538,12 @@ function GroupRows({
             </td>
             {canEdit && (
               <td className="whitespace-nowrap px-1 py-1">
-                <Button variant="ghost" size="icon-xs" title={t("Ajouter un 2e service (jour doublé)")} onClick={() => onAddShift(i)}>
-                  <Copy />
-                </Button>
-                {(r.is_extra || r.shift > 1) && (
+                {!(r.leave_lock && !r.leave_override) && (
+                  <Button variant="ghost" size="icon-xs" title={t("Ajouter un 2e service (jour doublé)")} onClick={() => onAddShift(i)}>
+                    <Copy />
+                  </Button>
+                )}
+                {(r.is_extra || r.shift > 1) && !(r.leave_lock && !r.leave_override) && (
                   <Button variant="ghost" size="icon-xs" title={t("Retirer de la feuille")} onClick={() => onRemove(i)}>
                     <Trash2 />
                   </Button>
@@ -549,6 +634,36 @@ function AddEmployeeDialog({
           </Button>
           <Button disabled={!employeeId} onClick={() => onAdd(employeeId, replacingId || null, chauffeurId || null)}>
             {t("Ajouter")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Autorisation explicite d'une modification sur une date de congé approuvé (motif obligatoire, journalisé). */
+function LeaveOverrideDialog({ name, date, onClose, onConfirm, pending }: { name: string; date: string; onClose: () => void; onConfirm: (reason: string) => void; pending: boolean }) {
+  const { t } = useT();
+  const [reason, setReason] = useState("");
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("Autoriser la modification")}</DialogTitle>
+          <DialogDescription>
+            {t("{name} bénéficie d'un congé approuvé le {date}. En autorisant la modification, vous pourrez changer son statut pour cette date uniquement. La demande de congé n'est pas modifiée ; votre nom, la date et le motif sont enregistrés dans l'historique. Si le congé lui-même doit changer, modifiez ou annulez la demande dans Congé / Récupération.", { name, date: formatDateFr(date) })}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1">
+          <Label htmlFor="override-reason">{t("Motif (obligatoire)")}</Label>
+          <Textarea id="override-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder={t("Ex. rappelé pour une urgence, congé annulé oralement…")} />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
+            {t("Annuler")}
+          </Button>
+          <Button onClick={() => onConfirm(reason)} disabled={pending || reason.trim().length < 5}>
+            {t("Autoriser la modification")}
           </Button>
         </DialogFooter>
       </DialogContent>

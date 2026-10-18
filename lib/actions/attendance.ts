@@ -36,6 +36,52 @@ const payloadSchema = z.object({
   rows: z.array(rowSchema).max(500),
 });
 
+/** Message du congé approuvé, avec le nom de l'employé et la date (erreur CONGE_APPROUVE|nom|date de la base). */
+function leaveError(t: Awaited<ReturnType<typeof getT>>, message: string): string {
+  const m = message.match(/CONGE_APPROUVE\|([^|]*)\|([0-9/]+)/);
+  if (m) return t("Attention : {name} bénéficie d'un congé approuvé pour le {date}. Le pointage est automatiquement défini sur « Congé ». Toute modification nécessite une autorisation.", { name: m[1], date: m[2] });
+  return t(friendlyError(message));
+}
+
+/**
+ * Autorise une modification exceptionnelle du pointage sur une date de congé approuvé
+ * (droits de modification sur les congés ET le pointage, motif obligatoire, journalisé).
+ * La demande de congé n'est pas modifiée ; la dérogation est conservée dans l'historique.
+ */
+export async function authorizeLeaveOverride(employeeId: string, date: string, reason: string): Promise<ActionResult<{ id: string; reason: string; at: string }>> {
+  const t = await getT();
+  const a1 = await assertModule("conges", "edit");
+  if ("error" in a1) return { ok: false, error: t("Seuls les utilisateurs autorisés à modifier les congés et le pointage peuvent autoriser cette modification.") };
+  const a2 = await assertModule("pointage", "edit");
+  if ("error" in a2) return { ok: false, error: t("Seuls les utilisateurs autorisés à modifier les congés et le pointage peuvent autoriser cette modification.") };
+  if (!z.string().uuid().safeParse(employeeId).success || !z.string().date().safeParse(date).success) return { ok: false, error: t("Saisie invalide.") };
+  if (reason.trim().length < 5) return { ok: false, error: t("Indiquez le motif de la modification (5 caractères minimum).") };
+  if (await isDayClosed(date)) return { ok: false, error: t("Cette journée est clôturée : aucune modification possible.") };
+  const supabase = await createClient();
+  const { data: req } = await supabase.from("leave_requests").select("id").eq("employee_id", employeeId).eq("status", "acceptee").lte("start_date", date).gte("end_date", date).limit(1).maybeSingle();
+  const { data, error } = await supabase
+    .from("attendance_leave_overrides")
+    .insert({ employee_id: employeeId, activity_date: date, leave_request_id: req?.id ?? null, reason: reason.trim().slice(0, 500), created_by: a1.user.id })
+    .select("id, reason, created_at")
+    .single();
+  if (error) return { ok: false, error: error.message.includes("duplicate") ? t("Une modification est déjà autorisée pour cet employé à cette date.") : t(friendlyError(error.message)) };
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: t("Modification autorisée et enregistrée dans l'historique. Vous pouvez maintenant changer le statut, puis enregistrer la feuille."), data: { id: data.id, reason: data.reason, at: data.created_at } };
+}
+
+/** Retire la dérogation : la date repasse automatiquement en « Congé ». */
+export async function revokeLeaveOverride(id: string): Promise<ActionResult> {
+  const t = await getT();
+  const a1 = await assertModule("conges", "edit");
+  const a2 = await assertModule("pointage", "edit");
+  if ("error" in a1 || "error" in a2) return { ok: false, error: t("Seuls les utilisateurs autorisés à modifier les congés et le pointage peuvent autoriser cette modification.") };
+  const supabase = await createClient();
+  const { error } = await supabase.from("attendance_leave_overrides").update({ revoked: true }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: t("Autorisation retirée : le pointage repasse en « Congé ».") };
+}
+
 /** Enregistre une feuille de présence complète (ajouts, modifications, suppressions). */
 export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
   const t = await getT();
@@ -63,7 +109,7 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
   const toDelete = (existing ?? []).filter((e) => !keys.has(`${e.employee_id}:${e.shift}`)).map((e) => e.id);
   if (toDelete.length) {
     const { error } = await supabase.from("attendance").delete().in("id", toDelete);
-    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    if (error) return { ok: false, error: leaveError(t, error.message) };
   }
 
   if (rows.length) {
@@ -71,7 +117,7 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
       rows.map((r) => ({ ...r, activity_date, team_type })),
       { onConflict: "activity_date,employee_id,shift" },
     );
-    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    if (error) return { ok: false, error: leaveError(t, error.message) };
   }
 
   const { error: metaError } = await supabase.from("attendance_sheet_meta").upsert({ activity_date, team_type, team_lead }, { onConflict: "activity_date,team_type" });
