@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { AppModule, CurrentUser, PermissionMap, Profile } from "@/lib/types";
-import { MODULES } from "@/lib/types";
+import { MODULES, defaultPermission } from "@/lib/types";
 
 /**
  * Couche d'accès aux données d'authentification.
@@ -29,9 +29,7 @@ export async function getOptionalUser(): Promise<CurrentUser | null> {
     .select("module, can_view, can_edit")
     .eq("role", profile.role);
 
-  const permissions = Object.fromEntries(
-    MODULES.map((m) => [m, { can_view: false, can_edit: false }]),
-  ) as PermissionMap;
+  const permissions = Object.fromEntries(MODULES.map((m) => [m, defaultPermission(m, profile.role)])) as PermissionMap;
   for (const p of perms ?? []) {
     permissions[p.module as AppModule] = { can_view: p.can_view, can_edit: p.can_edit };
   }

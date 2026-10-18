@@ -33,7 +33,7 @@ export type RepairFilters = { q?: string; truck?: string; status?: string; from?
 type Row = Omit<Repair, "truck" | "counted" | "photos">;
 
 function groupPhotos(list: PhotoItem[]): Record<PhotoPhase, PhotoItem[]> {
-  const g: Record<PhotoPhase, PhotoItem[]> = { vehicule: [], avant: [], apres: [], justificatif: [] };
+  const g: Record<PhotoPhase, PhotoItem[]> = { vehicule: [], avant: [], apres: [], justificatif: [], materiel: [], document: [] };
   for (const p of list) g[p.phase]?.push(p);
   return g;
 }

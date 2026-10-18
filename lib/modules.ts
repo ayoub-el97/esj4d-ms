@@ -18,6 +18,7 @@ export const DASHBOARD_MODULES: ModuleDef[] = [
   { key: "rapport_camions", label: "Rapport camions", href: "/rapport-camions", description: "Suivi journalier des véhicules", accent: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
   // Même permission que le rapport camions (lecture / modification)
   { key: "rapport_camions", label: "Problèmes et réparations", href: "/reparations", description: "Pannes, réparations, reçus et dépenses par camion", accent: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  { key: "achats", label: "Achats de matériel", href: "/achats", description: "Achats, reçus, paiements et dépenses mensuelles", accent: "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950 dark:text-fuchsia-300" },
   { key: "conges", label: "Congé / Récupération", href: "/conges", description: "Demandes, soldes de congés et de récupération", accent: "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300" },
   { key: "avertissements", label: "Avertissements", href: "/avertissements", description: "Incidents et sanctions", accent: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" },
   { key: "programme", label: "Programme de travail", href: "/programme", description: "Tâches planifiées", accent: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },

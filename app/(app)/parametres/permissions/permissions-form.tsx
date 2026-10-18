@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { savePermissions } from "@/lib/actions/admin";
 import { useT } from "@/lib/i18n/client";
-import { MODULES, MODULE_LABELS, ROLES, ROLE_LABELS } from "@/lib/types";
+import { MODULES, MODULE_LABELS, ROLES, ROLE_LABELS, defaultPermission } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
@@ -44,7 +44,7 @@ export function PermissionsForm({ perms }: { perms: Record<string, { can_view: b
                   <TableRow key={mod}>
                     <TableCell className="font-medium">{t(MODULE_LABELS[mod])}</TableCell>
                     {roles.map((r) => {
-                      const p = perms[`${r}:${mod}`] ?? { can_view: false, can_edit: false };
+                      const p = perms[`${r}:${mod}`] ?? defaultPermission(mod, r);
                       return (
                         <TableCell key={r} className="text-center">
                           <input type="checkbox" name={`view:${r}:${mod}`} defaultChecked={p.can_view} aria-label={`${v} ${t(ROLE_LABELS[r])}`} className="mx-1 size-4 accent-indigo-600" />

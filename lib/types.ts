@@ -23,7 +23,8 @@ export type AppModule =
   | "rapports_travailleurs"
   | "cloture"
   | "employes"
-  | "parametres";
+  | "parametres"
+  | "achats";
 
 export const MODULE_LABELS: Record<AppModule, string> = {
   pointage: "Pointage",
@@ -38,7 +39,20 @@ export const MODULE_LABELS: Record<AppModule, string> = {
   cloture: "Clôturer la journée",
   employes: "Employés",
   parametres: "Paramètres",
+  achats: "Achats de matériel",
 };
+
+/**
+ * Droits par défaut d'un module ajouté après coup, tant qu'aucune ligne n'est enregistrée dans
+ * Paramètres › Permissions (même règle que la fonction SQL module_default_permission).
+ */
+export function defaultPermission(module: AppModule, role: AppRole): { can_view: boolean; can_edit: boolean } {
+  if (module === "achats") {
+    if (role === "admin" || role === "secretaire") return { can_view: true, can_edit: true };
+    if (role === "lecture") return { can_view: true, can_edit: false };
+  }
+  return { can_view: false, can_edit: false };
+}
 
 export const MODULES = Object.keys(MODULE_LABELS) as AppModule[];
 

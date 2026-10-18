@@ -572,6 +572,54 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 21. Achats de matériel : calculs, paiements échelonnés, annulation, journal
+-- ---------------------------------------------------------------------------
+do $$
+declare a uuid; b uuid; r record;
+begin
+  -- 10 boîtes × 150 DH = 1 500 DH ; payé 1 000 DH le jour même ; reste 500 DH
+  insert into public.material_purchases (purchase_date, supplier_name, material_name, category, quantity, unit, unit_price)
+  values ('2026-10-05', 'Droguerie Atlas', 'Produits de nettoyage', 'produits_nettoyage', 10, 'boite', 150) returning id into a;
+  insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-10-05', 1000);
+  select * into r from public.material_purchases_calc where id = a;
+  assert r.total_amount = 1500 and r.amount_paid = 1000 and r.amount_due = 500 and r.payment_status = 'partiel', 'total 1500, payé 1000, reste 500, partiel';
+  -- Correction de la quantité : total recalculé, pas de doublon
+  update public.material_purchases set quantity = 12 where id = a;
+  assert (select total_amount from public.material_purchases where id = a) = 1800, 'quantité corrigée : 1800';
+  assert (select count(*) from public.material_purchases where supplier_name = 'Droguerie Atlas') = 1, 'pas de doublon';
+  -- Solde payé le mois suivant : la valeur reste en octobre, le paiement compte en novembre
+  insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-11-03', 800);
+  assert (select payment_status from public.material_purchases_calc where id = a) = 'paye', 'soldé';
+  assert (select sum(amount) from public.material_purchase_payments where payment_date between '2026-11-01' and '2026-11-30' and not cancelled) = 800, 'paiements de novembre séparés de la valeur d''octobre';
+  -- Trop-perçu refusé
+  begin
+    insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-11-04', 1);
+    raise exception 'ÉCHEC : paiement au-delà du montant accepté';
+  exception when others then
+    if sqlerrm not like '%PAIEMENT_SUPERIEUR%' then raise; end if;
+  end;
+  -- Valeurs invalides refusées
+  begin
+    insert into public.material_purchases (purchase_date, supplier_name, material_name, quantity, unit_price) values ('2026-10-06', 'X', 'Y', -2, 10);
+    raise exception 'ÉCHEC : quantité négative acceptée';
+  exception when check_violation then null;
+  end;
+  -- Ajustement du total : administrateur avec motif
+  insert into public.material_purchases (purchase_date, supplier_name, material_name, category, quantity, unit, unit_price, total_amount, amount_adjusted, adjustment_reason)
+  values ('2026-10-07', 'Quincaillerie Nord', 'Pelles', 'outillage', 3, 'piece', 100, 280, true, 'Remise fournisseur') returning id into b;
+  assert (select total_amount from public.material_purchases where id = b) = 280, 'ajustement documenté conservé';
+  -- Annulation (jamais supprimé) : exclue des totaux
+  update public.material_purchases set cancelled = true, cancel_reason = 'Commande en double' where id = b;
+  assert (select payment_status from public.material_purchases_calc where id = b) = 'annule', 'achat annulé';
+  delete from public.material_purchases where id = b;
+  assert exists (select 1 from public.material_purchases where id = b), 'un achat ne doit pas être supprimé';
+  -- Journal : création + modifications (quantité) + paiements
+  assert (select count(*) from public.purchase_history(a)) >= 4, 'historique de l''achat et de ses paiements';
+  assert public.photo_can_view('material_purchase'), 'photos des achats visibles par l''administrateur';
+  raise notice 'OK 21 achats : total = quantité × prix, paiements échelonnés, reste dû, annulation, journal';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);
@@ -606,6 +654,19 @@ do $$ begin
   delete from public.reminders where title = 'Réunion mensuelle';
   assert (select count(*) from public.reminders where title = 'Réunion mensuelle') = 1, 'rappel partagé supprimé par un non-administrateur';
   raise notice 'OK 14b rappels : personnel privé, partagé visible par tous, suppression réservée';
+end $$;
+
+-- Achats : droits par défaut du rôle lecture seule (voir oui, créer non)
+do $$ begin
+  assert public.can_view_module('achats') and not public.can_edit_module('achats'), 'lecture seule : achats visibles, non modifiables';
+  assert (select count(*) from public.material_purchases_calc) >= 1, 'lecture seule : consultation des achats';
+  begin
+    insert into public.material_purchases (purchase_date, supplier_name, material_name, quantity, unit_price) values ('2026-10-08', 'X', 'Y', 1, 1);
+    raise exception 'ÉCHEC : lecture seule a créé un achat';
+  exception when others then
+    if sqlerrm not like '%row-level security%' then raise; end if;
+  end;
+  raise notice 'OK 21b achats : droits par défaut (lecture seule = consultation)';
 end $$;
 
 reset role;

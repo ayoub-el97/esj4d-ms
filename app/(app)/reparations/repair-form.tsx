@@ -23,7 +23,7 @@ import { PhotoUploader } from "@/components/photo-uploader";
 import { PendingPhotosPicker, uploadPendingPhotos, type PendingPhoto } from "@/components/pending-photos";
 
 type Pending = Record<PhotoPhase, PendingPhoto[]>;
-const EMPTY: Pending = { vehicule: [], avant: [], apres: [], justificatif: [] };
+const EMPTY: Pending = { vehicule: [], avant: [], apres: [], justificatif: [], materiel: [], document: [] };
 
 export function RepairForm({ repair, trucks, defaultTruck, defaultDate, canEdit }: { repair: Repair | null; trucks: Truck[]; defaultTruck?: string; defaultDate: string; canEdit: boolean }) {
   const { t } = useT();
