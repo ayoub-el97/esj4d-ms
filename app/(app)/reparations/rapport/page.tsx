@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getTrucks } from "@/lib/data/employees";
-import { getRepairExpenseReport } from "@/lib/data/repairs";
+import { getDowntimeReport, getRepairExpenseReport } from "@/lib/data/repairs";
 import { getProjectStart } from "@/lib/data/settings";
 import { formatDateFr, formatWorkMonth, isISODate, isMonth, todayISO, workMonthOf } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
@@ -38,7 +38,12 @@ export default async function RepairReportPage({ searchParams }: { searchParams:
     vue === "mois" ? resolveRepairPeriod({ mois }, projectStart) : vue === "annee" ? resolveRepairPeriod({ annee }, projectStart) : resolveRepairPeriod({ from: periodFrom, to: periodTo }, projectStart);
   const from = period.from!;
   const to = period.to!;
-  const [report, trucks] = await Promise.all([getRepairExpenseReport(from, to, sp.truck || undefined), getTrucks()]);
+  const [report, trucks, downtime] = await Promise.all([getRepairExpenseReport(from, to, sp.truck || undefined), getTrucks(), getDowntimeReport(from, to, sp.truck || undefined)]);
+  const spentByTruck = new Map(report.rows.map((r) => [r.truck_id, r.total]));
+  const dtTotals = downtime.rows.reduce(
+    (a, r) => ({ incidents: a.incidents + r.incidents, days: a.days + r.downtimeDays, openEnd: a.openEnd + r.openAtEnd, openEndDays: a.openEndDays + r.openAtEndDays, closed: a.closed + r.closedInPeriod, closedDays: a.closedDays + (r.avgClosedDays ?? 0) * r.closedInPeriod }),
+    { incidents: 0, days: 0, openEnd: 0, openEndDays: 0, closed: 0, closedDays: 0 },
+  );
   const unit = t("DH");
   const title = vue === "mois" ? formatWorkMonth(mois, projectStart, locale) : vue === "annee" ? t("Année {year}", { year: annee }) : t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) });
   const pdfParams: Record<string, string> = { vue, from, to };
@@ -123,7 +128,67 @@ export default async function RepairReportPage({ searchParams }: { searchParams:
         </div>
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
-        {t("Seules les dépenses réelles sont comptées : coût saisi et date de réparation, statut En cours ou Réparé (ou Annulé avec frais engagés). Les réparations en attente ne sont pas comptées. Chaque réparation est comptée une seule fois, dans le mois de sa date de réparation.")}
+        {t("Seules les dépenses réelles sont comptées : coût saisi et date de réparation, statut En réparation ou Réparé (ou Annulé avec frais engagés). Les dossiers « En panne » ne sont pas comptés. Chaque réparation est comptée une seule fois, dans le mois de sa date de réparation.")}
+      </p>
+
+      <h2 className="mb-2 text-base font-semibold">{t("Immobilisation par camion")}</h2>
+      <div className="mb-2 overflow-x-auto rounded-xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("Matricule")}</TableHead>
+              <TableHead className="text-end">{t("Pannes (début dans la période)")}</TableHead>
+              <TableHead className="text-end">{t("Jours d'immobilisation dans la période")}</TableHead>
+              <TableHead className="text-end">{t("Pannes ouvertes à la fin de la période")}</TableHead>
+              <TableHead className="text-end">{t("dont jours dans la période")}</TableHead>
+              <TableHead className="text-end">{t("Pannes réparées")}</TableHead>
+              <TableHead className="text-end">{t("Durée moyenne (j)")}</TableHead>
+              <TableHead className="text-end">{t("Dépenses ({unit})", { unit })}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {downtime.rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  {t("Aucune immobilisation sur cette période.")}
+                </TableCell>
+              </TableRow>
+            )}
+            {downtime.rows.map((r) => (
+              <TableRow key={r.truck_id}>
+                <TableCell className="font-mono font-semibold">
+                  <Link href={`/reparations/camion/${r.truck_id}`} className="hover:underline">
+                    {r.truck?.matricule}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-end">{r.incidents}</TableCell>
+                <TableCell className="text-end font-semibold">{r.downtimeDays}</TableCell>
+                <TableCell className={cn("text-end", r.openAtEnd > 0 && "font-semibold text-orange-700 dark:text-orange-400")}>{r.openAtEnd}</TableCell>
+                <TableCell className="text-end">{r.openAtEndDays}</TableCell>
+                <TableCell className="text-end">{r.closedInPeriod}</TableCell>
+                <TableCell className="text-end">{r.avgClosedDays ?? "—"}</TableCell>
+                <TableCell className="text-end tabular-nums">{formatAmount(spentByTruck.get(r.truck_id) ?? 0)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          {downtime.rows.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell>{t("Total")}</TableCell>
+                <TableCell className="text-end">{dtTotals.incidents}</TableCell>
+                <TableCell className="text-end">{dtTotals.days}</TableCell>
+                <TableCell className="text-end">{dtTotals.openEnd}</TableCell>
+                <TableCell className="text-end">{dtTotals.openEndDays}</TableCell>
+                <TableCell className="text-end">{dtTotals.closed}</TableCell>
+                <TableCell className="text-end">{dtTotals.closed ? Math.round((dtTotals.closedDays / dtTotals.closed) * 10) / 10 : "—"}</TableCell>
+                <TableCell className="text-end tabular-nums">{formatMoney(report.total, unit)}</TableCell>
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
+      </div>
+      <p className="mb-6 text-xs text-muted-foreground">
+        {t("Jours calendaires, jour d'immobilisation et jour de remise en service inclus. Une panne commencée avant la période ou encore ouverte n'est comptée que pour les jours compris dans la période (jusqu'à aujourd'hui) ; deux immobilisations qui se chevauchent sur le même camion ne comptent qu'une fois les jours communs. Durée moyenne : pannes réparées dans la période.")}
       </p>
 
       <h2 className="mb-2 text-base font-semibold">{t("Dépenses par camion")}</h2>
@@ -227,7 +292,19 @@ export default async function RepairReportPage({ searchParams }: { searchParams:
         </div>
       )}
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="reparations-depenses" params={pdfParams} />} extra={<LinkButton href="/reparations" variant="outline">{t("Liste des réparations")}</LinkButton>} />
+      <ModuleButtons
+        pdfSlot={<PdfExportButton kind="reparations-depenses" params={pdfParams} />}
+        extra={
+          <>
+            <LinkButton href="/reparations" variant="outline">
+              {t("Liste des réparations")}
+            </LinkButton>
+            <LinkButton href="/reparations/flotte" variant="outline">
+              {t("État de la flotte")}
+            </LinkButton>
+          </>
+        }
+      />
     </div>
   );
 }

@@ -51,6 +51,32 @@ export function SettingsForm({ settings }: { settings: AppSettings }) {
               {t("Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).")}
             </p>
           </div>
+          <fieldset className="space-y-2 rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">{t("Alertes camions (Problèmes et réparations)")}</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="truck_alert_orange_days">{t("Orange : panne en cours depuis (jours)")}</Label>
+                <Input id="truck_alert_orange_days" name="truck_alert_orange_days" type="number" min="1" max="365" defaultValue={settings.truck_alert_orange_days} required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="truck_alert_red_days">{t("Rouge : panne en cours depuis (jours)")}</Label>
+                <Input id="truck_alert_red_days" name="truck_alert_red_days" type="number" min="1" max="365" defaultValue={settings.truck_alert_red_days} required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="truck_alert_orange_count">{t("Orange : nombre de pannes sur la période glissante")}</Label>
+                <Input id="truck_alert_orange_count" name="truck_alert_orange_count" type="number" min="1" max="100" defaultValue={settings.truck_alert_orange_count} required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="truck_alert_red_count">{t("Rouge : nombre de pannes sur la période glissante")}</Label>
+                <Input id="truck_alert_red_count" name="truck_alert_red_count" type="number" min="1" max="100" defaultValue={settings.truck_alert_red_count} required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="truck_alert_window_days">{t("Période glissante (jours)")}</Label>
+                <Input id="truck_alert_window_days" name="truck_alert_window_days" type="number" min="1" max="365" defaultValue={settings.truck_alert_window_days} required />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("Jours calendaires, jour de la panne inclus. L'alerte la plus grave s'applique : rouge l'emporte sur orange.")}</p>
+          </fieldset>
           <div className="space-y-1">
             <Label htmlFor="pointage_period_start_day">{t("Rapport mensuel de pointage : jour de début de la période")}</Label>
             <Input id="pointage_period_start_day" name="pointage_period_start_day" type="number" min="1" max="28" step="1" defaultValue={settings.pointage_period_start_day} required className="w-28" />

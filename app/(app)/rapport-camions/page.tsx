@@ -5,6 +5,7 @@ import { getTruckReports } from "@/lib/data/reports";
 import { isISODate } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
+import { FleetAlertsCard } from "@/components/fleet-alerts";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { LinkButton } from "@/components/link-button";
@@ -38,6 +39,9 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
           </LinkButton>
         )}
       </ModuleHeader>
+      <div className="mb-4">
+        <FleetAlertsCard />
+      </div>
       <TruckTabs active="general" />
 
       {sp.ok && (

@@ -7,8 +7,8 @@ export type RepairStatus = "en_attente" | "en_cours" | "repare" | "annule";
 export const REPAIR_STATUSES: RepairStatus[] = ["en_attente", "en_cours", "repare", "annule"];
 
 export const REPAIR_STATUS_LABELS: Record<RepairStatus, string> = {
-  en_attente: "En attente",
-  en_cours: "En cours",
+  en_attente: "En panne",
+  en_cours: "En réparation",
   repare: "Réparé",
   annule: "Annulé",
 };

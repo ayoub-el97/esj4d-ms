@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { getTrucks } from "@/lib/data/employees";
 import { getRepair, getRepairHistory } from "@/lib/data/repairs";
-import { formatDateFr, formatDateTimeFr } from "@/lib/dates";
+import { formatDateFr, formatDateTimeFr, todayISO } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import { REPAIR_STATUS_LABELS, REPAIR_STATUS_STYLES, type RepairStatus } from "@/lib/repair-types";
@@ -28,6 +28,10 @@ const FIELD_LABELS: Record<string, string> = {
   cost: "Coût",
   cancelled_expense: "Frais engagés",
   repair_notes: "Notes sur la réparation",
+  out_of_service_since: "Hors service depuis",
+  expected_return_date: "Remise en service prévue",
+  correction_reason: "Motif de la correction",
+  downtime_days: "Jours hors service",
 };
 
 export default async function RepairPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string }> }) {
@@ -44,6 +48,11 @@ export default async function RepairPage({ params, searchParams }: { params: Pro
       <ModuleHeader title={t("Dossier de réparation — {matricule}", { matricule: repair.truck?.matricule ?? "" })} subtitle={t("Problème signalé le {date}", { date: formatDateFr(repair.reported_date) })} backHref="/reparations">
         <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", REPAIR_STATUS_STYLES[repair.status])}>{t(REPAIR_STATUS_LABELS[repair.status])}</span>
         <span className="text-sm font-medium">{repair.cost == null ? t("Coût non renseigné") : formatMoney(repair.cost, unit)}</span>
+        {repair.days != null && (
+          <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", repair.status === "repare" ? "bg-muted" : "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300")}>
+            {repair.status === "repare" ? t("Immobilisé {count} j", { count: repair.days }) : t("Hors service depuis {count} j", { count: repair.days })}
+          </span>
+        )}
       </ModuleHeader>
       {sp.ok && (
         <Alert className="mb-4">
@@ -51,7 +60,7 @@ export default async function RepairPage({ params, searchParams }: { params: Pro
         </Alert>
       )}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <RepairForm repair={repair} trucks={trucks} defaultDate={repair.reported_date} canEdit={canEdit} />
+        <RepairForm repair={repair} trucks={trucks} defaultDate={repair.reported_date} canEdit={canEdit} today={todayISO()} />
         <Card className="h-fit">
           <CardHeader>
             <CardTitle>{t("Historique des modifications")}</CardTitle>

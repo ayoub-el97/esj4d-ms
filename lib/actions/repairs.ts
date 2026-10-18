@@ -25,10 +25,30 @@ const schema = z
     cost: optionalCost,
     cancelled_expense: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
     repair_notes: z.string().max(2000).default(""),
+    out_of_service: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
+    out_of_service_since: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date("Date d'immobilisation invalide.").nullable()),
+    expected_return_date: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date("Date de remise en service prévue invalide.").nullable()),
+    correction_reason: z.string().trim().max(500).default(""),
+  })
+  .refine((d) => !d.out_of_service || !!d.out_of_service_since, { message: "Indiquez la date à laquelle le camion est devenu indisponible.", path: ["out_of_service_since"] })
+  .refine((d) => !d.out_of_service || d.status !== "repare" || !d.repair_date || !d.out_of_service_since || d.repair_date >= d.out_of_service_since, {
+    message: "La date de remise en service ne peut pas précéder la date d'immobilisation.",
+    path: ["repair_date"],
+  })
+  .refine((d) => !d.out_of_service || !d.expected_return_date || !d.out_of_service_since || d.expected_return_date >= d.out_of_service_since, {
+    message: "La remise en service prévue ne peut pas précéder la date d'immobilisation.",
+    path: ["expected_return_date"],
   })
   .refine((d) => d.status !== "repare" || (d.repair_date && d.cost != null), { message: "Pour une réparation terminée, indiquez la date de réparation et le coût (0 si gratuit).", path: ["status"] })
   .refine((d) => !d.repair_date || d.repair_date >= d.reported_date, { message: "La date de réparation ne peut pas précéder la date du problème.", path: ["repair_date"] })
-  .transform((d) => ({ ...d, cancelled_expense: d.status === "annule" ? d.cancelled_expense : false }));
+  .transform(({ out_of_service, correction_reason, ...d }) => ({
+    ...d,
+    cancelled_expense: d.status === "annule" ? d.cancelled_expense : false,
+    out_of_service_since: out_of_service ? d.out_of_service_since : null,
+    expected_return_date: out_of_service ? d.expected_return_date : null,
+    // Motif envoyé seulement s'il est saisi (le précédent reste dans le journal)
+    ...(correction_reason ? { correction_reason } : {}),
+  }));
 
 function refresh(id?: string) {
   revalidatePath("/reparations", "layout");

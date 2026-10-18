@@ -16,7 +16,7 @@ export default async function NouveauProblemePage({ searchParams }: { searchPara
   return (
     <div className="mx-auto max-w-3xl">
       <ModuleHeader title={t("Nouveau problème de camion")} subtitle={t("Photos : prenez-les directement avec le téléphone ou importez-les ; elles sont envoyées à l'enregistrement.")} backHref="/reparations" />
-      <RepairForm repair={null} trucks={sorted} defaultTruck={sorted.some((tr) => tr.id === camion) ? camion : undefined} defaultDate={todayISO()} canEdit />
+      <RepairForm repair={null} trucks={sorted} defaultTruck={sorted.some((tr) => tr.id === camion) ? camion : undefined} defaultDate={todayISO()} today={todayISO()} canEdit />
     </div>
   );
 }

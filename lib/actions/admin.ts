@@ -119,6 +119,11 @@ const settingsSchema = z.object({
   double_day_on_rest_day: z.boolean(),
   double_day_two_shifts: z.boolean(),
   project_start_date: z.union([z.literal(""), z.string().date("Date de début du projet invalide.")]),
+  truck_alert_orange_days: z.coerce.number().int().min(1, "Seuils d'alerte invalides.").max(365, "Seuils d'alerte invalides."),
+  truck_alert_red_days: z.coerce.number().int().min(1, "Seuils d'alerte invalides.").max(365, "Seuils d'alerte invalides."),
+  truck_alert_orange_count: z.coerce.number().int().min(1, "Seuils d'alerte invalides.").max(100, "Seuils d'alerte invalides."),
+  truck_alert_red_count: z.coerce.number().int().min(1, "Seuils d'alerte invalides.").max(100, "Seuils d'alerte invalides."),
+  truck_alert_window_days: z.coerce.number().int().min(1, "Seuils d'alerte invalides.").max(365, "Seuils d'alerte invalides."),
   pointage_period_start_day: z.coerce.number().int("Jour de début de la période invalide (1 à 28).").min(1, "Jour de début de la période invalide (1 à 28).").max(28, "Jour de début de la période invalide (1 à 28)."),
 });
 
@@ -135,8 +140,15 @@ export async function saveSettings(_prev: ActionResult | null, formData: FormDat
     double_day_two_shifts: formData.get("double_day_two_shifts") === "on",
     project_start_date: formData.get("project_start_date") ?? "",
     pointage_period_start_day: formData.get("pointage_period_start_day") ?? 8,
+    truck_alert_orange_days: formData.get("truck_alert_orange_days") ?? 3,
+    truck_alert_red_days: formData.get("truck_alert_red_days") ?? 7,
+    truck_alert_orange_count: formData.get("truck_alert_orange_count") ?? 3,
+    truck_alert_red_count: formData.get("truck_alert_red_count") ?? 5,
+    truck_alert_window_days: formData.get("truck_alert_window_days") ?? 30,
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
+  if (parsed.data.truck_alert_red_days < parsed.data.truck_alert_orange_days || parsed.data.truck_alert_red_count < parsed.data.truck_alert_orange_count)
+    return { ok: false, error: t("Les seuils rouges doivent être supérieurs ou égaux aux seuils orange.") };
 
   const supabase = await createClient();
   const rows = Object.entries(parsed.data).map(([key, value]) => ({ key, value }));

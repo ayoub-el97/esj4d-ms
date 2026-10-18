@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { Plus } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getTrucks } from "@/lib/data/employees";
-import { getRepairs } from "@/lib/data/repairs";
+import { getAlertRules, getRepairs, getTruckDowntime } from "@/lib/data/repairs";
+import { AlertBadge, FLEET_STATE_LABELS, alertReasonTexts } from "@/components/fleet-alerts";
 import { formatDateFr } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
@@ -23,7 +24,8 @@ export default async function TruckRepairHistoryPage({ params }: { params: Promi
   const trucks = await getTrucks();
   const truck = trucks.find((tr) => tr.id === truckId);
   if (!truck) notFound();
-  const repairs = await getRepairs({ truck: truckId });
+  const [repairs, downtime, rules] = await Promise.all([getRepairs({ truck: truckId }), getTruckDowntime(truckId), getAlertRules()]);
+  const totalDays = repairs.filter((r) => r.status === "repare" && r.days != null).reduce((s, r) => s + r.days!, 0);
   const unit = t("DH");
   const spent = repairs.filter((r) => r.counted).reduce((s, r) => s + (r.cost ?? 0), 0);
   const open = repairs.filter((r) => r.status === "en_attente" || r.status === "en_cours").length;
@@ -42,18 +44,31 @@ export default async function TruckRepairHistoryPage({ params }: { params: Promi
         )}
       </ModuleHeader>
 
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className={cn("mb-4 flex flex-wrap items-center gap-2 rounded-xl border p-3", downtime.alert === "rouge" ? "border-red-300 bg-red-50 dark:bg-red-950/30" : downtime.alert === "orange" ? "border-orange-300 bg-orange-50 dark:bg-orange-950/30" : "bg-card")}>
+        <AlertBadge level={downtime.alert} t={t} />
+        <span className="font-semibold">{t(FLEET_STATE_LABELS[downtime.state])}</span>
+        {downtime.since && <span>{t("hors service depuis le {date} — {count} jour(s)", { date: formatDateFr(downtime.since), count: downtime.currentDays })}</span>}
+        {downtime.alertReasons.length > 0 && <span className="text-sm text-muted-foreground">({alertReasonTexts(t, { ...downtime, truck, lastRepairDate: null, repairedInPeriod: 0, expenses: 0 }, rules).join(" ; ")})</span>}
+        {downtime.overdue && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">{t("remise en service en retard")}</span>}
+        {downtime.issues.length > 0 && <span className="text-sm font-medium text-red-700">{t("Dossiers à vérifier : pannes ouvertes en double ou immobilisations qui se chevauchent.")}</span>}
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <p className="text-xs text-muted-foreground">{t("Problèmes enregistrés")}</p>
           <p className="mt-1 text-lg font-semibold">{repairs.length}</p>
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-sm">
-          <p className="text-xs text-muted-foreground">{t("En attente / en cours")}</p>
+          <p className="text-xs text-muted-foreground">{t("En panne / en réparation")}</p>
           <p className="mt-1 text-lg font-semibold">{open}</p>
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <p className="text-xs text-muted-foreground">{t("Dépenses de réparation (total)")}</p>
           <p className="mt-1 text-lg font-semibold">{formatMoney(spent, unit)}</p>
+        </div>
+        <div className="rounded-xl border bg-card p-3 shadow-sm">
+          <p className="text-xs text-muted-foreground">{t("Jours hors service (pannes réparées)")}</p>
+          <p className="mt-1 text-lg font-semibold">{t("{count} j", { count: totalDays })}</p>
         </div>
       </div>
 
@@ -64,6 +79,13 @@ export default async function TruckRepairHistoryPage({ params }: { params: Promi
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{formatDateFr(r.reported_date)}</span>
               <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", REPAIR_STATUS_STYLES[r.status])}>{t(REPAIR_STATUS_LABELS[r.status])}</span>
+              {r.days != null && (
+                <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", r.status === "repare" ? "bg-muted" : "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300")}>
+                  {r.status === "repare"
+                    ? t("Immobilisé {count} j (du {from} au {to})", { count: r.days, from: formatDateFr(r.out_of_service_since), to: formatDateFr(r.repair_date) })
+                    : t("Hors service depuis {count} j (depuis le {from})", { count: r.days, from: formatDateFr(r.out_of_service_since) })}
+                </span>
+              )}
               <span className="ms-auto text-sm font-semibold">
                 {r.cost == null ? t("Coût non renseigné") : formatMoney(r.cost, unit)}
                 {r.cost != null && !r.counted && <span className="ms-1 text-xs font-normal text-muted-foreground">({t("non compté")})</span>}

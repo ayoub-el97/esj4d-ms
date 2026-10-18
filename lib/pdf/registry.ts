@@ -25,10 +25,12 @@ import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
 import { EmployeeLeavePdf, LeaveBalancesPdf, LeaveHistoryPdf, RecoveryBalancesPdf, RecoveryHistoryPdf, WorkersPeriodPdf } from "./leaves";
 import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
 import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
-import { RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
+import { FleetPdf, RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
 import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
 import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchases";
-import { getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
+import { getDowntimeReport, getFleetOverview, getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
+import { applyFleetFilter, FLEET_FILTERS } from "@/lib/fleet-filters";
+import { workMonthRange } from "@/lib/dates";
 import { getLiveGrid, getPeriodSnapshots, getPeriodStartDay } from "@/lib/data/attendance-grid";
 import { filterGrid } from "@/lib/attendance-grid";
 import { AttendanceGridPdf } from "./attendance-grid";
@@ -156,7 +158,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
     }
     case "reparations-depenses": {
       if (!isISODate(params.from) || !isISODate(params.to)) return null;
-      const report = await getRepairExpenseReport(params.from, params.to, params.truck || undefined);
+      const [report, downtime] = await Promise.all([getRepairExpenseReport(params.from, params.to, params.truck || undefined), getDowntimeReport(params.from, params.to, params.truck || undefined)]);
       const sub =
         params.vue === "mois" && isMonth(params.mois)
           ? formatWorkMonth(params.mois, projectStart, locale)
@@ -165,7 +167,19 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
             : periodLabel(t, { from: params.from, to: params.to });
       const truckLabel = params.truck ? report.rows[0]?.truck?.matricule : undefined;
       const subtitle2 = [sub, truckLabel].filter(Boolean).join(" · ");
-      return done("rapport_camions", `${t("Dépenses de réparation des camions")} ${subtitle2}`, `depenses-reparations-${params.from}-${params.to}.pdf`, createElement(RepairExpensesPdf, { ...common, subtitle: subtitle2, report }));
+      return done("rapport_camions", `${t("Dépenses de réparation des camions")} ${subtitle2}`, `depenses-reparations-${params.from}-${params.to}.pdf`, createElement(RepairExpensesPdf, { ...common, subtitle: subtitle2, report, downtime: downtime.rows }));
+    }
+    case "flotte": {
+      const mois = isMonth(params.mois) ? params.mois : null;
+      if (!mois) return null;
+      const { from, to } = workMonthRange(mois, projectStart);
+      const fleet = await getFleetOverview(from, to);
+      const etat = FLEET_FILTERS.some((f) => f.key === params.etat) ? params.etat! : "tous";
+      const order = ["rouge", "orange", "vert"];
+      const trucks = applyFleetFilter(fleet.trucks, etat).sort((a, b) => order.indexOf(a.alert) - order.indexOf(b.alert) || b.currentDays - a.currentDays || a.truck.matricule.localeCompare(b.truck.matricule));
+      const label = FLEET_FILTERS.find((f) => f.key === etat)!.label;
+      const subtitle = `${t("au {date}", { date: formatDateFr(fleet.today) })} · ${t(label)} · ${t("statistiques : {period}", { period: formatWorkMonth(mois, projectStart, locale) })}`;
+      return done("rapport_camions", `${t("État de la flotte")} ${fleet.today}`, `etat-flotte-${fleet.today}.pdf`, createElement(FleetPdf, { ...common, subtitle, trucks, rules: fleet.rules }));
     }
     case "reparation": {
       if (!params.id) return null;

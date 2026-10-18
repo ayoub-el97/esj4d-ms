@@ -8,6 +8,7 @@ import { ADMIN_MODULES, DASHBOARD_MODULES } from "@/lib/modules";
 import { NavIcon } from "@/lib/nav-icons";
 import { isAlert, reminderState } from "@/lib/reminder-types";
 import { RemindersPanel } from "@/components/reminders-panel";
+import { FleetAlertsCard } from "@/components/fleet-alerts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +64,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
         <RemindersPanel reminders={[...alerts, ...next]} today={today} emptyText={t("Aucun rappel. Créez-en un pour être alerté à l'approche d'une date.")} />
       </section>
+
+      {user.permissions.rapport_camions.can_view && <FleetAlertsCard />}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">{t("Modules")}</h2>

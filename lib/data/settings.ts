@@ -16,6 +16,12 @@ export type AppSettings = {
   project_start_date: string;
   /** Jour de début de la période de pointage (1 à 28) : du 8 au 7 par défaut */
   pointage_period_start_day: number;
+  /** Alertes camions : seuils (jours d'immobilisation, nombre de pannes sur la fenêtre) */
+  truck_alert_orange_days: number;
+  truck_alert_red_days: number;
+  truck_alert_orange_count: number;
+  truck_alert_red_count: number;
+  truck_alert_window_days: number;
 };
 
 const DEFAULTS: AppSettings = {
@@ -29,6 +35,11 @@ const DEFAULTS: AppSettings = {
   company_logo_path: "",
   project_start_date: "",
   pointage_period_start_day: 8,
+  truck_alert_orange_days: 3,
+  truck_alert_red_days: 7,
+  truck_alert_orange_count: 3,
+  truck_alert_red_count: 5,
+  truck_alert_window_days: 30,
 };
 
 /** Lit les réglages (table settings) en appliquant les valeurs par défaut. */

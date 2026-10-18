@@ -2,8 +2,9 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getTrucks, type Truck } from "@/lib/data/employees";
 import { getPhotosFor } from "@/lib/data/photos";
-import { getProjectStart } from "@/lib/data/settings";
-import { workMonthOf } from "@/lib/dates";
+import { getProjectStart, getSettings } from "@/lib/data/settings";
+import { todayISO, workMonthOf } from "@/lib/dates";
+import { alertRulesFrom, incidentDays, periodDowntime, truckDowntime, type AlertRules, type DowntimeIncident, type PeriodDowntime, type TruckDowntime } from "@/lib/downtime";
 import type { PhotoItem, PhotoPhase } from "@/lib/photo-types";
 import { isActualExpense, type RepairStatus } from "@/lib/repair-types";
 
@@ -20,9 +21,18 @@ export type Repair = {
   cost: number | null;
   cancelled_expense: boolean;
   repair_notes: string;
+  /** Hors service depuis (null = camion resté en service) */
+  out_of_service_since: string | null;
+  /** Remise en service prévue */
+  expected_return_date: string | null;
+  correction_reason: string;
+  /** Durée finale figée par la base (réparé) */
+  downtime_days: number | null;
   created_at: string;
   updated_at: string;
   truck: Truck | null;
+  /** Jours hors service (en cours : jusqu'à aujourd'hui ; réparé : durée finale) */
+  days: number | null;
   /** Compté dans les dépenses (même règle que la base) */
   counted: boolean;
   photos: Record<PhotoPhase, PhotoItem[]>;
@@ -30,7 +40,7 @@ export type Repair = {
 
 export type RepairFilters = { q?: string; truck?: string; status?: string; from?: string; to?: string };
 
-type Row = Omit<Repair, "truck" | "counted" | "photos">;
+type Row = Omit<Repair, "truck" | "counted" | "photos" | "days">;
 
 function groupPhotos(list: PhotoItem[]): Record<PhotoPhase, PhotoItem[]> {
   const g: Record<PhotoPhase, PhotoItem[]> = { vehicule: [], avant: [], apres: [], justificatif: [], materiel: [], document: [] };
@@ -41,10 +51,12 @@ function groupPhotos(list: PhotoItem[]): Record<PhotoPhase, PhotoItem[]> {
 async function hydrate(rows: Row[]): Promise<Repair[]> {
   const [trucks, photos] = await Promise.all([getTrucks(), getPhotosFor("truck_repair", rows.map((r) => r.id))]);
   const byId = new Map(trucks.map((t) => [t.id, t]));
+  const today = todayISO();
   return rows.map((r) => {
     const cost = r.cost == null ? null : Number(r.cost);
     const base = { ...r, cost };
-    return { ...base, truck: byId.get(r.truck_id) ?? null, counted: isActualExpense(base), photos: groupPhotos(photos.get(r.id) ?? []) };
+    const days = r.status === "repare" && r.downtime_days != null ? r.downtime_days : incidentDays(r, today);
+    return { ...base, truck: byId.get(r.truck_id) ?? null, counted: isActualExpense(base), photos: groupPhotos(photos.get(r.id) ?? []), days };
   });
 }
 
@@ -154,4 +166,76 @@ export async function getRepairExpenseReport(from: string, to: string, truckId?:
     repairs: rows.reduce((s, r) => s + r.repairs, 0),
     byMonth: Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month)),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Immobilisation (jours hors service) et alertes
+// ---------------------------------------------------------------------------
+export async function getAlertRules(): Promise<AlertRules> {
+  return alertRulesFrom((await getSettings()) as unknown as Record<string, unknown>);
+}
+
+async function getIncidents(): Promise<DowntimeIncident[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("truck_repairs").select("id, truck_id, status, out_of_service_since, repair_date, expected_return_date, reported_date").limit(10000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DowntimeIncident[];
+}
+
+export type FleetTruck = TruckDowntime & { truck: Truck; lastRepairDate: string | null; repairedInPeriod: number; period?: PeriodDowntime; expenses: number };
+
+export type FleetOverview = {
+  today: string;
+  rules: AlertRules;
+  trucks: FleetTruck[];
+  from: string;
+  to: string;
+};
+
+/** Situation de chaque camion aujourd'hui + statistiques sur [from, to] (dépenses réelles : date de réparation). */
+export async function getFleetOverview(from: string, to: string): Promise<FleetOverview> {
+  const supabase = await createClient();
+  const today = todayISO();
+  const [trucks, incidents, rules, { data: expenses }] = await Promise.all([
+    getTrucks(),
+    getIncidents(),
+    getAlertRules(),
+    supabase.from("truck_repair_expenses").select("truck_id, cost").gte("expense_date", from).lte("expense_date", to),
+  ]);
+  const spent = new Map<string, number>();
+  for (const e of expenses ?? []) spent.set(e.truck_id, (spent.get(e.truck_id) ?? 0) + Number(e.cost));
+  const list: FleetTruck[] = trucks
+    .filter((tr) => tr.is_active || incidents.some((r) => r.truck_id === tr.id))
+    .map((tr) => {
+      const mine = incidents.filter((r) => r.truck_id === tr.id);
+      const repaired = mine.filter((r) => r.status === "repare" && r.repair_date).map((r) => r.repair_date!).sort();
+      return {
+        ...truckDowntime(tr.id, incidents, today, rules),
+        truck: tr,
+        lastRepairDate: repaired.at(-1) ?? null,
+        repairedInPeriod: repaired.filter((d) => d >= from && d <= to).length,
+        period: periodDowntime(tr.id, incidents, from, to, today),
+        expenses: spent.get(tr.id) ?? 0,
+      };
+    });
+  return { today, rules, trucks: list, from, to };
+}
+
+/** Immobilisation de chaque camion sur une période (rapport mensuel / annuel / libre). */
+export async function getDowntimeReport(from: string, to: string, truckId?: string): Promise<{ rows: (PeriodDowntime & { truck: Truck | null })[]; today: string }> {
+  const today = todayISO();
+  const [trucks, incidents] = await Promise.all([getTrucks(), getIncidents()]);
+  const ids = [...new Set(incidents.map((r) => r.truck_id))].filter((id) => !truckId || id === truckId);
+  const byId = new Map(trucks.map((t) => [t.id, t]));
+  const rows = ids
+    .map((id) => ({ ...periodDowntime(id, incidents, from, to, today), truck: byId.get(id) ?? null }))
+    .filter((r) => r.incidents || r.downtimeDays || r.closedInPeriod)
+    .sort((a, b) => b.downtimeDays - a.downtimeDays || b.incidents - a.incidents);
+  return { rows, today };
+}
+
+/** Situation actuelle d'un camion (historique). */
+export async function getTruckDowntime(truckId: string): Promise<TruckDowntime> {
+  const [incidents, rules] = await Promise.all([getIncidents(), getAlertRules()]);
+  return truckDowntime(truckId, incidents, todayISO(), rules);
 }

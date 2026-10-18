@@ -86,6 +86,7 @@ export async function assertModule(
  */
 export function friendlyError(message: string): string {
   if (message.includes("JOURNEE_CLOTUREE")) return "Cette journée est clôturée : modification impossible.";
+  if (message.includes("MOTIF_CORRECTION")) return "Ce dossier est déjà réparé : indiquez le motif de la correction (5 caractères minimum).";
   if (message.includes("CONGE_APPROUVE")) return "Attention : cet employé bénéficie d'un congé approuvé pour cette date. Le pointage est automatiquement défini sur « Congé ». Toute modification nécessite une autorisation.";
   if (message.includes("ACCES_REFUSE") && message.includes("rouvrir")) return "Seul un administrateur peut rouvrir une journée.";
   if (message.includes("ACCES_REFUSE")) return "Vous n'êtes pas autorisé à clôturer une journée.";

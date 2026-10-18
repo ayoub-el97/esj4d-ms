@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ChevronRight, History, Plus, Search } from "lucide-react";
+import { BarChart3, ChevronRight, History, Plus, Search, Truck } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getTrucks } from "@/lib/data/employees";
 import { getRepairs } from "@/lib/data/repairs";
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { resolveRepairPeriod } from "./period";
+import { FleetAlertsCard } from "@/components/fleet-alerts";
 
 export const generateMetadata = pageTitle("Problèmes et réparations");
 
@@ -37,8 +38,8 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
 
   const kpis = [
     { label: t("Dossiers"), value: String(repairs.length) },
-    { label: t("En attente"), value: String(count("en_attente")) },
-    { label: t("En cours"), value: String(count("en_cours")) },
+    { label: t("En panne"), value: String(count("en_attente")) },
+    { label: t("En réparation"), value: String(count("en_cours")) },
     { label: t("Réparés"), value: String(count("repare")) },
     { label: t("Dépenses réelles"), value: formatMoney(spent, unit) },
   ];
@@ -51,6 +52,9 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
             <Plus /> {t("Nouveau problème")}
           </LinkButton>
         )}
+        <LinkButton href="/reparations/flotte" size="sm" variant="secondary">
+          <Truck /> {t("État de la flotte")}
+        </LinkButton>
         <LinkButton href="/reparations/rapport" size="sm" variant="secondary">
           <BarChart3 /> {t("Rapport des dépenses")}
         </LinkButton>
@@ -60,6 +64,10 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
           </LinkButton>
         )}
       </ModuleHeader>
+
+      <div className="mb-4">
+        <FleetAlertsCard />
+      </div>
 
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1 sm:col-span-2">
@@ -142,6 +150,7 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
             <p className="mt-1 line-clamp-2 text-sm">{r.problem_description}</p>
             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
               {formatDateFr(r.reported_date)}
+              {r.days != null && <span className={cn("font-medium", r.status !== "repare" && "text-orange-700 dark:text-orange-400")}>· {r.status === "repare" ? t("{count} j hors service", { count: r.days }) : t("hors service depuis {count} j", { count: r.days })}</span>}
               {r.cost != null && <span className={cn("font-medium", r.counted ? "text-foreground" : "")}>· {formatMoney(r.cost, unit)}</span>}
               <ChevronRight className="ms-auto size-4 rtl:rotate-180" />
             </div>
@@ -158,6 +167,7 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
                 <TableHead>{t("Signalé le")}</TableHead>
                 <TableHead>{t("Matricule")}</TableHead>
                 <TableHead>{t("Problème")}</TableHead>
+                <TableHead>{t("Hors service")}</TableHead>
                 <TableHead>{t("Réparé le")}</TableHead>
                 <TableHead className="text-end">{t("Coût ({unit})", { unit })}</TableHead>
                 <TableHead>{t("Statut")}</TableHead>
@@ -176,6 +186,16 @@ export default async function ReparationsPage({ searchParams }: { searchParams: 
                   </TableCell>
                   <TableCell className="max-w-72">
                     <span className="line-clamp-2">{r.problem_description}</span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {r.days == null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : r.status === "repare" ? (
+                      t("{count} j", { count: r.days })
+                    ) : (
+                      <span className="font-semibold text-orange-700 dark:text-orange-400">{t("{count} j (en cours)", { count: r.days })}</span>
+                    )}
+                    {r.out_of_service_since && <span className="block text-xs text-muted-foreground">{t("depuis le {date}", { date: formatDateFr(r.out_of_service_since) })}</span>}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{r.repair_date ? formatDateFr(r.repair_date) : "—"}</TableCell>
                   <TableCell className={cn("text-end tabular-nums", !r.counted && "text-muted-foreground")} title={r.counted ? undefined : t("Non compté dans les dépenses")}>
