@@ -1573,4 +1573,6 @@ export const ar: Messages = {
   "{employees} employé(s) · {count} jour(s)": "{employees} موظف · {count} يوم",
   "{month} — du {from} au {to}": "{month} — من {from} إلى {to}",
   "À vérifier": "للتحقق",
+  "Total de la période : {count}": "مجموع الفترة: {count}",
+  "période : {count}": "الفترة: {count}",
 };

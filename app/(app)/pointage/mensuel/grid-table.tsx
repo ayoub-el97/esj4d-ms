@@ -58,13 +58,6 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
                 </th>
               );
             })}
-            {codes.map((c) => (
-              <th key={c} rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 text-center text-[10px] font-bold")} title={t(CODE_DEF[c].label)}>
-                <span className="inline-block min-w-8 rounded px-1 py-0.5" style={{ backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg }}>
-                  {c}
-                </span>
-              </th>
-            ))}
           </tr>
           <tr>
             {grid.dates.map((d) => (
@@ -77,7 +70,7 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
         <tbody>
           {grid.rows.length === 0 && (
             <tr>
-              <td colSpan={4 + grid.dates.length + codes.length} className="p-6 text-center text-muted-foreground">
+              <td colSpan={4 + grid.dates.length} className="p-6 text-center text-muted-foreground">
                 {t("Aucun employé pour cette période et ces filtres.")}
               </td>
             </tr>
@@ -93,11 +86,6 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
               {grid.dates.map((d) => (
                 <Cell key={d} cell={r.cells[d]} date={d} today={today} t={t} />
               ))}
-              {codes.map((c) => (
-                <td key={c} className="border-e border-b bg-muted/30 px-1 text-center font-semibold tabular-nums">
-                  {r.totals[c] || ""}
-                </td>
-              ))}
             </tr>
           ))}
         </tbody>
@@ -105,22 +93,26 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
           <tfoot>
             {codes.map((c, i) => (
               <tr key={c} className={i === 0 ? "[&>td]:border-t-2" : ""}>
-                <td colSpan={4} className="sticky start-0 z-10 border-e-2 border-b bg-muted px-2 font-semibold">
+                <td colSpan={4} className="sticky start-0 z-10 border-e-2 border-b bg-muted px-2 font-semibold" title={t("Total de la période : {count}", { count: grid.totals[c] ?? 0 })}>
                   <span className="me-1 inline-block w-9 rounded px-1 text-center text-[10px] font-bold" style={{ backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg }}>
                     {c}
                   </span>
-                  {t("Total {code}", { code: c })} — {t(CODE_DEF[c].label)}
+                  {t(CODE_DEF[c].label)}
+                  <span className="ms-1 font-normal text-muted-foreground">({t("période : {count}", { count: grid.totals[c] ?? 0 })})</span>
                 </td>
-                {grid.dates.map((d) => (
-                  <td key={d} className="border-e border-b bg-muted/40 text-center text-[11px] tabular-nums" title={`${formatDateFr(d)} — ${t(CODE_DEF[c].label)}`}>
-                    {grid.dayTotals[d]?.[c] || ""}
-                  </td>
-                ))}
-                {codes.map((c2) => (
-                  <td key={c2} className="border-e border-b bg-muted px-1 text-center font-bold tabular-nums">
-                    {c2 === c ? grid.totals[c] : ""}
-                  </td>
-                ))}
+                {grid.dates.map((d) => {
+                  const n = grid.dayTotals[d]?.[c] ?? 0;
+                  return (
+                    <td
+                      key={d}
+                      className={cn("h-7 border-e border-b text-center text-[11px] font-semibold tabular-nums", !n && "bg-muted/30 font-normal text-muted-foreground")}
+                      style={n ? { backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg } : undefined}
+                      title={`${formatDateFr(d)} — ${t(CODE_DEF[c].label)} : ${n}`}
+                    >
+                      {n}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tfoot>

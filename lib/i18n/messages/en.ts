@@ -1573,4 +1573,6 @@ export const en: Messages = {
   "{employees} employé(s) · {count} jour(s)": "{employees} employee(s) · {count} day(s)",
   "{month} — du {from} au {to}": "{month} — from {from} to {to}",
   "À vérifier": "To check",
+  "Total de la période : {count}": "Period total: {count}",
+  "période : {count}": "period: {count}",
 };

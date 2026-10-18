@@ -8,7 +8,6 @@ import { usePdf } from "./context";
 const PAGE_W = 1191;
 const PAD = 18;
 const ID_W = { nb: 20, nom: 74, prenom: 64, fonction: 62 };
-const TOTAL_W = 22;
 const BORDER = "#9ca3af";
 
 const s = StyleSheet.create({
@@ -52,7 +51,7 @@ export function AttendanceGridPdf({
   const { t, locale, logoUrl } = usePdf();
   const codes: GridCode[] = GRID_CODES.filter((c) => !c.extra || grid.extraCodes.includes(c.code)).map((c) => c.code);
   const idW = ID_W.nb + ID_W.nom + ID_W.prenom + ID_W.fonction;
-  const avail = PAGE_W - 2 * PAD - idW - codes.length * TOTAL_W - 2;
+  const avail = PAGE_W - 2 * PAD - idW - 2;
   const dayW = Math.min(30, avail / Math.max(grid.dates.length, 1));
   const title = t("Rapport mensuel de pointage");
 
@@ -121,22 +120,12 @@ export function AttendanceGridPdf({
                 </Text>
               </View>
             ))}
-            {codes.map((c) => (
-              <View key={c} style={[s.cell, { width: TOTAL_W, backgroundColor: CODE_DEF[c].bg }]}>
-                <Text style={[s.txt, { color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" }]}>{c}</Text>
-              </View>
-            ))}
           </View>
           <View style={s.row}>
             {idCells("", "", "", "", true)}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, s.head, { width: dayW }, grid.holidays[d] ? { backgroundColor: "#e9d5ff" } : {}]}>
                 <Text style={s.txt}>{WEEKDAY_INITIALS[weekdayOf(d)]}</Text>
-              </View>
-            ))}
-            {codes.map((c) => (
-              <View key={c} style={[s.cell, s.head, { width: TOTAL_W }]}>
-                <Text style={[s.txt, { fontSize: 5.5 }]}>{t("Total")}</Text>
               </View>
             ))}
           </View>
@@ -170,11 +159,6 @@ export function AttendanceGridPdf({
                 </View>
               );
             })}
-            {codes.map((c) => (
-              <View key={c} style={[s.cell, { width: TOTAL_W, backgroundColor: "#f9fafb" }]}>
-                <Text style={[s.txt, { fontFamily: "Helvetica-Bold" }]}>{r.totals[c] ? String(r.totals[c]) : ""}</Text>
-              </View>
-            ))}
           </View>
         ))}
 
@@ -186,19 +170,17 @@ export function AttendanceGridPdf({
                 <View style={[s.cell, { width: idW, borderLeftWidth: 0.5, borderRightWidth: 1, backgroundColor: "#e5e7eb", flexDirection: "row", alignItems: "center", justifyContent: "flex-start" }]}>
                   <Text style={[s.txt, { width: 22, marginLeft: 2, backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" }]}>{c}</Text>
                   <Text style={[s.txtLeft, { fontFamily: "Helvetica-Bold" }]}>
-                    {t("Total {code}", { code: c })} — {t(CODE_DEF[c].label)}
+                    {t(CODE_DEF[c].label)} ({t("période : {count}", { count: grid.totals[c] ?? 0 })})
                   </Text>
                 </View>
-                {grid.dates.map((d) => (
-                  <View key={d} style={[s.cell, { width: dayW, backgroundColor: "#f3f4f6" }]}>
-                    <Text style={s.txt}>{grid.dayTotals[d]?.[c] ? String(grid.dayTotals[d][c]) : ""}</Text>
-                  </View>
-                ))}
-                {codes.map((c2) => (
-                  <View key={c2} style={[s.cell, { width: TOTAL_W, backgroundColor: "#e5e7eb" }]}>
-                    <Text style={[s.txt, { fontFamily: "Helvetica-Bold" }]}>{c2 === c ? String(grid.totals[c] ?? 0) : ""}</Text>
-                  </View>
-                ))}
+                {grid.dates.map((d) => {
+                  const n = grid.dayTotals[d]?.[c] ?? 0;
+                  return (
+                    <View key={d} style={[s.cell, { width: dayW, backgroundColor: n ? CODE_DEF[c].bg : "#f3f4f6" }]}>
+                      <Text style={[s.txt, n ? { color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" } : { color: "#6b7280" }]}>{String(n)}</Text>
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </View>
