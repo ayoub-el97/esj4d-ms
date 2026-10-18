@@ -27,10 +27,12 @@ export type Employee = {
   hire_date: string | null;
   phone: string;
   is_active: boolean;
+  /** Libellé libre de la fonction (poste « Autre fonction ») */
+  job_title: string;
 };
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active, job_title";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();

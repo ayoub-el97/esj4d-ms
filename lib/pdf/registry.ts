@@ -29,6 +29,11 @@ import { RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
 import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
 import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchases";
 import { getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
+import { getLiveGrid, getPeriodSnapshots, getPeriodStartDay } from "@/lib/data/attendance-grid";
+import { filterGrid } from "@/lib/attendance-grid";
+import { AttendanceGridPdf } from "./attendance-grid";
+import { POSITIONS, POSITION_LABELS, type Position } from "@/lib/types";
+import { formatDateTimeFr, formatMonthFr, todayISO } from "@/lib/dates";
 
 export type BuiltPdf = {
   element: ReactElement;
@@ -83,6 +88,29 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
       const rows = await getMonthlyAttendance(month, team);
       return done("pointage", `${t("Rapport mensuel de pointage")} ${month}`, `pointage-mensuel-${month}${team ? `-${team}` : ""}.pdf`, createElement(MonthlyAttendancePdf, { ...common, month, team, rows }));
+    }
+    case "pointage-grille": {
+      const month = params.mois;
+      if (!isMonth(month)) return null;
+      const startDay = await getPeriodStartDay();
+      const [live, snapshots] = await Promise.all([getLiveGrid(month, startDay), getPeriodSnapshots(month)]);
+      const latest = snapshots[0] ?? null;
+      const selected = params.version === "actuel" ? null : params.version ? (snapshots.find((s) => String(s.revision) === params.version) ?? latest) : latest;
+      const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
+      const position = POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
+      const q = (params.q ?? "").slice(0, 60);
+      const grid = filterGrid(selected ? selected.data : live, { team, position, q });
+      const monthName = formatMonthFr(month, locale).replace(/^./, (c) => c.toUpperCase());
+      const versionLabel = selected
+        ? t("Version finalisée {n} du {date}", { n: selected.revision, date: formatDateTimeFr(selected.created_at) })
+        : t("Données actuelles du Pointage (non finalisées)");
+      const filtersLabel = [team ? t(TEAM_LABELS[team]) : "", position ? t(POSITION_LABELS[position]) : "", q ? `« ${q} »` : ""].filter(Boolean).join(" · ");
+      return done(
+        "pointage",
+        `${t("Rapport mensuel de pointage")} — ${monthName}`,
+        `rapport-mensuel-pointage-${month}${team ? `-${team}` : ""}.pdf`,
+        createElement(AttendanceGridPdf, { grid, company: settings.company_name, agency: settings.agency_name, generatedBy: user.fullName, today: todayISO(), monthName, versionLabel, filtersLabel }),
+      );
     }
     case "rapport-nettoiement": {
       if (!isISODate(date)) return null;

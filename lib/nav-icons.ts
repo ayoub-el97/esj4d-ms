@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarCheck2,
   CalendarDays,
+  CalendarRange,
   ClipboardCheck,
   ClipboardList,
   FileBarChart2,
@@ -25,6 +26,7 @@ import {
 export const NAV_ICONS: Record<string, LucideIcon> = {
   "/": Home,
   "/pointage": ClipboardCheck,
+  "/pointage/mensuel": CalendarRange,
   "/rapport-journalier": ClipboardList,
   "/rapport-mensuel": FileBarChart2,
   "/rapport-camions": Truck,

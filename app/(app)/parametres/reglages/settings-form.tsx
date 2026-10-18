@@ -52,6 +52,11 @@ export function SettingsForm({ settings }: { settings: AppSettings }) {
             </p>
           </div>
           <div className="space-y-1">
+            <Label htmlFor="pointage_period_start_day">{t("Rapport mensuel de pointage : jour de début de la période")}</Label>
+            <Input id="pointage_period_start_day" name="pointage_period_start_day" type="number" min="1" max="28" step="1" defaultValue={settings.pointage_period_start_day} required className="w-28" />
+            <p className="text-xs text-muted-foreground">{t("8 = période du 8 d'un mois au 7 du mois suivant (ex. Septembre : du 08/09 au 07/10).")}</p>
+          </div>
+          <div className="space-y-1">
             <Label htmlFor="leave_days_per_month">{t("Congés acquis par mois (jours)")}</Label>
             <Input id="leave_days_per_month" name="leave_days_per_month" type="number" step="0.5" min="0" defaultValue={settings.leave_days_per_month} required />
             <p className="text-xs text-muted-foreground">{t("Règle initiale : 1,5 jour par mois (3 jours tous les deux mois).")}</p>

@@ -26,6 +26,7 @@ const employeeSchema = z
     hire_date: optionalDate,
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
+    job_title: z.string().trim().max(60).default(""),
   })
   .transform((d) => ({
     ...d,
@@ -35,7 +36,8 @@ const employeeSchema = z
     chauffeur_id: d.position === "rippeur" ? d.chauffeur_id : null,
     // Remplaçant attitré : pour les titulaires (chauffeur, rippeur) uniquement
     substitute_id: d.position === "chauffeur" || d.position === "rippeur" ? d.substitute_id : null,
-  }));
+  }))
+  .refine((d) => d.position !== "autre" || d.job_title.length > 0, { message: "Indiquez le libellé de la fonction.", path: ["job_title"] });
 
 const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
 
@@ -57,6 +59,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     hire_date: formData.get("hire_date"),
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
+    job_title: formData.get("job_title") ?? "",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 

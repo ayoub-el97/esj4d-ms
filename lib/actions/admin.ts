@@ -119,6 +119,7 @@ const settingsSchema = z.object({
   double_day_on_rest_day: z.boolean(),
   double_day_two_shifts: z.boolean(),
   project_start_date: z.union([z.literal(""), z.string().date("Date de début du projet invalide.")]),
+  pointage_period_start_day: z.coerce.number().int("Jour de début de la période invalide (1 à 28).").min(1, "Jour de début de la période invalide (1 à 28).").max(28, "Jour de début de la période invalide (1 à 28)."),
 });
 
 export async function saveSettings(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -133,6 +134,7 @@ export async function saveSettings(_prev: ActionResult | null, formData: FormDat
     double_day_on_rest_day: formData.get("double_day_on_rest_day") === "on",
     double_day_two_shifts: formData.get("double_day_two_shifts") === "on",
     project_start_date: formData.get("project_start_date") ?? "",
+    pointage_period_start_day: formData.get("pointage_period_start_day") ?? 8,
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 

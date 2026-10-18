@@ -14,6 +14,8 @@ export type AppSettings = {
   company_logo_path: string;
   /** Date de début du projet (aaaa-mm-jj) : base du calcul des « mois » ; vide = mois calendaire */
   project_start_date: string;
+  /** Jour de début de la période de pointage (1 à 28) : du 8 au 7 par défaut */
+  pointage_period_start_day: number;
 };
 
 const DEFAULTS: AppSettings = {
@@ -26,6 +28,7 @@ const DEFAULTS: AppSettings = {
   double_day_two_shifts: true,
   company_logo_path: "",
   project_start_date: "",
+  pointage_period_start_day: 8,
 };
 
 /** Lit les réglages (table settings) en appliquant les valeurs par défaut. */

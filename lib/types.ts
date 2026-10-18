@@ -82,7 +82,19 @@ export const TEAM_LABELS: Record<TeamType, string> = {
 };
 export const TEAM_SLUGS: Record<string, TeamType> = { collecte: "collecte", nettoiement: "nettoiement" };
 
-export type Position = "balayeur" | "rippeur" | "chauffeur" | "chauffeur_remplacant" | "rippeur_remplacant" | "superviseur" | "chef_equipe" | "agent_securite";
+export type Position =
+  | "balayeur"
+  | "rippeur"
+  | "chauffeur"
+  | "chauffeur_remplacant"
+  | "rippeur_remplacant"
+  | "superviseur"
+  | "chef_equipe"
+  | "agent_securite"
+  | "mecanicien"
+  | "gardien"
+  | "directeur"
+  | "autre";
 /** Ordre d'affichage des postes */
 export const POSITION_LABELS: Record<Position, string> = {
   balayeur: "Balayeur",
@@ -93,12 +105,20 @@ export const POSITION_LABELS: Record<Position, string> = {
   superviseur: "Superviseur",
   chef_equipe: "Chef d'équipe",
   agent_securite: "Agent de sécurité",
+  mecanicien: "Mécanicien",
+  gardien: "Gardien",
+  directeur: "Directeur",
+  autre: "Autre fonction",
 };
 /** Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre */
 export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placement: "top" | "after" }[] = [
+  { position: "directeur", title: "Direction", placement: "top" },
   { position: "chef_equipe", title: "Chef d'équipe", placement: "top" },
   { position: "superviseur", title: "Superviseur", placement: "top" },
   { position: "agent_securite", title: "Sécurité", placement: "after" },
+  { position: "mecanicien", title: "Mécanicien", placement: "after" },
+  { position: "gardien", title: "Gardien", placement: "after" },
+  { position: "autre", title: "Autres fonctions", placement: "after" },
 ];
 export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];
 /** Postes de conduite (titulaire ou remplaçant) : peuvent conduire un camion */

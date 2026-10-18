@@ -75,6 +75,11 @@ export function EmployeeForm({
                 {t("Équipe : {team} (déduite du poste)", { team: teamOfPosition(position) === "nettoiement" ? t("Nettoiement") : t("Collecte") })}
               </p>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="job_title">{position === "autre" ? t("Libellé de la fonction (obligatoire)") : t("Libellé de la fonction (facultatif)")}</Label>
+              <Input id="job_title" name="job_title" defaultValue={employee?.job_title ?? ""} maxLength={60} required={position === "autre"} placeholder={t("Ex. Électricien, Magasinier…")} />
+              <p className="text-xs text-muted-foreground">{t("Affiché dans la colonne « Fonction » du rapport mensuel de pointage.")}</p>
+            </div>
             {position === "chauffeur" && (
               <div className="space-y-1">
                 <Label htmlFor="truck_id">{t("Camion (matricule)")}</Label>
