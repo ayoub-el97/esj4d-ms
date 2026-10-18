@@ -18,7 +18,7 @@ export default async function CamionsMensuelPage({ searchParams }: { searchParam
   const projectStart = await getProjectStart();
   const month = isMonth(sp.mois) ? sp.mois : workMonthOf(todayISO(), projectStart);
   const rows = await getTruckMonthly(month);
-  const total = rows.reduce((a, r) => ({ days: a.days + r.days, tonnage: a.tonnage + r.tonnage, dumps: a.dumps + r.dumps, km: a.km + r.km, fuel: a.fuel + r.fuel }), { days: 0, tonnage: 0, dumps: 0, km: 0, fuel: 0 });
+  const total = rows.reduce((a, r) => ({ days: a.days + r.days, matin: a.matin + r.tonnage_matin, soir: a.soir + r.tonnage_soir, tonnage: a.tonnage + r.tonnage, dumps: a.dumps + r.dumps, km: a.km + r.km, fuel: a.fuel + r.fuel }), { days: 0, matin: 0, soir: 0, tonnage: 0, dumps: 0, km: 0, fuel: 0 });
 
   return (
     <div>
@@ -35,6 +35,8 @@ export default async function CamionsMensuelPage({ searchParams }: { searchParam
               <TableHead>{t("Marque")}</TableHead>
               <TableHead className="text-end">{t("Jours")}</TableHead>
               <TableHead className="text-end">{t("Tickets")}</TableHead>
+              <TableHead className="text-end">{t("Tonnage matin (t)")}</TableHead>
+              <TableHead className="text-end">{t("Tonnage soir (t)")}</TableHead>
               <TableHead className="text-end">{t("Tonnage total (t)")}</TableHead>
               <TableHead className="text-end">{t("Vidages")}</TableHead>
               <TableHead className="text-end">{t("Km")}</TableHead>
@@ -44,7 +46,7 @@ export default async function CamionsMensuelPage({ searchParams }: { searchParam
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell colSpan={10} className="text-center text-muted-foreground">
                   {t("Aucune donnée pour ce mois.")}
                 </TableCell>
               </TableRow>
@@ -55,7 +57,9 @@ export default async function CamionsMensuelPage({ searchParams }: { searchParam
                 <TableCell>{r.truck?.brand}</TableCell>
                 <TableCell className="text-end">{r.days}</TableCell>
                 <TableCell className="text-end">{r.tickets}</TableCell>
-                <TableCell className="text-end">{r.tonnage.toFixed(2)}</TableCell>
+                <TableCell className="text-end">{r.tonnage_matin.toFixed(2)}</TableCell>
+                <TableCell className="text-end">{r.tonnage_soir.toFixed(2)}</TableCell>
+                <TableCell className="text-end font-semibold">{r.tonnage.toFixed(2)}</TableCell>
                 <TableCell className="text-end">{r.dumps}</TableCell>
                 <TableCell className="text-end">{r.km.toFixed(1)}</TableCell>
                 <TableCell className="text-end">{r.fuel.toFixed(2)}</TableCell>
@@ -66,6 +70,8 @@ export default async function CamionsMensuelPage({ searchParams }: { searchParam
                 <TableCell colSpan={2}>{t("Total")}</TableCell>
                 <TableCell className="text-end">{total.days}</TableCell>
                 <TableCell />
+                <TableCell className="text-end">{total.matin.toFixed(2)}</TableCell>
+                <TableCell className="text-end">{total.soir.toFixed(2)}</TableCell>
                 <TableCell className="text-end">{total.tonnage.toFixed(2)}</TableCell>
                 <TableCell className="text-end">{total.dumps}</TableCell>
                 <TableCell className="text-end">{total.km.toFixed(1)}</TableCell>

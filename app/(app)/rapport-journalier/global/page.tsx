@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import { requireModule } from "@/lib/auth";
+import { ShiftBadge } from "../../rapport-camions/truck-day-table";
 import { getWorkDay } from "@/lib/data/attendance";
 import { getCleaningSummary, getTruckReports } from "@/lib/data/reports";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
@@ -24,7 +25,7 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
   const date = isISODate(sp.date) ? sp.date : todayISO();
   const [workDay, trucks, summary] = await Promise.all([getWorkDay(date), getTruckReports({ date }), getCleaningSummary(date)]);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
-  const totalTonnage = trucks.reduce((s, tr) => s + Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0), 0);
+  const totalTonnage = trucks.reduce((s, tr) => s + tr.tonnage_total, 0);
 
   return (
     <div>
@@ -50,11 +51,10 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
               <TableRow>
                 <TableHead>{t("Marque")}</TableHead>
                 <TableHead>{t("Matricule")}</TableHead>
+                <TableHead>{t("Poste")}</TableHead>
                 <TableHead>{t("Chauffeur")}</TableHead>
-                <TableHead>{t("N° ticket")}</TableHead>
-                <TableHead className="text-end">{t("Tonnage")}</TableHead>
-                <TableHead>{t("2e ticket")}</TableHead>
-                <TableHead className="text-end">{t("2e tonnage")}</TableHead>
+                <TableHead>{t("Vidages (ticket — tonnage)")}</TableHead>
+                <TableHead className="text-end">{t("Tonnage total")}</TableHead>
                 <TableHead className="text-end">{t("Nb vidages")}</TableHead>
                 <TableHead className="text-end">{t("Nb rippeurs")}</TableHead>
                 {canEdit && <TableHead />}
@@ -72,11 +72,12 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
                 <TableRow key={tr.id}>
                   <TableCell>{tr.truck?.brand}</TableCell>
                   <TableCell className="font-mono">{tr.truck?.matricule}</TableCell>
+                  <TableCell>
+                    <ShiftBadge shift={tr.shift} t={t} />
+                  </TableCell>
                   <TableCell>{tr.chauffeur_name || "—"}</TableCell>
-                  <TableCell>{tr.ticket1}</TableCell>
-                  <TableCell className="text-end">{tr.tonnage1 ?? ""}</TableCell>
-                  <TableCell>{tr.ticket2}</TableCell>
-                  <TableCell className="text-end">{tr.tonnage2 ?? ""}</TableCell>
+                  <TableCell className="text-xs">{tr.loads.map((l, k) => <div key={k}>{k + 1}. {l.ticket || "—"} — {l.tonnage != null ? `${l.tonnage} t` : "—"}</div>)}</TableCell>
+                  <TableCell className="text-end font-semibold">{tr.tonnage_total.toFixed(2)}</TableCell>
                   <TableCell className="text-end">{tr.dumps_count}</TableCell>
                   <TableCell className="text-end">{tr.rippers_count}</TableCell>
                   {canEdit && (
@@ -91,9 +92,8 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
               {trucks.length > 0 && (
                 <TableRow className="bg-muted/50 font-semibold">
                   <TableCell colSpan={4}>{t("Total")}</TableCell>
-                  <TableCell className="text-end" colSpan={3}>
-                    {totalTonnage.toFixed(2)} t
-                  </TableCell>
+                  <TableCell />
+                  <TableCell className="text-end">{totalTonnage.toFixed(2)} t</TableCell>
                   <TableCell className="text-end">{trucks.reduce((s, tr) => s + tr.dumps_count, 0)}</TableCell>
                   <TableCell className="text-end">{trucks.reduce((s, tr) => s + tr.rippers_count, 0)}</TableCell>
                   {canEdit && <TableCell />}

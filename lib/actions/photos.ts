@@ -15,11 +15,12 @@ const ENTITY_MODULE: Record<PhotoEntityType, AppModule> = {
   work_task: "programme",
   fuel_entry: "rapport_camions",
   truck_repair: "rapport_camions",
+  truck_report: "rapport_camions",
 };
 
 const registerSchema = z.object({
   storage_path: z.string().min(1),
-  entity_type: z.enum(["cleaning_report_agent", "collection_report", "warning", "green_waste", "work_task", "fuel_entry", "truck_repair"]),
+  entity_type: z.enum(["cleaning_report_agent", "collection_report", "warning", "green_waste", "work_task", "fuel_entry", "truck_repair", "truck_report"]),
   entity_id: z.string().uuid(),
   phase: z.enum(["avant", "apres", "justificatif", "vehicule"]),
   activity_date: z.string().date().nullable(),

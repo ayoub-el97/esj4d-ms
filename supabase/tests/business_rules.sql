@@ -486,6 +486,43 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 19. Rapport camions : Matin / Soir, vidages calculés, totaux sans doublon
+-- ---------------------------------------------------------------------------
+do $$
+declare tr uuid; m1 uuid; m2 uuid; s1 uuid; r record;
+begin
+  select id into tr from public.trucks where matricule = '77027-A-1';
+  -- 1 tonnage -> 1 vidage ; 2 -> 2 ; 3 -> 3 ; vide -> 0
+  insert into public.truck_daily_reports (activity_date, truck_id, shift, line_no, loads) values
+    ('2026-10-23', tr, 'matin', 1, '[{"ticket":"T1","tonnage":4.5}]') returning id into m1;
+  assert (select dumps_count = 1 and tonnage_total = 4.5 from public.truck_daily_reports where id = m1), '1 tonnage = 1 vidage';
+  update public.truck_daily_reports set loads = '[{"ticket":"T1","tonnage":4.5},{"ticket":"T2","tonnage":3.2}]' where id = m1;
+  assert (select dumps_count = 2 and tonnage_total = 7.7 and ticket2 = 'T2' and tonnage2 = 3.2 from public.truck_daily_reports where id = m1), '2 tonnages = 2 vidages, colonnes 2e ticket alimentées';
+  update public.truck_daily_reports set loads = '[{"ticket":"T1","tonnage":4.5},{"ticket":"T2","tonnage":3.2},{"ticket":"T3","tonnage":5.1}]' where id = m1;
+  assert (select dumps_count = 3 and tonnage_total = 12.8 from public.truck_daily_reports where id = m1), '3 tonnages = 3 vidages, 12,8 t';
+  insert into public.truck_daily_reports (activity_date, truck_id, shift, line_no, loads) values ('2026-10-23', tr, 'matin', 2, '[{"ticket":"","tonnage":null}]') returning id into m2;
+  assert (select dumps_count = 0 and tonnage_total = 0 and loads = '[]'::jsonb from public.truck_daily_reports where id = m2), 'vidage vide ignoré : 0';
+  -- Même camion le soir
+  insert into public.truck_daily_reports (activity_date, truck_id, shift, line_no, loads) values ('2026-10-23', tr, 'soir', 1, '[{"ticket":"S1","tonnage":5.1}]') returning id into s1;
+  select sum(tonnage_total) ton, sum(dumps_count) d, count(*) filter (where shift = 'soir') soir into r from public.truck_daily_reports where activity_date = '2026-10-23' and truck_id = tr;
+  assert r.ton = 17.9 and r.d = 4 and r.soir = 1, 'total journée matin + soir';
+  -- Une même ligne (date, camion, poste, n°) ne peut pas exister deux fois
+  begin
+    insert into public.truck_daily_reports (activity_date, truck_id, shift, line_no) values ('2026-10-23', tr, 'soir', 1);
+    raise exception 'ÉCHEC : ligne en double acceptée';
+  exception when unique_violation then null;
+  end;
+  -- Ancienne écriture (ticket1 / tonnage1) : la liste est reconstruite, les vidages 3+ conservés
+  update public.truck_daily_reports set tonnage1 = 6 where id = m1;
+  assert (select jsonb_array_length(loads) = 3 and tonnage_total = 14.3 and dumps_count = 3 from public.truck_daily_reports where id = m1), 'compatibilité anciennes colonnes';
+  -- Correction manuelle (administrateur)
+  update public.truck_daily_reports set dumps_override = true, dumps_count = 5 where id = s1;
+  assert (select dumps_count from public.truck_daily_reports where id = s1) = 5, 'correction manuelle conservée';
+  assert public.photo_module('truck_report') = 'rapport_camions', 'photos des lignes camion';
+  raise notice 'OK 19 rapport camions : Matin / Soir, vidages et tonnage calculés, pas de doublon';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);

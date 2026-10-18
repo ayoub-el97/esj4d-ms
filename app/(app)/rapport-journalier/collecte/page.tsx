@@ -73,7 +73,7 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
                   </div>
                   {r.truckReport && (
                     <div className="text-muted-foreground">
-                      {t("Tonnage : {ton} t · Vidages : {dumps}", { ton: Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0), dumps: r.truckReport.dumps_count })}
+                      {t("Tonnage : {ton} t · Vidages : {dumps}", { ton: Number(r.truckReport.tonnage_total ?? 0), dumps: r.truckReport.dumps_count })}
                     </div>
                   )}
                 </CardContent>

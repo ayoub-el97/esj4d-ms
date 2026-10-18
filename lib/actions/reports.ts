@@ -151,12 +151,28 @@ export async function createCollectionReport(date: string, truckId: string): Pro
   }
   await supabase
     .from("truck_daily_reports")
-    .upsert({ activity_date: date, truck_id: truckId, chauffeur_id: chauffeur?.id ?? null, rippers_count: ripperIds.length }, { onConflict: "activity_date,truck_id" });
+    .upsert({ activity_date: date, truck_id: truckId, shift: "matin", line_no: 1, chauffeur_id: chauffeur?.id ?? null, rippers_count: ripperIds.length }, { onConflict: "activity_date,truck_id,shift,line_no" });
 
   revalidatePath("/rapport-journalier/collecte");
   revalidatePath("/rapport-camions");
   return { ok: true, data: { id: report.id } };
 }
+
+/** Vidages saisis : JSON [{ticket, tonnage}] ; lignes vides ignorées (le calcul est fait par la base). */
+const loadsSchema = z.preprocess(
+  (v) => {
+    if (typeof v !== "string" || v === "") return [];
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
+  },
+  z
+    .array(z.object({ ticket: z.string().max(50).default(""), tonnage: z.number().min(0, "Tonnage invalide.").nullable() }), { message: "Vidages invalides." })
+    .max(50)
+    .transform((list) => list.filter((l) => l.ticket.trim() !== "" || (l.tonnage != null && l.tonnage > 0))),
+);
 
 const collectionSchema = z.object({
   id: uuid,
@@ -164,11 +180,7 @@ const collectionSchema = z.object({
   sectors: z.string().max(1000).default(""),
   observations: z.string().max(2000).default(""),
   rippers: z.array(uuid),
-  ticket1: z.string().max(50).default(""),
-  tonnage1: optionalNumber,
-  ticket2: z.string().max(50).default(""),
-  tonnage2: optionalNumber,
-  dumps_count: intField,
+  loads: loadsSchema,
   km_start: optionalNumber,
   km_end: optionalNumber,
 }).refine((d) => d.km_start == null || d.km_end == null || d.km_end >= d.km_start, { message: "Le km de fin doit être supérieur ou égal au km de départ.", path: ["km_end"] });
@@ -184,11 +196,7 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
     sectors: formData.get("sectors") ?? "",
     observations: formData.get("observations") ?? "",
     rippers: formData.getAll("rippers"),
-    ticket1: formData.get("ticket1") ?? "",
-    tonnage1: formData.get("tonnage1"),
-    ticket2: formData.get("ticket2") ?? "",
-    tonnage2: formData.get("tonnage2"),
-    dumps_count: formData.get("dumps_count"),
+    loads: formData.get("loads") ?? "",
     km_start: formData.get("km_start"),
     km_end: formData.get("km_end"),
   });
@@ -211,24 +219,22 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
     if (e2) return { ok: false, error: t(friendlyError(e2.message)) };
   }
 
-  // Rapport camions alimenté automatiquement (pas de double saisie)
+  // Rapport camions alimenté automatiquement (pas de double saisie) : ligne Matin n° 1 du camion
   const { error: e3 } = await supabase.from("truck_daily_reports").upsert(
     {
       activity_date: existing.activity_date,
       truck_id: existing.truck_id,
+      shift: "matin",
+      line_no: 1,
       chauffeur_id: d.chauffeur_id,
-      ticket1: d.ticket1,
-      tonnage1: d.tonnage1,
-      ticket2: d.ticket2,
-      tonnage2: d.tonnage2,
-      dumps_count: d.dumps_count,
+      loads: d.loads,
       rippers_count: d.rippers.length,
       km_start: d.km_start,
       km_end: d.km_end,
       km: null,
       observations: d.observations,
     },
-    { onConflict: "activity_date,truck_id" },
+    { onConflict: "activity_date,truck_id,shift,line_no" },
   );
   if (e3) return { ok: false, error: t(friendlyError(e3.message)) };
 
@@ -258,35 +264,62 @@ const truckReportSchema = z.object({
   id: z.preprocess((v) => (v === "" ? undefined : v), uuid.optional()),
   activity_date: dateSchema,
   truck_id: uuid,
+  shift: z.enum(["matin", "soir"], { message: "Choisissez le poste (Matin ou Soir)." }),
   chauffeur_id: optionalUuid,
-  ticket1: z.string().max(50).default(""),
-  tonnage1: optionalNumber,
-  ticket2: z.string().max(50).default(""),
-  tonnage2: optionalNumber,
-  dumps_count: intField,
+  loads: loadsSchema,
   rippers_count: intField,
   km_start: optionalNumber,
   km_end: optionalNumber,
   observations: z.string().max(2000).default(""),
 }).refine((d) => d.km_start == null || d.km_end == null || d.km_end >= d.km_start, { message: "Le km de fin doit être supérieur ou égal au km de départ.", path: ["km_end"] });
 
-export async function saveTruckReport(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/**
+ * Enregistre une ligne camion (Matin ou Soir). Plusieurs lignes possibles par camion et par
+ * jour : à la création, la ligne prend le numéro suivant du poste. Le nombre de vidages et le
+ * tonnage total sont calculés par la base ; seule l'administration peut corriger les vidages.
+ * À la création, renvoie l'id pour l'envoi des photos.
+ */
+export async function saveTruckReport(_prev: ActionResult<{ id: string; date: string }> | null, formData: FormData): Promise<ActionResult<{ id: string; date: string }>> {
   const t = await getT();
   const auth = await assertModule("rapport_camions", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   const parsed = truckReportSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const { id, ...rest } = parsed.data;
-  const values = { ...rest, km: null }; // km parcourus recalculés par la base (fin − départ)
+  const values: Record<string, unknown> = { ...rest, km: null }; // km parcourus recalculés par la base (fin − départ)
+  if (auth.user.role === "admin") {
+    const override = formData.get("dumps_override") === "on";
+    values.dumps_override = override;
+    if (override) values.dumps_count = Math.max(0, Math.trunc(Number(formData.get("dumps_count") ?? 0)) || 0);
+  }
 
   const supabase = await createClient();
-  const { error } = id
-    ? await supabase.from("truck_daily_reports").update(values).eq("id", id)
-    : await supabase.from("truck_daily_reports").upsert(values, { onConflict: "activity_date,truck_id" });
+  if (id) {
+    const { error } = await supabase.from("truck_daily_reports").update(values).eq("id", id);
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    revalidatePath("/rapport-camions");
+    revalidatePath("/rapport-journalier/global");
+    return { ok: true, message: t("Ligne camion enregistrée."), data: { id, date: rest.activity_date } };
+  }
+  // Numéro de ligne suivant pour ce camion, ce jour et ce poste
+  const { data: last } = await supabase
+    .from("truck_daily_reports")
+    .select("line_no")
+    .eq("activity_date", rest.activity_date)
+    .eq("truck_id", rest.truck_id)
+    .eq("shift", rest.shift)
+    .order("line_no", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data, error } = await supabase
+    .from("truck_daily_reports")
+    .insert({ ...values, line_no: (last?.line_no ?? 0) + 1 })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/rapport-camions");
   revalidatePath("/rapport-journalier/global");
-  redirect(`/rapport-camions?date=${values.activity_date}&ok=1`);
+  return { ok: true, message: t("Ligne camion enregistrée."), data: { id: data.id, date: rest.activity_date } };
 }
 
 export async function deleteTruckReport(id: string): Promise<ActionResult> {
@@ -296,6 +329,7 @@ export async function deleteTruckReport(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("truck_daily_reports").delete().eq("id", id);
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  await deletePhotosOfEntity("truck_report", id);
   revalidatePath("/rapport-camions");
   revalidatePath("/rapport-journalier/global");
   return { ok: true, message: t("Ligne supprimée.") };

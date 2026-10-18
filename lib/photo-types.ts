@@ -6,7 +6,7 @@ export const PHOTO_PHASE_LABELS: Record<PhotoPhase, string> = {
   vehicule: "Camion",
 };
 
-export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry" | "truck_repair";
+export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry" | "truck_repair" | "truck_report";
 
 export type PhotoItem = {
   id: string;

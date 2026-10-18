@@ -34,10 +34,22 @@ export type CollectionReport = {
   updated_at: string;
 };
 
+export type TruckShift = "matin" | "soir";
+export const SHIFT_LABELS: Record<TruckShift, string> = { matin: "Matin", soir: "Soir" };
+
 export type TruckDailyReport = {
   id: string;
   activity_date: string;
   truck_id: string;
+  /** Poste : Matin ou Soir ; plusieurs lignes possibles par poste (line_no) */
+  shift: TruckShift;
+  line_no: number;
+  /** Vidages : un élément par vidage (n° de ticket + tonnage) */
+  loads: { ticket: string; tonnage: number | null }[];
+  /** Somme des tonnages > 0 (calculée par la base) */
+  tonnage_total: number;
+  /** Nombre de vidages corrigé à la main (administrateur) */
+  dumps_override: boolean;
   chauffeur_id: string | null;
   ticket1: string;
   tonnage1: number | null;
@@ -150,7 +162,7 @@ export async function getCollectionReports(filters: { date?: string; from?: stri
       truck: truckById.get(r.truck_id) ?? null,
       chauffeur: r.chauffeur_id ? (empById.get(r.chauffeur_id) ?? null) : null,
       rippers: (rippers ?? []).filter((x) => x.report_id === r.id).map((x) => empById.get(x.employee_id)).filter((e): e is Employee => !!e),
-      truckReport: (truckReports ?? []).find((t) => t.activity_date === r.activity_date && t.truck_id === r.truck_id) ?? null,
+      truckReport: (truckReports ?? []).find((t) => t.activity_date === r.activity_date && t.truck_id === r.truck_id && t.shift === "matin" && t.line_no === 1) ?? null,
       photosAvant: ph.filter((p) => p.phase === "avant"),
       photosApres: ph.filter((p) => p.phase === "apres"),
     };
@@ -168,7 +180,7 @@ export async function getCollectionReport(id: string): Promise<CollectionReportF
 // ---------------------------------------------------------------------------
 // Rapport camions
 // ---------------------------------------------------------------------------
-export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null; crew: string[] };
+export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null; crew: string[]; photos: PhotoItem[] };
 
 export async function getTruckReports(filters: { date?: string; from?: string; to?: string; truck?: string }, limit = 500): Promise<TruckReportRow[]> {
   const supabase = await createClient();
@@ -178,7 +190,8 @@ export async function getTruckReports(filters: { date?: string; from?: string; t
   if (filters.to) q = q.lte("activity_date", filters.to);
   if (filters.truck) q = q.eq("truck_id", filters.truck);
   const [{ data }, employees, trucks] = await Promise.all([q.returns<TruckDailyReport[]>(), getEmployees(), getTrucks()]);
-  const rows = data ?? [];
+  const rows = (data ?? []).map((r) => ({ ...r, tonnage_total: Number(r.tonnage_total ?? 0), loads: (r.loads ?? []).map((l) => ({ ticket: l.ticket ?? "", tonnage: l.tonnage == null ? null : Number(l.tonnage) })) }));
+  const photosByLine = await getPhotosFor("truck_report", rows.map((r) => r.id));
   const empById = new Map(employees.map((e) => [e.id, e]));
   const truckById = new Map(trucks.map((t) => [t.id, t]));
 
@@ -205,34 +218,49 @@ export async function getTruckReports(filters: { date?: string; from?: string; t
     .map((r) => {
       const c = r.chauffeur_id ? empById.get(r.chauffeur_id) : null;
       const reportId = links.get(`${r.activity_date}:${r.truck_id}`) ?? null;
-      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: reportId, crew: reportId ? (crewByReport.get(reportId) ?? []) : [] };
+      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: reportId, crew: reportId ? (crewByReport.get(reportId) ?? []) : [], photos: photosByLine.get(r.id) ?? [] };
     })
-    .sort((a, b) => (a.activity_date === b.activity_date ? (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? "") : 0));
+    // Jour (récent d'abord), camion, Matin avant Soir, n° de ligne
+    .sort(
+      (a, b) =>
+        b.activity_date.localeCompare(a.activity_date) ||
+        (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? "") ||
+        (a.shift === b.shift ? 0 : a.shift === "matin" ? -1 : 1) ||
+        a.line_no - b.line_no,
+    );
 }
 
 export async function getTruckMonthly(month: string) {
   const { from, to } = workMonthRange(month, await getProjectStart());
   const rows = await getTruckReports({ from, to }, 2000);
-  const byTruck = new Map<string, { truck: Truck | null; days: number; tonnage: number; dumps: number; rippers: number; km: number; fuel: number; tickets: number }>();
+  type Agg = { truck: Truck | null; days: number; tonnage: number; tonnage_matin: number; tonnage_soir: number; dumps: number; rippers: number; km: number; fuel: number; tickets: number; dates: Set<string> };
+  const empty = (truck: Truck | null): Agg => ({ truck, days: 0, tonnage: 0, tonnage_matin: 0, tonnage_soir: 0, dumps: 0, rippers: 0, km: 0, fuel: 0, tickets: 0, dates: new Set() });
+  const byTruck = new Map<string, Agg>();
+  // Chaque ligne (Matin ou Soir) est comptée une fois ; un jour avec deux postes = 1 jour
   for (const r of rows) {
-    const agg = byTruck.get(r.truck_id) ?? { truck: r.truck, days: 0, tonnage: 0, dumps: 0, rippers: 0, km: 0, fuel: 0, tickets: 0 };
-    agg.days += 1;
-    agg.tonnage += Number(r.tonnage1 ?? 0) + Number(r.tonnage2 ?? 0);
+    const agg = byTruck.get(r.truck_id) ?? empty(r.truck);
+    agg.dates.add(r.activity_date);
+    agg.tonnage += r.tonnage_total;
+    if (r.shift === "soir") agg.tonnage_soir += r.tonnage_total;
+    else agg.tonnage_matin += r.tonnage_total;
     agg.dumps += r.dumps_count;
     agg.rippers += r.rippers_count;
     agg.km += Number(r.km ?? 0);
-    agg.tickets += (r.ticket1 ? 1 : 0) + (r.ticket2 ? 1 : 0);
+    agg.tickets += r.loads.filter((l) => l.ticket).length;
     byTruck.set(r.truck_id, agg);
   }
+  for (const agg of byTruck.values()) agg.days = agg.dates.size;
   // Carburant : somme des pleins du mois (partie 2 du rapport camions)
   const supabase = await createClient();
   const [{ data: fills }, trucks] = await Promise.all([supabase.from("fuel_entries").select("truck_id, liters").gte("activity_date", from).lte("activity_date", to), getTrucks()]);
   for (const f of fills ?? []) {
-    const agg = byTruck.get(f.truck_id) ?? { truck: trucks.find((t) => t.id === f.truck_id) ?? null, days: 0, tonnage: 0, dumps: 0, rippers: 0, km: 0, fuel: 0, tickets: 0 };
+    const agg = byTruck.get(f.truck_id) ?? empty(trucks.find((t) => t.id === f.truck_id) ?? null);
     agg.fuel += Number(f.liters);
     byTruck.set(f.truck_id, agg);
   }
-  return Array.from(byTruck.values()).sort((a, b) => (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? ""));
+  return Array.from(byTruck.values())
+    .map(({ dates: _dates, ...a }) => (void _dates, a))
+    .sort((a, b) => (a.truck?.matricule ?? "").localeCompare(b.truck?.matricule ?? ""));
 }
 
 // ---------------------------------------------------------------------------

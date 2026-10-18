@@ -81,7 +81,7 @@ export default async function CollecteHistoriquePage({ searchParams }: { searchP
                 <TableCell>{r.chauffeur ? employeeName(r.chauffeur) : "—"}</TableCell>
                 <TableCell>{r.rippers.length}</TableCell>
                 <TableCell className="max-w-56 truncate">{r.sectors}</TableCell>
-                <TableCell className="text-end">{r.truckReport ? Number(r.truckReport.tonnage1 ?? 0) + Number(r.truckReport.tonnage2 ?? 0) : ""}</TableCell>
+                <TableCell className="text-end">{r.truckReport ? Number(r.truckReport.tonnage_total ?? 0) : ""}</TableCell>
                 <TableCell className="text-end">{r.photosAvant.length + r.photosApres.length}</TableCell>
               </TableRow>
             ))}

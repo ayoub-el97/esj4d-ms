@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { LoadsEditor } from "@/components/loads-editor";
 
 export function CollectionForm({ report, canEdit }: { report: CollectionReportFull; canEdit: boolean }) {
   const { t } = useT();
@@ -75,25 +76,9 @@ export function CollectionForm({ report, canEdit }: { report: CollectionReportFu
               <CardTitle>{t("Données camion (alimente le rapport camions)")}</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="ticket1">{t("N° ticket")}</Label>
-                <Input id="ticket1" name="ticket1" defaultValue={tr?.ticket1 ?? ""} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="tonnage1">{t("Tonnage (t)")}</Label>
-                <Input id="tonnage1" name="tonnage1" type="number" step="0.01" min="0" defaultValue={tr?.tonnage1 ?? ""} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ticket2">{t("2e ticket")}</Label>
-                <Input id="ticket2" name="ticket2" defaultValue={tr?.ticket2 ?? ""} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="tonnage2">{t("2e tonnage (t)")}</Label>
-                <Input id="tonnage2" name="tonnage2" type="number" step="0.01" min="0" defaultValue={tr?.tonnage2 ?? ""} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="dumps_count">{t("Nombre de vidages")}</Label>
-                <Input id="dumps_count" name="dumps_count" type="number" min="0" defaultValue={tr?.dumps_count ?? 0} />
+              <p className="col-span-2 text-xs text-muted-foreground">{t("Poste du matin. Pour le travail du soir de ce camion, ajoutez une ligne « Soir » dans le rapport camions.")}</p>
+              <div className="col-span-2">
+                <LoadsEditor initial={tr?.loads ?? []} canEdit={canEdit} isAdmin={false} initialOverride={tr?.dumps_override ?? false} initialDumps={tr?.dumps_count ?? 0} />
               </div>
               <div className="space-y-1">
                 <Label>{t("Nombre de rippeurs")}</Label>

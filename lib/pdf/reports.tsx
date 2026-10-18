@@ -91,7 +91,7 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
           </Text>
           {r.truckReport && (
             <Text style={{ marginBottom: 3 }}>
-              {t("N° ticket")} {r.truckReport.ticket1 || "—"} : {r.truckReport.tonnage1 ?? "—"} t · {t("2e ticket")} {r.truckReport.ticket2 || "—"} : {r.truckReport.tonnage2 ?? "—"} t · {t("Vidages")} : {r.truckReport.dumps_count}
+              {t("Vidages (matin)")} : {r.truckReport.loads?.length ? r.truckReport.loads.map((l, i) => `${i + 1}. ${l.ticket || "—"} — ${l.tonnage ?? "—"} t`).join(" · ") : "—"} · {t("Tonnage total")} : {Number(r.truckReport.tonnage_total ?? 0).toFixed(2)} t · {t("Vidages")} : {r.truckReport.dumps_count}
               {r.truckReport.km != null ? ` · ${t("Km")} : ${r.truckReport.km}` : ""}
               {r.truckReport.fuel != null ? ` · ${t("Carburant")} : ${r.truckReport.fuel} L` : ""}
             </Text>
@@ -111,38 +111,58 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
 }
 
 const TRUCK_COLUMNS: Column[] = [
-  { key: "brand", label: "Marque", width: 6 },
   { key: "mat", label: "Matricule", width: 9 },
+  { key: "brand", label: "Marque", width: 6 },
+  { key: "poste", label: "Poste", width: 6 },
   { key: "chauffeur", label: "Chauffeur", width: 11 },
-  { key: "t1", label: "N° ticket", width: 7 },
-  { key: "ton1", label: "Tonnage", width: 6, align: "right" },
-  { key: "t2", label: "2e ticket", width: 7 },
-  { key: "ton2", label: "2e tonnage", width: 6, align: "right" },
+  { key: "vid", label: "Vidages (ticket — tonnage)", width: 20 },
   { key: "tont", label: "Tonnage total", width: 7, align: "right" },
   { key: "dumps", label: "Vidages", width: 5, align: "right" },
-  { key: "rip", label: "Équipe (rippeurs)", width: 12 },
+  { key: "rip", label: "Équipe (rippeurs)", width: 11 },
   { key: "kmd", label: "Km départ", width: 6, align: "right" },
   { key: "kmf", label: "Km fin", width: 6, align: "right" },
   { key: "km", label: "Km parcourus", width: 6, align: "right" },
-  { key: "obs", label: "Observations", width: 6 },
+  { key: "obs", label: "Observations", width: 7 },
 ];
 
-const truckRow = (tr: TruckReportRow) => ({
-  brand: tr.truck?.brand ?? "",
+const truckRow = (tr: TruckReportRow, t: (k: string, v?: Record<string, string | number>) => string) => ({
   mat: tr.truck?.matricule ?? "",
+  brand: tr.truck?.brand ?? "",
+  poste: tr.shift === "soir" ? t("Soir") : t("Matin"),
   chauffeur: tr.chauffeur_name,
-  t1: tr.ticket1,
-  ton1: tr.tonnage1 == null ? "" : String(tr.tonnage1),
-  t2: tr.ticket2,
-  ton2: tr.tonnage2 == null ? "" : String(tr.tonnage2),
-  tont: tr.tonnage1 == null && tr.tonnage2 == null ? "" : (Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0)).toFixed(2),
+  vid: tr.loads.length ? tr.loads.map((l, i) => `${i + 1}. ${l.ticket || "—"} — ${l.tonnage != null ? `${l.tonnage} t` : "—"}`).join("\n") : "—",
+  tont: tr.tonnage_total.toFixed(2),
+  dumps: `${tr.dumps_count}${tr.dumps_override ? ` (${t("manuel")})` : ""}`,
+  rip: tr.crew.length ? tr.crew.join(", ") : tr.rippers_count ? String(tr.rippers_count) : "",
   kmd: tr.km_start == null ? "" : String(tr.km_start),
   kmf: tr.km_end == null ? "" : String(tr.km_end),
-  dumps: String(tr.dumps_count),
-  rip: tr.crew.length ? tr.crew.join(", ") : tr.rippers_count ? String(tr.rippers_count) : "",
   km: tr.km == null ? "" : String(tr.km),
-  obs: tr.observations,
+  obs: `${tr.observations}${tr.photos.length ? ` (${t("{count} photo(s)", { count: tr.photos.length })})` : ""}`,
 });
+
+/** Lignes du tableau PDF : par date et camion, Matin puis Soir, sous-totaux par poste et total de la journée. */
+function truckPdfRows(rows: TruckReportRow[], t: (k: string, v?: Record<string, string | number>) => string, withDate: boolean) {
+  const sum = (list: TruckReportRow[]) => ({
+    tont: list.reduce((s, r) => s + r.tonnage_total, 0).toFixed(2),
+    dumps: String(list.reduce((s, r) => s + r.dumps_count, 0)),
+    km: list.reduce((s, r) => s + Number(r.km ?? 0), 0).toFixed(1),
+  });
+  const out: Record<string, string>[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const key = `${rows[i].activity_date}:${rows[i].truck_id}`;
+    const group: TruckReportRow[] = [];
+    while (i < rows.length && `${rows[i].activity_date}:${rows[i].truck_id}` === key) group.push(rows[i++]);
+    group.forEach((r, k) => out.push({ ...(withDate ? { date: k === 0 ? formatDateFr(r.activity_date) : "" } : {}), ...truckRow(r, t), ...(k > 0 ? { mat: "", brand: "" } : {}) }));
+    const matin = group.filter((r) => r.shift === "matin");
+    const soir = group.filter((r) => r.shift === "soir");
+    if (matin.length && (matin.length > 1 || soir.length)) out.push({ vid: t("Total Matin"), ...sum(matin) });
+    if (soir.length && (soir.length > 1 || matin.length)) out.push({ vid: t("Total Soir"), ...sum(soir) });
+    if (group.length > 1) out.push({ vid: t("Total journée — {matricule}", { matricule: group[0].truck?.matricule ?? "" }), ...sum(group) });
+  }
+  if (rows.length) out.push({ ...(withDate ? { date: t("Total") } : { mat: t("Total") }), ...sum(rows) });
+  return out;
+}
 
 /** Rapport journalier global : tableau camions + récapitulatif nettoiement. */
 export function GlobalDailyPdf({ company, date, trucks, summary, generatedBy }: { company: string; date: string; trucks: TruckReportRow[]; summary: CleaningSummaryRow[]; generatedBy: string }) {
@@ -159,13 +179,13 @@ export function GlobalDailyPdf({ company, date, trucks, summary, generatedBy }: 
     { key: "rest", label: "Repos", width: 9, align: "right" },
     { key: "total", label: "Total", width: 9, align: "right" },
   ];
-  const totalTon = trucks.reduce((s, tr) => s + Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0), 0);
+  const totalTon = trucks.reduce((s, tr) => s + tr.tonnage_total, 0);
   const title = t("Rapport journalier global");
   return (
     <PdfDocument title={`${title} ${date}`} company={company} generatedBy={generatedBy} orientation="landscape">
       <PdfHeader company={company} title={title} subtitle={formatDateFr(date)} />
       <Text style={styles.section}>{t("Collecte — tableau des camions")}</Text>
-      <PdfTable columns={TRUCK_COLUMNS} rows={trucks.map(truckRow)} />
+      <PdfTable columns={TRUCK_COLUMNS} rows={truckPdfRows(trucks, t, false)} />
       <Text style={[styles.small, { marginTop: 3 }]}>
         {t("Total tonnage : {ton} t · Vidages : {dumps} · Rippeurs : {rippers}", {
           ton: totalTon.toFixed(2),
@@ -200,18 +220,7 @@ export function TruckReportsPdf({ company, subtitle, rows, generatedBy }: { comp
   return (
     <PdfDocument title={`${t("Rapport camions")} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
       <PdfHeader company={company} title={t("Rapport camions")} subtitle={subtitle} />
-      <PdfTable
-        columns={columns}
-        rows={[
-          ...rows.map((tr) => ({ date: formatDateFr(tr.activity_date), ...truckRow(tr) })),
-          {
-            date: t("Total"),
-            tont: rows.reduce((s, tr) => s + Number(tr.tonnage1 ?? 0) + Number(tr.tonnage2 ?? 0), 0).toFixed(2),
-            dumps: String(rows.reduce((s, tr) => s + tr.dumps_count, 0)),
-            km: rows.reduce((s, tr) => s + Number(tr.km ?? 0), 0).toFixed(1),
-          },
-        ]}
-      />
+      <PdfTable columns={columns} rows={truckPdfRows(rows, t, true)} />
     </PdfDocument>
   );
 }
@@ -224,26 +233,28 @@ export function TruckMonthlyPdf({
 }: {
   company: string;
   month: string;
-  rows: { truck: { matricule: string; brand: string } | null; days: number; tickets: number; tonnage: number; dumps: number; km: number; fuel: number }[];
+  rows: { truck: { matricule: string; brand: string } | null; days: number; tickets: number; tonnage: number; tonnage_matin: number; tonnage_soir: number; dumps: number; km: number; fuel: number }[];
   generatedBy: string;
 }) {
   const { t, locale, projectStart } = usePdf();
   const columns: Column[] = [
-    { key: "mat", label: "Matricule", width: 16 },
-    { key: "brand", label: "Marque", width: 14 },
-    { key: "days", label: "Jours", width: 10, align: "right" },
-    { key: "tickets", label: "Tickets", width: 10, align: "right" },
-    { key: "ton", label: "Tonnage total (t)", width: 16, align: "right" },
-    { key: "dumps", label: "Vidages", width: 10, align: "right" },
-    { key: "km", label: "Km", width: 12, align: "right" },
-    { key: "fuel", label: "Carburant (L)", width: 12, align: "right" },
+    { key: "mat", label: "Matricule", width: 13 },
+    { key: "brand", label: "Marque", width: 11 },
+    { key: "days", label: "Jours", width: 7, align: "right" },
+    { key: "tickets", label: "Tickets", width: 8, align: "right" },
+    { key: "tm", label: "Tonnage matin (t)", width: 12, align: "right" },
+    { key: "ts", label: "Tonnage soir (t)", width: 12, align: "right" },
+    { key: "ton", label: "Tonnage total (t)", width: 12, align: "right" },
+    { key: "dumps", label: "Vidages", width: 8, align: "right" },
+    { key: "km", label: "Km", width: 8, align: "right" },
+    { key: "fuel", label: "Carburant (L)", width: 9, align: "right" },
   ];
   return (
     <PdfDocument title={`${t("Rapport mensuel camions")} ${month}`} company={company} generatedBy={generatedBy}>
       <PdfHeader company={company} title={t("Rapport mensuel camions")} subtitle={formatWorkMonth(month, projectStart, locale)} />
       <PdfTable
         columns={columns}
-        rows={rows.map((r) => ({ mat: r.truck?.matricule ?? "", brand: r.truck?.brand ?? "", days: String(r.days), tickets: String(r.tickets), ton: r.tonnage.toFixed(2), dumps: String(r.dumps), km: r.km.toFixed(1), fuel: r.fuel.toFixed(2) }))}
+        rows={rows.map((r) => ({ mat: r.truck?.matricule ?? "", brand: r.truck?.brand ?? "", days: String(r.days), tickets: String(r.tickets), tm: r.tonnage_matin.toFixed(2), ts: r.tonnage_soir.toFixed(2), ton: r.tonnage.toFixed(2), dumps: String(r.dumps), km: r.km.toFixed(1), fuel: r.fuel.toFixed(2) }))}
       />
     </PdfDocument>
   );
