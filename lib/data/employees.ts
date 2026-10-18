@@ -6,6 +6,8 @@ export type Truck = {
   id: string;
   matricule: string;
   brand: string;
+  /** Modèle (facultatif) */
+  model: string;
   is_active: boolean;
 };
 
@@ -36,7 +38,7 @@ export function employeeName(e: Pick<Employee, "last_name" | "first_name">): str
 
 export async function getTrucks(onlyActive = false): Promise<Truck[]> {
   const supabase = await createClient();
-  let q = supabase.from("trucks").select("id, matricule, brand, is_active").order("matricule");
+  let q = supabase.from("trucks").select("id, matricule, brand, model, is_active").order("matricule");
   if (onlyActive) q = q.eq("is_active", true);
   const { data } = await q.returns<Truck[]>();
   return data ?? [];

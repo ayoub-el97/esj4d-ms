@@ -122,6 +122,7 @@ const truckSchema = z.object({
   id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
   matricule: z.string().trim().min(1, "Matricule requis."),
   brand: z.string().trim().default(""),
+  model: z.string().trim().max(100).default(""),
   is_active: z.boolean(),
 });
 
@@ -134,6 +135,7 @@ export async function saveTruck(_prev: ActionResult | null, formData: FormData):
     id: formData.get("id") ?? undefined,
     matricule: formData.get("matricule"),
     brand: formData.get("brand") ?? "",
+    model: formData.get("model") ?? "",
     is_active: formData.get("is_active") !== "off",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };

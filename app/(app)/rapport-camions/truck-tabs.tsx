@@ -1,14 +1,15 @@
 import Link from "next/link";
-import { Fuel, Truck } from "lucide-react";
+import { Fuel, Truck, Wrench } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 /** Deux parties du rapport camions : rapport général et carburant. */
-export async function TruckTabs({ active }: { active: "general" | "carburant" }) {
+export async function TruckTabs({ active }: { active: "general" | "carburant" | "reparations" }) {
   const t = await getT();
   const tabs = [
     { key: "general", href: "/rapport-camions", label: t("1. Rapport général"), icon: Truck },
     { key: "carburant", href: "/rapport-camions/carburant", label: t("2. Carburant"), icon: Fuel },
+    { key: "reparations", href: "/reparations", label: t("3. Réparations"), icon: Wrench },
   ] as const;
   return (
     <nav className="mb-4 flex gap-1 rounded-xl border bg-card p-1" aria-label={t("Rapport camions")}>

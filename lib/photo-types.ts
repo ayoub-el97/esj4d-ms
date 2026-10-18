@@ -1,11 +1,12 @@
-export type PhotoPhase = "avant" | "apres" | "justificatif";
+export type PhotoPhase = "avant" | "apres" | "justificatif" | "vehicule";
 export const PHOTO_PHASE_LABELS: Record<PhotoPhase, string> = {
   avant: "AVANT",
   apres: "APRÈS",
   justificatif: "Justificatif",
+  vehicule: "Camion",
 };
 
-export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry";
+export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry" | "truck_repair";
 
 export type PhotoItem = {
   id: string;

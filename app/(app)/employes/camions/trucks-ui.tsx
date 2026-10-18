@@ -50,7 +50,10 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
               {trucks.map((tr) => (
                 <TableRow key={tr.id} className={!tr.is_active ? "opacity-60" : undefined}>
                   <TableCell className="font-mono">{tr.matricule}</TableCell>
-                  <TableCell>{tr.brand || "—"}</TableCell>
+                  <TableCell>
+                    {tr.brand || "—"}
+                    {tr.model && <span className="text-muted-foreground"> · {tr.model}</span>}
+                  </TableCell>
                   <TableCell>{tr.is_active ? <Badge>{t("Actif")}</Badge> : <Badge variant="destructive">{t("Inactif")}</Badge>}</TableCell>
                   {canEdit && (
                     <TableCell className="space-x-1 whitespace-nowrap text-end">
@@ -125,6 +128,10 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
               <div className="space-y-1">
                 <Label htmlFor="brand">{t("Marque")}</Label>
                 <Input id="brand" name="brand" defaultValue={editing?.brand} placeholder={t("Ex. Renault, Isuzu…")} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="model">{t("Modèle (facultatif)")}</Label>
+                <Input id="model" name="model" defaultValue={editing?.model} placeholder={t("Ex. BOM 16 m³")} />
               </div>
               <div className="flex gap-2">
                 <SubmitButton className="flex-1">{editing ? t("Enregistrer") : t("Ajouter")}</SubmitButton>

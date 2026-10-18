@@ -6,14 +6,14 @@ import { getSettings, logoUrl } from "@/lib/data/settings";
 import { buildSheet, getMonthlyAttendance } from "@/lib/data/attendance";
 import { getCleaningReport, getCleaningSummary, getCollectionReports, getTruckMonthly, getTruckReports } from "@/lib/data/reports";
 import { getLeaveBalances, getLeaveDetail, getLeaveRequests, getRecoveryBalances, getRecoveryDetail, getRecoveryRequests } from "@/lib/data/leaves";
-import { getEmployee } from "@/lib/data/employees";
+import { getEmployee, getTrucks } from "@/lib/data/employees";
 import { getWarnings } from "@/lib/data/warnings";
 import { getGreenWasteEntries } from "@/lib/data/green-waste";
 import { getTasks } from "@/lib/data/tasks";
 import { costPivot, entriesTotals, getFuelEntries, getFuelEntry, getFuelSummary, type FuelPeriod } from "@/lib/data/fuel";
 import { getMonthlyReport } from "@/lib/data/monthly";
 import { getWorkerReport, getWorkersPeriodReport } from "@/lib/data/worker";
-import { formatDateFr, isISODate, isMonth } from "@/lib/dates";
+import { formatDateFr, isISODate, isMonth, formatWorkMonth } from "@/lib/dates";
 import { makeT, type TFunction } from "@/lib/i18n/config";
 import { getLocale, getMessages, pdfLocale } from "@/lib/i18n/server";
 import { TEAM_LABELS, TEAM_SLUGS, type AppModule } from "@/lib/types";
@@ -24,6 +24,8 @@ import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
 import { EmployeeLeavePdf, LeaveBalancesPdf, LeaveHistoryPdf, RecoveryBalancesPdf, RecoveryHistoryPdf, WorkersPeriodPdf } from "./leaves";
 import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
 import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
+import { RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
+import { getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
 
 export type BuiltPdf = {
   element: ReactElement;
@@ -120,6 +122,32 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const viewLabel = { day: t("Par jour"), week: t("Par semaine"), month: t("Par mois") }[period];
       const sub = [viewLabel, subtitle, f.truck ? rows.find((r) => r.truck_id === f.truck)?.truck?.matricule : undefined].filter(Boolean).join(" · ");
       return done("rapport_camions", `${t("Statistiques des coûts carburant")} ${sub}`, `carburant-couts-${params.vue ?? "mois"}-${slug}.pdf`, createElement(FuelCostsPdf, { ...common, subtitle: sub, period, pivot: costPivot(rows) }));
+    }
+    case "reparations-depenses": {
+      if (!isISODate(params.from) || !isISODate(params.to)) return null;
+      const report = await getRepairExpenseReport(params.from, params.to, params.truck || undefined);
+      const sub =
+        params.vue === "mois" && isMonth(params.mois)
+          ? formatWorkMonth(params.mois, projectStart, locale)
+          : params.vue === "annee" && params.annee
+            ? t("Année {year}", { year: params.annee })
+            : periodLabel(t, { from: params.from, to: params.to });
+      const truckLabel = params.truck ? report.rows[0]?.truck?.matricule : undefined;
+      const subtitle2 = [sub, truckLabel].filter(Boolean).join(" · ");
+      return done("rapport_camions", `${t("Dépenses de réparation des camions")} ${subtitle2}`, `depenses-reparations-${params.from}-${params.to}.pdf`, createElement(RepairExpensesPdf, { ...common, subtitle: subtitle2, report }));
+    }
+    case "reparation": {
+      if (!params.id) return null;
+      const repair = await getRepair(params.id);
+      if (!repair) return null;
+      return done("rapport_camions", `${t("Dossier de réparation")} ${repair.truck?.matricule ?? ""}`, `reparation-${repair.truck?.matricule ?? ""}-${repair.reported_date}.pdf`, createElement(RepairPdf, { ...common, repair }));
+    }
+    case "reparations-camion": {
+      if (!params.truck) return null;
+      const [repairs, trucks] = await Promise.all([getRepairs({ truck: params.truck }), getTrucks()]);
+      const truck = trucks.find((tr) => tr.id === params.truck);
+      if (!truck) return null;
+      return done("rapport_camions", `${t("Historique des réparations du camion")} ${truck.matricule}`, `historique-reparations-${truck.matricule}.pdf`, createElement(TruckRepairHistoryPdf, { ...common, matricule: truck.matricule, repairs }));
     }
     case "camions-mensuel": {
       const month = params.mois;

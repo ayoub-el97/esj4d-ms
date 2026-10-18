@@ -70,7 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {visible.map((m) => {
             return (
               <Link
-                key={m.key}
+                key={m.href}
                 href={m.href}
                 className={cn(
                   "group flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",

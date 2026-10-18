@@ -17,6 +17,7 @@ import {
   Truck,
   UserRound,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "/rapport-journalier": ClipboardList,
   "/rapport-mensuel": FileBarChart2,
   "/rapport-camions": Truck,
+  "/reparations": Wrench,
   "/conges": CalendarDays,
   "/avertissements": AlertTriangle,
   "/programme": ListTodo,

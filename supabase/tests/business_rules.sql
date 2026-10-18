@@ -431,6 +431,61 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- 18. Réparations : dépenses réelles, mois de la réparation, aucun double comptage
+-- ---------------------------------------------------------------------------
+do $$
+declare a uuid; b uuid; r1 uuid; r2 uuid; r3 uuid; r4 uuid; r5 uuid; r record;
+begin
+  select id into a from public.trucks where matricule = '77027-A-1';
+  select id into b from public.trucks where matricule = '77035-A-1';
+  -- Réparé en octobre (signalé en septembre) : compte en octobre
+  insert into public.truck_repairs (truck_id, reported_date, problem_description, repair_date, repair_description, status, cost)
+  values (a, '2026-09-28', 'Fuite hydraulique', '2026-10-03', 'Flexible remplacé', 'repare', 1500) returning id into r1;
+  -- En cours avec coût et date : compte
+  insert into public.truck_repairs (truck_id, reported_date, problem_description, repair_date, status, cost)
+  values (a, '2026-10-10', 'Freins', '2026-10-12', 'en_cours', 1000) returning id into r2;
+  -- En attente avec coût estimé : ne compte pas
+  insert into public.truck_repairs (truck_id, reported_date, problem_description, status, cost)
+  values (b, '2026-10-11', 'Pneu', 'en_attente', 800) returning id into r3;
+  -- Annulé sans frais : ne compte pas ; annulé avec frais engagés : compte
+  insert into public.truck_repairs (truck_id, reported_date, problem_description, repair_date, status, cost)
+  values (b, '2026-10-05', 'Diagnostic moteur', '2026-10-06', 'annule', 300) returning id into r4;
+  insert into public.truck_repairs (truck_id, reported_date, problem_description, repair_date, status, cost, cancelled_expense)
+  values (b, '2026-10-07', 'Dépannage', '2026-10-07', 'annule', 450, true) returning id into r5;
+
+  select * into r from public.repair_expenses_by_truck('2026-10-01', '2026-10-31') x where x.truck_id = a;
+  assert r.repairs = 2 and r.total = 2500, format('camion A octobre : 2 réparations, 2500 DH (obtenu %s / %s)', r.repairs, r.total);
+  select * into r from public.repair_expenses_by_truck('2026-10-01', '2026-10-31') x where x.truck_id = b;
+  assert r.repairs = 1 and r.total = 450, 'camion B : seul l''annulé avec frais compte';
+  assert not exists (select 1 from public.repair_expenses_by_truck('2026-09-01', '2026-09-30')), 'rien en septembre (date de réparation, pas de signalement)';
+  assert (select sum(total) from public.repair_expenses_by_truck('2026-10-01', '2026-10-31')) = 2950, 'total flotte octobre';
+
+  -- Modification : le rapport suit ; passage en attente : retiré des dépenses
+  update public.truck_repairs set cost = 1800 where id = r1;
+  assert (select total from public.repair_expenses_by_truck('2026-10-01', '2026-10-31') x where x.truck_id = a) = 2800, 'coût modifié pris en compte';
+  update public.truck_repairs set status = 'en_attente' where id = r2;
+  assert (select repairs from public.repair_expenses_by_truck('2026-10-01', '2026-10-31') x where x.truck_id = a) = 1, 'en attente retiré';
+
+  -- Réparé sans coût / date : refusé
+  begin
+    update public.truck_repairs set status = 'repare', cost = null where id = r3;
+    raise exception 'ÉCHEC : réparé sans coût accepté';
+  exception when check_violation then null;
+  end;
+  -- Pas de suppression ; historique (coût, statut) disponible
+  delete from public.truck_repairs where id = r1;
+  assert exists (select 1 from public.truck_repairs where id = r1), 'une réparation ne doit pas être supprimée';
+  assert (select count(*) from public.repair_history(r1)) = 2, 'historique : création + modification du coût';
+  assert (select old_cost = 1500 and new_cost = 1800 from public.repair_history(r1) h where h.action = 'UPDATE'), 'changement de coût journalisé';
+  -- Camion inactif : historique conservé
+  update public.trucks set is_active = false where id = b;
+  assert (select count(*) from public.truck_repairs where truck_id = b) = 3, 'historique conservé pour un camion inactif';
+  update public.trucks set is_active = true where id = b;
+  assert public.photo_module('truck_repair') = 'rapport_camions', 'photos de réparation : droits camions';
+  raise notice 'OK 18 réparations : dépenses réelles, mois de réparation, pas de doublon, historique';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 11. Permissions et conservation des demandes
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);
