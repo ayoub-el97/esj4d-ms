@@ -135,7 +135,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   repos_travaille: "Jour de repos travaillé",
   absent: "Absent",
   absent_maladie: "Absent maladie",
-  conge: "Congé",
+  conge: "Congé payé",
   recuperation: "Récupération",
   repos: "Repos",
   ferie: "Jour férié",

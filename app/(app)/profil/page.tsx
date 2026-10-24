@@ -70,7 +70,15 @@ export default async function ProfilPage({ searchParams }: { searchParams: Promi
 
 async function CompanyTab({ canEdit }: { canEdit: boolean }) {
   const settings = await getSettings();
-  return <CompanyForm companyName={settings.company_name} agencyName={settings.agency_name} logoUrl={logoUrl(settings.company_logo_path)} canEdit={canEdit} />;
+  return (
+    <CompanyForm
+      companyName={settings.company_name}
+      agencyName={settings.agency_name}
+      details={{ address: settings.company_address, phone: settings.company_phone, email: settings.company_email, legal: settings.company_legal }}
+      logoUrl={logoUrl(settings.company_logo_path)}
+      canEdit={canEdit}
+    />
+  );
 }
 
 async function TeamLeadsTab({ canEdit }: { canEdit: boolean }) {

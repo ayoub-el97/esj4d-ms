@@ -141,6 +141,11 @@ export function EmployeeForm({
               <p className="text-xs text-muted-foreground">{t("Sert au calcul des congés acquis.")}</p>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="work_schedule">{t("Horaire habituel (facultatif)")}</Label>
+              <Input id="work_schedule" name="work_schedule" defaultValue={employee?.work_schedule ?? ""} maxLength={80} placeholder={t("Ex. Matin 06:00 – 13:00")} />
+              <p className="text-xs text-muted-foreground">{t("Information pour l'organisation ; les heures réelles restent saisies dans le Pointage.")}</p>
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="phone">{t("Téléphone")}</Label>
               <Input id="phone" name="phone" defaultValue={employee?.phone} dir="ltr" />
             </div>

@@ -49,7 +49,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
       )}
       {sheet.holidayLabel && (
         <Alert className="mb-4">
-          <AlertDescription>{t("Jour férié : {label}. Le statut « Jour férié » est proposé par défaut.", { label: sheet.holidayLabel })}</AlertDescription>
+          <AlertDescription>{t("Jour férié : {label}. Le statut « Jour férié » est proposé par défaut ; choisissez « Jour férié travaillé » pour un employé qui travaille (compté double, avec un jour de récupération).", { label: sheet.holidayLabel })}</AlertDescription>
         </Alert>
       )}
 
@@ -67,6 +67,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         logo={logoUrl(settings.company_logo_path)}
         trucks={sheet.trucks}
         canAuthorize={user.permissions.conges.can_edit && user.permissions.pointage.can_edit}
+        isHoliday={!!sheet.holidayLabel}
       />
 
       <ModuleButtons

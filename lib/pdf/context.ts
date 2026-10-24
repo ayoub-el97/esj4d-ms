@@ -7,9 +7,9 @@ import { makeT, type Locale, type TFunction } from "@/lib/i18n/config";
  * React.createContext n'est pas disponible côté serveur (RSC) : on utilise un stockage
  * propre à chaque requête (AsyncLocalStorage), isolé entre requêtes simultanées.
  */
-export type PdfContextValue = { t: TFunction; locale: Locale; logoUrl: string | null; projectStart: string | null };
+export type PdfContextValue = { t: TFunction; locale: Locale; logoUrl: string | null; projectStart: string | null; companyDetails?: string[] };
 
-const DEFAULT: PdfContextValue = { t: makeT(null), locale: "fr", logoUrl: null, projectStart: null };
+const DEFAULT: PdfContextValue = { t: makeT(null), locale: "fr", logoUrl: null, projectStart: null, companyDetails: [] };
 const storage = new AsyncLocalStorage<PdfContextValue>();
 
 export function runWithPdfContext<T>(value: PdfContextValue, fn: () => T): T {

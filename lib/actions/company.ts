@@ -12,15 +12,26 @@ import type { ActionResult } from "@/lib/types";
 // Identité de l'entreprise
 // ---------------------------------------------------------------------------
 const companySchema = z.object({
-  company_name: z.string().trim().min(1, "Nom de la société requis."),
-  agency_name: z.string().trim().min(1, "Nom de l'agence requis."),
+  company_name: z.string().trim().min(1, "Nom de la société requis.").max(120),
+  agency_name: z.string().trim().max(120).default(""),
+  company_address: z.string().trim().max(300).default(""),
+  company_phone: z.string().trim().max(60).default(""),
+  company_email: z.union([z.literal(""), z.string().trim().email("Adresse e-mail invalide.")]).default(""),
+  company_legal: z.string().trim().max(300).default(""),
 });
 
 export async function saveCompanyProfile(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
   const auth = await assertModule("parametres", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
-  const parsed = companySchema.safeParse({ company_name: formData.get("company_name"), agency_name: formData.get("agency_name") });
+  const parsed = companySchema.safeParse({
+    company_name: formData.get("company_name"),
+    agency_name: formData.get("agency_name") ?? "",
+    company_address: formData.get("company_address") ?? "",
+    company_phone: formData.get("company_phone") ?? "",
+    company_email: String(formData.get("company_email") ?? "").trim(),
+    company_legal: formData.get("company_legal") ?? "",
+  });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
   const supabase = await createClient();

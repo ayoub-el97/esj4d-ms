@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GridLegend, GridTable } from "./grid-table";
 import { FinalizePanel } from "./finalize-panel";
+import { MonthlyTabs } from "./tabs";
 
 export const generateMetadata = pageTitle("Rapport mensuel de pointage");
 
@@ -65,6 +66,8 @@ export default async function MonthlyGridPage({ searchParams }: { searchParams: 
           </LinkButton>
         </div>
       </ModuleHeader>
+
+      <MonthlyTabs active="grille" month={month} t={t} />
 
       {/* Filtres (formulaire simple : le rapport est recalculé depuis le Pointage à chaque affichage) */}
       <form method="get" className="no-print mb-4 grid gap-2 rounded-xl border bg-card p-3 sm:grid-cols-2 lg:grid-cols-[auto_auto_auto_1fr_auto]">

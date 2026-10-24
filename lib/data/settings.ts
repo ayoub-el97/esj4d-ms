@@ -12,6 +12,12 @@ export type AppSettings = {
   double_day_on_rest_day: boolean;
   double_day_two_shifts: boolean;
   company_logo_path: string;
+  /** Coordonnées affichées dans les en-têtes des documents */
+  company_address: string;
+  company_phone: string;
+  company_email: string;
+  /** Identifiants légaux (ICE, RC, IF…), texte libre */
+  company_legal: string;
   /** Date de début du projet (aaaa-mm-jj) : base du calcul des « mois » ; vide = mois calendaire */
   project_start_date: string;
   /** Jour de début de la période de pointage (1 à 28) : du 8 au 7 par défaut */
@@ -25,14 +31,18 @@ export type AppSettings = {
 };
 
 const DEFAULTS: AppSettings = {
-  company_name: "ESJ-4D",
-  agency_name: "Agence principale",
+  company_name: "",
+  agency_name: "",
   director_email: "",
   timezone: "Africa/Casablanca",
   leave_days_per_month: 1.5,
   double_day_on_rest_day: true,
   double_day_two_shifts: true,
   company_logo_path: "",
+  company_address: "",
+  company_phone: "",
+  company_email: "",
+  company_legal: "",
   project_start_date: "",
   pointage_period_start_day: 8,
   truck_alert_orange_days: 3,
@@ -74,7 +84,7 @@ export async function getBranding(): Promise<{ companyName: string; logoUrl: str
   const supabase = await createClient();
   const { data } = await supabase.from("settings").select("key, value").in("key", ["company_name", "company_logo_path"]);
   const map = new Map((data ?? []).map((r) => [r.key, r.value as string]));
-  return { companyName: map.get("company_name") || DEFAULTS.company_name, logoUrl: logoUrl(map.get("company_logo_path")) };
+  return { companyName: map.get("company_name") || "", logoUrl: logoUrl(map.get("company_logo_path")) };
 }
 
 /** Indique si l'envoi d'e-mail est configuré (clé Resend + e-mail du directeur). */
@@ -97,4 +107,9 @@ export async function getTeamLeads(onlyActive = false): Promise<TeamLead[]> {
   if (onlyActive) q = q.eq("is_active", true);
   const { data } = await q.returns<TeamLead[]>();
   return data ?? [];
+}
+
+/** Lignes de coordonnées de l'entreprise (en-têtes des PDF) : agence, adresse, téléphone / e-mail, identifiants. */
+export function companyDetailLines(s: Pick<AppSettings, "agency_name" | "company_address" | "company_phone" | "company_email" | "company_legal">): string[] {
+  return [s.agency_name, s.company_address, [s.company_phone, s.company_email].filter(Boolean).join(" · "), s.company_legal].map((x) => (x ?? "").trim()).filter(Boolean);
 }

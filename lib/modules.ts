@@ -29,6 +29,7 @@ export const DASHBOARD_MODULES: ModuleDef[] = [
 ];
 
 export const ADMIN_MODULES: ModuleDef[] = [
+  { key: "parametres", label: "Mise en route", href: "/mise-en-route", description: "Configuration avant le premier jour réel", accent: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
   { key: "parametres", label: "Profil de l'entreprise", href: "/profil", description: "Logo, nom, chefs d'équipe, employés", accent: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
   { key: "employes", label: "Employés", href: "/employes", description: "Agents, postes et équipes", accent: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
   { key: "parametres", label: "Paramètres", href: "/parametres", description: "Comptes, permissions, réglages", accent: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },

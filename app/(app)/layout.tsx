@@ -31,9 +31,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               // eslint-disable-next-line @next/next/no-img-element
               <img src={brand.logoUrl} alt={brand.companyName} className="size-8 shrink-0 rounded-lg object-contain" />
             ) : (
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">{brand.companyName.slice(0, 1).toUpperCase()}</span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">{(brand.companyName || "?").slice(0, 1).toUpperCase()}</span>
             )}
-            <span className="truncate">{brand.companyName}</span>
+            <span className="truncate">{brand.companyName || t("Entreprise à configurer")}</span>
           </Link>
           <div className="ms-auto flex items-center gap-1.5">
             <LanguageSwitcher className="hidden sm:inline-flex lg:hidden" />

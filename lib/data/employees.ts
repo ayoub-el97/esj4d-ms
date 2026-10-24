@@ -8,6 +8,10 @@ export type Truck = {
   brand: string;
   /** Modèle (facultatif) */
   model: string;
+  /** Numéro interne (unique s'il est renseigné) */
+  internal_number: string;
+  /** Type de camion (benne tasseuse, ampliroll…) */
+  truck_type: string;
   is_active: boolean;
 };
 
@@ -29,10 +33,12 @@ export type Employee = {
   is_active: boolean;
   /** Libellé libre de la fonction (poste « Autre fonction ») */
   job_title: string;
+  /** Horaire habituel (texte libre, informatif) */
+  work_schedule: string;
 };
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active, job_title";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active, job_title, work_schedule";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();
@@ -40,7 +46,7 @@ export function employeeName(e: Pick<Employee, "last_name" | "first_name">): str
 
 export async function getTrucks(onlyActive = false): Promise<Truck[]> {
   const supabase = await createClient();
-  let q = supabase.from("trucks").select("id, matricule, brand, model, is_active").order("matricule");
+  let q = supabase.from("trucks").select("id, matricule, brand, model, internal_number, truck_type, is_active").order("matricule");
   if (onlyActive) q = q.eq("is_active", true);
   const { data } = await q.returns<Truck[]>();
   return data ?? [];

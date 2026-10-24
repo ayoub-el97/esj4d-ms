@@ -27,6 +27,7 @@ const employeeSchema = z
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
     job_title: z.string().trim().max(60).default(""),
+    work_schedule: z.string().trim().max(80).default(""),
   })
   .transform((d) => ({
     ...d,
@@ -60,6 +61,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
     job_title: formData.get("job_title") ?? "",
+    work_schedule: formData.get("work_schedule") ?? "",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
@@ -126,6 +128,8 @@ const truckSchema = z.object({
   matricule: z.string().trim().min(1, "Matricule requis."),
   brand: z.string().trim().default(""),
   model: z.string().trim().max(100).default(""),
+  internal_number: z.string().trim().max(30).default(""),
+  truck_type: z.string().trim().max(60).default(""),
   is_active: z.boolean(),
 });
 
@@ -139,6 +143,8 @@ export async function saveTruck(_prev: ActionResult | null, formData: FormData):
     matricule: formData.get("matricule"),
     brand: formData.get("brand") ?? "",
     model: formData.get("model") ?? "",
+    internal_number: formData.get("internal_number") ?? "",
+    truck_type: formData.get("truck_type") ?? "",
     is_active: formData.get("is_active") !== "off",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
@@ -166,6 +172,7 @@ export async function setTruckActive(id: string, isActive: boolean): Promise<Act
 }
 
 function friendlyDbError(message: string): string {
+  if (message.includes("trucks_internal_number_uniq")) return "Ce numéro interne de camion existe déjà.";
   if (message.includes("duplicate key") && message.includes("matricule")) return "Ce matricule existe déjà.";
   if (message.includes("REMPLACANT_INVALIDE")) return "Le remplaçant d'un chauffeur doit être un chauffeur remplaçant, celui d'un rippeur un rippeur remplaçant.";
   if (message.includes("employees_substitute_not_self")) return "Un employé ne peut pas être son propre remplaçant.";

@@ -67,6 +67,7 @@ function Logo({ company }: { company: string }) {
 
 /** En-tête : logo de la société, titre (déjà traduit) et sous-titre. */
 export function PdfHeader({ company, title, subtitle }: { company: string; title: string; subtitle?: string }) {
+  const { companyDetails } = usePdf();
   return (
     <View style={styles.header} fixed>
       <Logo company={company} />
@@ -74,8 +75,13 @@ export function PdfHeader({ company, title, subtitle }: { company: string; title
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
-      <View style={{ width: 44, alignItems: "flex-end" }}>
-        <Text style={[styles.small, { textAlign: "right" }]}>{company}</Text>
+      <View style={{ width: 130, alignItems: "flex-end" }}>
+        <Text style={[styles.small, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{company}</Text>
+        {(companyDetails ?? []).map((l, i) => (
+          <Text key={i} style={[styles.small, { textAlign: "right", fontSize: 7 }]}>
+            {l}
+          </Text>
+        ))}
       </View>
     </View>
   );

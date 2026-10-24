@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getEmployees } from "@/lib/data/employees";
 import { getSettings } from "@/lib/data/settings";
-import { attendancePeriod, buildGrid, normalizeStartDay, type GridData, type GridEmployee, type GridRecord } from "@/lib/attendance-grid";
+import { attendancePeriod, buildGrid, filterGrid, normalizeStartDay, periodDates, type GridData, type GridEmployee, type GridFilters, type GridRecord } from "@/lib/attendance-grid";
 import type { Position, TeamType } from "@/lib/types";
 
 export async function getPeriodStartDay(): Promise<number> {
@@ -12,11 +12,11 @@ export async function getPeriodStartDay(): Promise<number> {
 /** Toutes les lignes de pointage de la période (lecture par pages de 1000). */
 async function fetchRecords(from: string, to: string) {
   const supabase = await createClient();
-  const out: (GridRecord & { position: Position; team_type: TeamType })[] = [];
+  const out: (GridRecord & { position: Position; team_type: TeamType; overtime_hours: number })[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await supabase
       .from("attendance")
-      .select("employee_id, activity_date, status, position, team_type, shift")
+      .select("employee_id, activity_date, status, position, team_type, shift, overtime_hours")
       .gte("activity_date", from)
       .lte("activity_date", to)
       .order("activity_date")
@@ -44,9 +44,14 @@ export async function getLiveGrid(month: string, startDay?: number): Promise<Gri
     fetchRecords(from, to),
     supabase.from("holidays").select("date, label").gte("date", from).lte("date", to),
   ]);
+  return buildGrid({ month, from, to, employees: periodEmployees(employees, records, to), records, holidays: holidays ?? [] });
+}
+
+/** Employés de la période : pointés dans la période, ou actifs et embauchés au plus tard à la fin. */
+function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, records: { employee_id: string; position: Position; team_type: TeamType }[], to: string): GridEmployee[] {
   const lastSnapshot = new Map<string, { position: Position; team_type: TeamType }>();
   for (const r of records) lastSnapshot.set(r.employee_id, { position: r.position, team_type: r.team_type });
-  const gridEmployees: GridEmployee[] = employees
+  return employees
     .filter((e) => lastSnapshot.has(e.id) || (e.is_active && (!e.hire_date || e.hire_date <= to)))
     .map((e) => ({
       id: e.id,
@@ -58,7 +63,44 @@ export async function getLiveGrid(month: string, startDay?: number): Promise<Gri
       job_title: e.job_title ?? "",
       team_type: lastSnapshot.get(e.id)?.team_type ?? e.team_type,
     }));
-  return buildGrid({ month, from, to, employees: gridEmployees, records, holidays: holidays ?? [] });
+}
+
+export type OvertimeRow = GridEmployee & { hours: Record<string, number>; total: number };
+export type OvertimeGrid = { month: string; from: string; to: string; dates: string[]; holidays: Record<string, string>; rows: OvertimeRow[]; dayTotals: Record<string, number>; total: number };
+
+/**
+ * Heures supplémentaires de la période, telles que saisies dans le Pointage (colonne HS) :
+ * somme des services du jour, même calcul que la synthèse mensuelle (aucune valeur inventée).
+ */
+export async function getOvertimeGrid(month: string, f: GridFilters = {}, startDay?: number): Promise<OvertimeGrid> {
+  const day = startDay ?? (await getPeriodStartDay());
+  const { from, to } = attendancePeriod(month, day);
+  const supabase = await createClient();
+  const [employees, records, { data: holidays }] = await Promise.all([getEmployees(), fetchRecords(from, to), supabase.from("holidays").select("date, label").gte("date", from).lte("date", to)]);
+  // Filtres équipe / fonction / nom : mêmes règles que la grille
+  const base = buildGrid({ month, from, to, employees: periodEmployees(employees, records, to), records: [], holidays: holidays ?? [] });
+  const kept = filterGrid(base, f).rows;
+  const hours = new Map<string, number>();
+  for (const r of records) {
+    const h = Number(r.overtime_hours) || 0;
+    if (h) hours.set(`${r.employee_id}|${r.activity_date}`, (hours.get(`${r.employee_id}|${r.activity_date}`) ?? 0) + h);
+  }
+  const dates = periodDates(from, to);
+  const dayTotals: Record<string, number> = Object.fromEntries(dates.map((d) => [d, 0]));
+  const rows: OvertimeRow[] = kept.map((e) => {
+    const h: Record<string, number> = {};
+    let total = 0;
+    for (const d of dates) {
+      const v = hours.get(`${e.id}|${d}`);
+      if (v) {
+        h[d] = v;
+        total += v;
+        dayTotals[d] += v;
+      }
+    }
+    return { id: e.id, order_number: e.order_number, matricule: e.matricule, last_name: e.last_name, first_name: e.first_name, position: e.position, job_title: e.job_title, team_type: e.team_type, hours: h, total };
+  });
+  return { month, from, to, dates, holidays: base.holidays, rows, dayTotals, total: rows.reduce((s, r) => s + r.total, 0) };
 }
 
 export type PeriodSnapshot = {

@@ -35,6 +35,8 @@ type Props = {
   trucks: { id: string; matricule: string; brand: string }[];
   /** Peut autoriser une modification sur une date de congé approuvé (droits congés + pointage) */
   canAuthorize?: boolean;
+  /** Date fériée : « Présent » s'affiche « Jour férié travaillé » (même statut enregistré) */
+  isHoliday?: boolean;
 };
 
 const LEAVE_WARNING =
@@ -54,7 +56,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -275,6 +277,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 onAddShift={addShift}
                 onAssignSubstitute={assignSubstitute}
                 canAuthorize={canAuthorize}
+                isHoliday={isHoliday}
                 onAuthorize={(i) => setOverrideFor(i)}
                 onRevoke={(i) => {
                   const ov = rows[i].leave_override;
@@ -365,6 +368,7 @@ function GroupRows({
   onAddShift,
   onAssignSubstitute,
   canAuthorize,
+  isHoliday,
   onAuthorize,
   onRevoke,
   trucks,
@@ -383,6 +387,7 @@ function GroupRows({
   onAddShift: (i: number) => void;
   onAssignSubstitute: (i: number) => void;
   canAuthorize: boolean;
+  isHoliday: boolean;
   onAuthorize: (i: number) => void;
   onRevoke: (i: number) => void;
   trucks: { id: string; matricule: string; brand: string }[];
@@ -472,7 +477,7 @@ function GroupRows({
               >
                 {ATTENDANCE_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {t(ATTENDANCE_STATUS_LABELS[s])}
+                    {isHoliday && s === "present" ? t("Jour férié travaillé") : isHoliday && s === "repos_travaille" ? t("Jour férié travaillé (jour de repos)") : t(ATTENDANCE_STATUS_LABELS[s])}
                   </option>
                 ))}
               </NativeSelect>

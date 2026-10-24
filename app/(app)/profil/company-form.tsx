@@ -16,7 +16,9 @@ import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_BYTES = 2 * 1024 * 1024;
 
-export function CompanyForm({ companyName, agencyName, logoUrl, canEdit }: { companyName: string; agencyName: string; logoUrl: string | null; canEdit: boolean }) {
+export type CompanyDetails = { address: string; phone: string; email: string; legal: string };
+
+export function CompanyForm({ companyName, agencyName, details, logoUrl, canEdit }: { companyName: string; agencyName: string; details: CompanyDetails; logoUrl: string | null; canEdit: boolean }) {
   const { t } = useT();
   const router = useRouter();
   const [state, action] = useActionState(saveCompanyProfile, null);
@@ -109,11 +111,30 @@ export function CompanyForm({ companyName, agencyName, logoUrl, canEdit }: { com
             <fieldset disabled={!canEdit} className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="company_name">{t("Nom de la société")}</Label>
-                <Input id="company_name" name="company_name" defaultValue={companyName} required />
+                <Input id="company_name" name="company_name" defaultValue={companyName} required placeholder={t("Nom affiché sur l'application et les documents")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="agency_name">{t("Agence")}</Label>
-                <Input id="agency_name" name="agency_name" defaultValue={agencyName} required />
+                <Label htmlFor="agency_name">{t("Agence / site (facultatif)")}</Label>
+                <Input id="agency_name" name="agency_name" defaultValue={agencyName} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="company_address">{t("Adresse")}</Label>
+                <Input id="company_address" name="company_address" defaultValue={details.address} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="company_phone">{t("Téléphone")}</Label>
+                  <Input id="company_phone" name="company_phone" defaultValue={details.phone} dir="ltr" inputMode="tel" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="company_email">{t("E-mail")}</Label>
+                  <Input id="company_email" name="company_email" type="email" defaultValue={details.email} dir="ltr" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="company_legal">{t("Identifiants légaux (facultatif)")}</Label>
+                <Input id="company_legal" name="company_legal" defaultValue={details.legal} placeholder={t("Ex. ICE …, RC …, IF …")} />
+                <p className="text-xs text-muted-foreground">{t("Le nom, le logo et ces coordonnées apparaissent dans les en-têtes des rapports et des PDF. Les modifier ne change aucun enregistrement.")}</p>
               </div>
             </fieldset>
             {canEdit && <SubmitButton>{t("Enregistrer")}</SubmitButton>}

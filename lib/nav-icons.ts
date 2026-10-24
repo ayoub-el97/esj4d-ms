@@ -14,6 +14,7 @@ import {
   Leaf,
   ListTodo,
   Lock,
+  Rocket,
   Settings,
   ShoppingCart,
   Truck,
@@ -40,6 +41,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "/cloture": Lock,
   "/rappels": BellRing,
   "/profil": Building2,
+  "/mise-en-route": Rocket,
   "/employes": Users,
   "/parametres": Settings,
 };

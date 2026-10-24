@@ -9,6 +9,7 @@ import { NavIcon } from "@/lib/nav-icons";
 import { isAlert, reminderState } from "@/lib/reminder-types";
 import { RemindersPanel } from "@/components/reminders-panel";
 import { FleetAlertsCard } from "@/components/fleet-alerts";
+import { getSetupHint } from "@/lib/data/setup";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
         )}
       </div>
+
+      {user.permissions.parametres.can_edit && <SetupBanner t={t} />}
 
       {error === "acces_refuse" && (
         <Alert variant="destructive">
@@ -115,5 +118,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </section>
       )}
     </div>
+  );
+}
+
+/** Rappel de configuration (administrateur) tant que le système n'est pas prêt pour le pilote. */
+async function SetupBanner({ t }: { t: (k: string, v?: Record<string, string | number>) => string }) {
+  const hint = await getSetupHint();
+  if (!hint.incomplete && !hint.demo) return null;
+  return (
+    <Link href="/mise-en-route" className={cn("flex items-center gap-3 rounded-2xl border p-4 text-sm shadow-sm transition hover:shadow-md", hint.demo ? "border-red-300 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200" : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200")}>
+      <span className="flex-1">
+        <span className="block font-semibold">{hint.demo ? t("Données de démonstration présentes") : t("Mise en route à terminer")}</span>
+        {hint.demo ? t("Supprimez-les avant le pilote : voir la page Mise en route.") : t("Renseignez le nom et le logo de l'entreprise, puis enregistrez vos employés et vos camions.")}
+      </span>
+      <ChevronRight className="size-4 shrink-0 rtl:rotate-180" />
+    </Link>
   );
 }

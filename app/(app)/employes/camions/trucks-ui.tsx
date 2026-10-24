@@ -34,6 +34,8 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Matricule")}</TableHead>
+                <TableHead>{t("N° interne")}</TableHead>
+                <TableHead>{t("Type")}</TableHead>
                 <TableHead>{t("Marque")}</TableHead>
                 <TableHead>{t("Statut")}</TableHead>
                 {canEdit && <TableHead className="text-end">{t("Actions")}</TableHead>}
@@ -42,7 +44,7 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
             <TableBody>
               {trucks.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     {t("Aucun véhicule enregistré.")}
                   </TableCell>
                 </TableRow>
@@ -50,6 +52,8 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
               {trucks.map((tr) => (
                 <TableRow key={tr.id} className={!tr.is_active ? "opacity-60" : undefined}>
                   <TableCell className="font-mono">{tr.matricule}</TableCell>
+                  <TableCell>{tr.internal_number || "—"}</TableCell>
+                  <TableCell>{tr.truck_type || "—"}</TableCell>
                   <TableCell>
                     {tr.brand || "—"}
                     {tr.model && <span className="text-muted-foreground"> · {tr.model}</span>}
@@ -124,6 +128,21 @@ export function TrucksUI({ trucks, canEdit }: { trucks: Truck[]; canEdit: boolea
               <div className="space-y-1">
                 <Label htmlFor="matricule">{t("Matricule")}</Label>
                 <Input id="matricule" name="matricule" defaultValue={editing?.matricule} required />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="internal_number">{t("N° interne (facultatif)")}</Label>
+                  <Input id="internal_number" name="internal_number" defaultValue={editing?.internal_number} placeholder={t("Ex. C-01")} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="truck_type">{t("Type de camion (facultatif)")}</Label>
+                  <Input id="truck_type" name="truck_type" defaultValue={editing?.truck_type} placeholder={t("Ex. Benne tasseuse")} list="truck-types" />
+                  <datalist id="truck-types">
+                    {["Benne tasseuse", "Ampliroll", "Camion plateau", "Laveuse", "Balayeuse", "Pick-up"].map((x) => (
+                      <option key={x} value={t(x)} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="brand">{t("Marque")}</Label>

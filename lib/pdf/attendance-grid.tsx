@@ -48,7 +48,7 @@ export function AttendanceGridPdf({
   versionLabel: string;
   filtersLabel: string;
 }) {
-  const { t, locale, logoUrl } = usePdf();
+  const { t, locale, logoUrl, companyDetails } = usePdf();
   const codes: GridCode[] = GRID_CODES.filter((c) => !c.extra || grid.extraCodes.includes(c.code)).map((c) => c.code);
   const idW = ID_W.nb + ID_W.nom + ID_W.prenom + ID_W.fonction;
   const avail = PAGE_W - 2 * PAD - idW - 2;
@@ -104,7 +104,11 @@ export function AttendanceGridPdf({
           </View>
           <View style={{ width: 320, alignItems: "flex-end" }}>
             <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold" }}>{company}</Text>
-            <Text style={{ fontSize: 8, color: "#555" }}>{agency}</Text>
+            {(companyDetails?.length ? companyDetails : [agency]).filter(Boolean).map((l, i) => (
+              <Text key={i} style={{ fontSize: 8, color: "#555" }}>
+                {l}
+              </Text>
+            ))}
             <Text style={{ fontSize: 8, color: "#555" }}>{t("{employees} employé(s) · {count} jour(s)", { employees: grid.rows.length, count: grid.dates.length })}</Text>
           </View>
         </View>

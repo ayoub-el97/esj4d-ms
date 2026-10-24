@@ -2,7 +2,7 @@ import "server-only";
 import { createElement, type ReactElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getOptionalUser } from "@/lib/auth";
-import { getSettings, logoUrl } from "@/lib/data/settings";
+import { companyDetailLines, getSettings, logoUrl } from "@/lib/data/settings";
 import { buildSheet, getMonthlyAttendance } from "@/lib/data/attendance";
 import { getCleaningReport, getCleaningSummary, getCollectionReports, getTruckMonthly, getTruckReports } from "@/lib/data/reports";
 import { getLeaveBalances, getLeaveDetail, getLeaveRequests, getRecoveryBalances, getRecoveryDetail, getRecoveryRequests } from "@/lib/data/leaves";
@@ -31,7 +31,8 @@ import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchas
 import { getDowntimeReport, getFleetOverview, getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
 import { applyFleetFilter, FLEET_FILTERS } from "@/lib/fleet-filters";
 import { workMonthRange } from "@/lib/dates";
-import { getLiveGrid, getPeriodSnapshots, getPeriodStartDay } from "@/lib/data/attendance-grid";
+import { getLiveGrid, getOvertimeGrid, getPeriodSnapshots, getPeriodStartDay } from "@/lib/data/attendance-grid";
+import { OvertimePdf } from "./overtime";
 import { filterGrid } from "@/lib/attendance-grid";
 import { AttendanceGridPdf } from "./attendance-grid";
 import { POSITIONS, POSITION_LABELS, type Position } from "@/lib/types";
@@ -64,7 +65,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
   const locale = pdfLocale(userLocale);
   const t = makeT(getMessages(locale));
   const projectStart = /^\d{4}-\d{2}-\d{2}$/.test(settings.project_start_date) ? settings.project_start_date : null;
-  const context: PdfContextValue = { t, locale, logoUrl: logoUrl(settings.company_logo_path), projectStart };
+  const context: PdfContextValue = { t, locale, logoUrl: logoUrl(settings.company_logo_path), projectStart, companyDetails: companyDetailLines(settings) };
   const common = { company: settings.company_name, generatedBy: user.fullName };
   const date = params.date;
   const range = { date: dateOrUndef(params.date), from: dateOrUndef(params.from), to: dateOrUndef(params.to) };
@@ -113,6 +114,17 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
         `rapport-mensuel-pointage-${month}${team ? `-${team}` : ""}.pdf`,
         createElement(AttendanceGridPdf, { grid, company: settings.company_name, agency: settings.agency_name, generatedBy: user.fullName, today: todayISO(), monthName, versionLabel, filtersLabel }),
       );
+    }
+    case "pointage-hs": {
+      const month = params.mois;
+      if (!isMonth(month)) return null;
+      const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
+      const position = POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
+      const q = (params.q ?? "").slice(0, 60);
+      const grid = await getOvertimeGrid(month, { team, position, q });
+      const monthName = formatMonthFr(month, locale).replace(/^./, (c) => c.toUpperCase());
+      const filtersLabel = [team ? t(TEAM_LABELS[team]) : "", position ? t(POSITION_LABELS[position]) : "", q ? `« ${q} »` : ""].filter(Boolean).join(" · ");
+      return done("pointage", `${t("Heures supplémentaires")} — ${monthName}`, `heures-supplementaires-${month}.pdf`, createElement(OvertimePdf, { grid, company: settings.company_name, generatedBy: user.fullName, today: todayISO(), monthName, filtersLabel }));
     }
     case "rapport-nettoiement": {
       if (!isISODate(date)) return null;

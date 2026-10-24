@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <Truck className="size-7" />
             </div>
           )}
-          <h1 className="text-2xl font-semibold tracking-tight">{companyName}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{companyName || t("Gestion Collecte & Nettoiement")}</h1>
           <p className="text-sm text-muted-foreground">{t("Gestion Collecte & Nettoiement")}</p>
         </div>
         <LoginForm notice={notice} />

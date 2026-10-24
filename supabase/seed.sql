@@ -1,6 +1,8 @@
 -- =============================================================================
--- Données de démonstration (fictives). À exécuter une seule fois après les
--- migrations, dans l'éditeur SQL de Supabase ou via `npx supabase db push`.
+-- ⚠ DONNÉES DE DÉMONSTRATION (FICTIVES) — UTILISÉES PAR LES TESTS AUTOMATIQUES.
+-- NE PAS EXÉCUTER sur la base du pilote ou de production : le pilote démarre vide
+-- (voir la page « Mise en route » et supabase/pilote/).
+-- Ancien usage : à exécuter une seule fois après les migrations, dans l'éditeur SQL.
 -- Aucun mot de passe ici : les comptes se créent dans Authentication > Users
 -- ou dans Paramètres > Comptes de l'application.
 -- =============================================================================

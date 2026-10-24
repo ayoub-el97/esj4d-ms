@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { I18nProvider } from "@/lib/i18n/client";
 import { LOCALE_DIR } from "@/lib/i18n/config";
 import { getLocale, getMessages, getT } from "@/lib/i18n/server";
+import { getBranding } from "@/lib/data/settings";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -11,9 +12,10 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const cairo = Cairo({ subsets: ["arabic", "latin"], variable: "--font-arabic" });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getT();
+  const [t, branding] = await Promise.all([getT(), getBranding().catch(() => ({ companyName: "" }))]);
+  const name = branding.companyName || t("Gestion Collecte & Nettoiement");
   return {
-    title: { default: t("ESJ-4D — Gestion"), template: "%s · ESJ-4D" },
+    title: { default: branding.companyName ? t("{name} — Gestion", { name }) : name, template: `%s · ${name}` },
     description: t("Système de gestion Collecte & Nettoiement"),
   };
 }
