@@ -1,4 +1,5 @@
 import "server-only";
+import { mostFrequent } from "@/lib/day-function";
 import { createClient } from "@/lib/supabase/server";
 import { getEmployees } from "@/lib/data/employees";
 import { getSettings } from "@/lib/data/settings";
@@ -49,8 +50,21 @@ export async function getLiveGrid(month: string, startDay?: number): Promise<Gri
 
 /** Employés de la période : pointés dans la période, ou actifs et embauchés au plus tard à la fin. */
 function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, records: { employee_id: string; position: Position; team_type: TeamType }[], to: string): GridEmployee[] {
+  // Fonction et équipe de la période : les plus fréquentes au pointage (une affectation ponctuelle,
+  // ex. balayeur pointé ripeur un jour, ne change pas la fonction affichée) ; sinon la fiche.
+  const seen = new Map<string, { positions: Position[]; teams: TeamType[] }>();
+  for (const r of records) {
+    const x = seen.get(r.employee_id) ?? { positions: [], teams: [] };
+    x.positions.push(r.position);
+    x.teams.push(r.team_type);
+    seen.set(r.employee_id, x);
+  }
+  const usualById = new Map(employees.map((e) => [e.id, e]));
   const lastSnapshot = new Map<string, { position: Position; team_type: TeamType }>();
-  for (const r of records) lastSnapshot.set(r.employee_id, { position: r.position, team_type: r.team_type });
+  for (const [id, x] of seen) {
+    const e = usualById.get(id);
+    lastSnapshot.set(id, { position: mostFrequent(x.positions, e?.position)!, team_type: mostFrequent(x.teams, e?.team_type)! });
+  }
   return employees
     .filter((e) => lastSnapshot.has(e.id) || (e.is_active && (!e.hire_date || e.hire_date <= to)))
     .map((e) => ({

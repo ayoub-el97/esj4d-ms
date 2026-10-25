@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, Lock, Plus, Save, Trash2, UserPlus } from "lucide-react";
 import { authorizeLeaveOverride, revokeLeaveOverride, saveSheet } from "@/lib/actions/attendance";
-import type { EmployeeOption, SheetRow } from "@/lib/attendance-types";
+import type { EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import type { TFunction } from "@/lib/i18n/config";
 import { formatDateTimeFr } from "@/lib/dates";
-import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType } from "@/lib/types";
+import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType , POSITIONS, type Position} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +37,12 @@ type Props = {
   canAuthorize?: boolean;
   /** Date fériée : « Présent » s'affiche « Jour férié travaillé » (même statut enregistré) */
   isHoliday?: boolean;
+  /** Employés déjà pointés ce jour dans l'autre équipe */
+  elsewhere?: ElsewhereRow[];
 };
+
+/** Fonctions du jour rattachées à une équipe de camion (chauffeur). */
+const TEAM_MEMBER_POSITIONS: Position[] = ["rippeur", "rippeur_remplacant", "chauffeur_remplacant", "balayeur", "autre", "mecanicien", "gardien"];
 
 const LEAVE_WARNING =
   "Attention : cet employé bénéficie d'un congé approuvé pour cette date. Le pointage est automatiquement défini sur « Congé ». Toute modification nécessite une autorisation.";
@@ -56,7 +61,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [] }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -88,7 +93,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     ]);
     setDirty(true);
   };
-  const addEmployee = (employeeId: string, replacingId: string | null, chauffeurId: string | null) => {
+  const addEmployee = (employeeId: string, replacingId: string | null, chauffeurId: string | null, dayPosition: Position) => {
     const o = optionsById.get(employeeId);
     if (!o) return;
     if (rows.some((r) => r.employee_id === employeeId && r.shift === 1)) return toast.error(t("Cet employé figure déjà sur la feuille."));
@@ -106,9 +111,10 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         entered_at: null,
         planned: null,
         replacing_employee_id: replacingId,
-        chauffeur_id: team === "collecte" && o.position !== "chauffeur" ? chauffeurId : null,
-        // Un employé de la collecte garde son poste ; un employé d'une autre équipe renforce comme rippeur
-        position: team === "nettoiement" ? "balayeur" : o.team_type === "collecte" ? o.position : "rippeur",
+        chauffeur_id: team === "collecte" && dayPosition !== "chauffeur" ? chauffeurId : null,
+        // Fonction du jour choisie à l'ajout ; la fiche de l'employé n'est pas modifiée
+        position: dayPosition,
+        usual_position: o.position,
         team_type: team,
         order_number: o.order_number,
         name: o.name,
@@ -129,7 +135,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (!titular.substitute_id) return;
     const crewChauffeur = titular.position === "chauffeur" ? titular.employee_id : titular.chauffeur_id;
     const subIndex = rows.findIndex((r) => r.employee_id === titular.substitute_id && r.shift === 1);
-    if (subIndex < 0) return addEmployee(titular.substitute_id, titular.employee_id, crewChauffeur);
+    if (subIndex < 0) return addEmployee(titular.substitute_id, titular.employee_id, crewChauffeur, optionsById.get(titular.substitute_id)?.position ?? (titular.position === "chauffeur" ? "chauffeur_remplacant" : "rippeur_remplacant"));
     const sub = rows[subIndex];
     if (sub.replacing_employee_id && sub.replacing_employee_id !== titular.employee_id) {
       const other = optionsById.get(sub.replacing_employee_id);
@@ -145,7 +151,11 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
 
   const save = () =>
     start(async () => {
-      const r = await saveSheet({ activity_date: date, team_type: team, team_lead: teamLead, rows });
+      let r = await saveSheet({ activity_date: date, team_type: team, team_lead: teamLead, rows });
+      if (!r.ok && r.conflicts?.length) {
+        if (!window.confirm(`${t("Affectations à confirmer :")}\n\n• ${r.conflicts.join("\n• ")}\n\n${t("Confirmer et enregistrer ?")}`)) return;
+        r = await saveSheet({ activity_date: date, team_type: team, team_lead: teamLead, rows, confirm_conflicts: true });
+      }
       if (r.ok) {
         toast.success(r.message);
         setDirty(false);
@@ -350,7 +360,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         />
       )}
 
-      {adding && <AddEmployeeDialog date={date} team={team} options={options} rows={rows} defaultChauffeurId={adding.chauffeurId} onClose={() => setAdding(null)} onAdd={addEmployee} />}
+      {adding && <AddEmployeeDialog date={date} team={team} options={options} rows={rows} elsewhere={elsewhere} defaultChauffeurId={adding.chauffeurId} onClose={() => setAdding(null)} onAdd={addEmployee} />}
     </div>
   );
 }
@@ -410,6 +420,7 @@ function GroupRows({
       )}
       {idx.map((i) => {
         const r = rows[i];
+        const teamHeads = rows.filter((x) => x.position === "chauffeur" && x.shift === 1 && x.employee_id !== r.employee_id);
         const replacing = r.replacing_employee_id ? optionsById.get(r.replacing_employee_id) : null;
         const substitute = r.substitute_id ? optionsById.get(r.substitute_id) : null;
         const substituteRow = substitute ? rows.find((x) => x.employee_id === substitute.id && x.shift === 1) : undefined;
@@ -417,7 +428,41 @@ function GroupRows({
         return (
           <tr key={`${r.employee_id}-${r.shift}`} className={cn("border-t", STATUS_COLORS[r.status], r.is_extra && "italic")}>
             <td className="px-2 py-1 text-muted-foreground">{r.order_number || "—"}</td>
-            <td className="px-2 py-1">{t(POSITION_LABELS[r.position])}</td>
+            <td className="px-2 py-1">
+              {canEdit ? (
+                <NativeSelect
+                  className="h-7 w-auto min-w-28 py-0 text-xs not-italic"
+                  aria-label={t("Fonction du jour")}
+                  title={t("Fonction du jour")}
+                  value={r.position}
+                  onChange={(e) => {
+                    const p = e.target.value as Position;
+                    onUpdate(i, { position: p, ...(p === "chauffeur" ? { chauffeur_id: null } : {}), ...(p !== "chauffeur" && p !== "chauffeur_remplacant" ? { truck_id: null } : {}) });
+                  }}
+                >
+                  {POSITIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {t(POSITION_LABELS[p])}
+                    </option>
+                  ))}
+                </NativeSelect>
+              ) : (
+                t(POSITION_LABELS[r.position])
+              )}
+              {r.usual_position && r.usual_position !== r.position && (
+                <div className="mt-0.5 text-[11px] font-normal not-italic text-amber-700 dark:text-amber-400">{t("habituellement {usual}", { usual: t(POSITION_LABELS[r.usual_position]) })}</div>
+              )}
+              {canEdit && r.team_type === "collecte" && r.shift === 1 && TEAM_MEMBER_POSITIONS.includes(r.position) && (
+                <NativeSelect className="mt-1 h-6 w-auto py-0 text-[11px] not-italic" aria-label={t("Équipe (chauffeur)")} value={r.chauffeur_id ?? ""} onChange={(e) => onUpdate(i, { chauffeur_id: e.target.value || null })}>
+                  <option value="">{t("— Sans équipe —")}</option>
+                  {teamHeads.map((h) => (
+                    <option key={h.employee_id} value={h.employee_id}>
+                      {t("Équipe {name}", { name: h.name })}
+                    </option>
+                  ))}
+                </NativeSelect>
+              )}
+            </td>
             <td className="px-2 py-1 font-medium">
               {r.name}
               {r.shift > 1 && <span className="ms-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">{t("service {n}", { n: r.shift })}</span>}
@@ -568,6 +613,7 @@ function AddEmployeeDialog({
   options,
   rows,
   defaultChauffeurId,
+  elsewhere,
   onClose,
   onAdd,
 }: {
@@ -575,9 +621,10 @@ function AddEmployeeDialog({
   team: TeamType;
   options: EmployeeOption[];
   rows: SheetRow[];
+  elsewhere: ElsewhereRow[];
   defaultChauffeurId: string | null;
   onClose: () => void;
-  onAdd: (employeeId: string, replacingId: string | null, chauffeurId: string | null) => void;
+  onAdd: (employeeId: string, replacingId: string | null, chauffeurId: string | null, dayPosition: Position) => void;
 }) {
   const { t } = useT();
   const present = new Set(rows.map((r) => r.employee_id));
@@ -586,6 +633,16 @@ function AddEmployeeDialog({
   const [employeeId, setEmployeeId] = useState(candidates[0]?.id ?? "");
   const [replacingId, setReplacingId] = useState("");
   const [chauffeurId, setChauffeurId] = useState(defaultChauffeurId ?? "");
+  const otherTeam = new Map(elsewhere.map((x) => [x.employee_id, x]));
+  // Fonction du jour proposée : rippeur dans une équipe de camion, balayeur au nettoiement, sinon la fonction habituelle
+  const suggest = (id: string, chauf: string): Position => {
+    const o = options.find((x) => x.id === id);
+    if (!o) return team === "nettoiement" ? "balayeur" : "rippeur";
+    if (team === "nettoiement") return o.team_type === "nettoiement" ? o.position : "balayeur";
+    if (chauf && o.position !== "rippeur" && o.position !== "rippeur_remplacant") return "rippeur";
+    return o.team_type === "collecte" ? o.position : "rippeur";
+  };
+  const [dayPosition, setDayPosition] = useState<Position>(() => suggest(candidates[0]?.id ?? "", defaultChauffeurId ?? ""));
 
   const teamMembers = rows.filter((r) => r.shift === 1 && (team === "nettoiement" || !chauffeurId || r.employee_id === chauffeurId || r.chauffeur_id === chauffeurId));
 
@@ -599,19 +656,48 @@ function AddEmployeeDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label>{t("Employé")}</Label>
-            <NativeSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <NativeSelect
+              value={employeeId}
+              onChange={(e) => {
+                setEmployeeId(e.target.value);
+                setDayPosition(suggest(e.target.value, chauffeurId));
+              }}
+            >
               {candidates.length === 0 && <option value="">{t("Aucun employé disponible")}</option>}
               {candidates.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name} — {t(POSITION_LABELS[o.position])} ({t(TEAM_LABELS[o.team_type])})
+                  {otherTeam.has(o.id) ? ` — ${t("déjà pointé : {team}", { team: t(TEAM_LABELS[otherTeam.get(o.id)!.team_type]) })}` : ""}
                 </option>
               ))}
             </NativeSelect>
+            <p className="text-xs text-muted-foreground">{t("Tout employé actif peut être affecté, quelle que soit sa fonction habituelle.")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label>{t("Fonction du jour")}</Label>
+            <NativeSelect value={dayPosition} onChange={(e) => setDayPosition(e.target.value as Position)}>
+              {POSITIONS.map((p) => (
+                <option key={p} value={p}>
+                  {t(POSITION_LABELS[p])}
+                </option>
+              ))}
+            </NativeSelect>
+            {employeeId && options.find((o) => o.id === employeeId)?.position !== dayPosition && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {t("Fonction habituelle : {usual} — la fiche de l'employé n'est pas modifiée.", { usual: t(POSITION_LABELS[options.find((o) => o.id === employeeId)!.position]) })}
+              </p>
+            )}
           </div>
           {team === "collecte" && (
             <div className="space-y-1">
               <Label>{t("Équipe (chauffeur)")}</Label>
-              <NativeSelect value={chauffeurId} onChange={(e) => setChauffeurId(e.target.value)}>
+              <NativeSelect
+                value={chauffeurId}
+                onChange={(e) => {
+                  setChauffeurId(e.target.value);
+                  setDayPosition(suggest(employeeId, e.target.value));
+                }}
+              >
                 <option value="">{t("— Sans équipe —")}</option>
                 {chauffeurs.map((c) => (
                   <option key={c.employee_id} value={c.employee_id}>
@@ -637,7 +723,7 @@ function AddEmployeeDialog({
           <Button variant="outline" onClick={onClose}>
             {t("Annuler")}
           </Button>
-          <Button disabled={!employeeId} onClick={() => onAdd(employeeId, replacingId || null, chauffeurId || null)}>
+          <Button disabled={!employeeId} onClick={() => onAdd(employeeId, replacingId || null, chauffeurId || null, dayPosition)}>
             {t("Ajouter")}
           </Button>
         </DialogFooter>

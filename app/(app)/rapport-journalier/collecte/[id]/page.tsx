@@ -24,7 +24,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
   const [workDay, trucks, collecte, audit] = await Promise.all([
     getWorkDay(report.activity_date),
     getTrucks(true),
-    getEmployees({ team: "collecte", onlyActive: true }),
+    getEmployees({ onlyActive: true }),
     getRecordAuditInfo("collection_reports", [report.id]),
   ]);
   const info = audit.get(report.id);

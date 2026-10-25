@@ -1,4 +1,5 @@
 import "server-only";
+import type { Position } from "@/lib/types";
 import { getProjectStart } from "@/lib/data/settings";
 import { workMonthRange } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
@@ -145,7 +146,8 @@ export async function getCleaningReportDates(limit = 60): Promise<{ activity_dat
 export type CollectionReportFull = CollectionReport & {
   truck: Truck | null;
   chauffeur: Employee | null;
-  rippers: Employee[];
+  /** Équipiers ; day_position = fonction du jour au pointage (si différente de la fiche) */
+  rippers: (Employee & { day_position?: Position | null })[];
   truckReport: TruckDailyReport | null;
   photosAvant: PhotoItem[];
   photosApres: PhotoItem[];
@@ -168,13 +170,16 @@ export async function getCollectionReports(filters: { date?: string; from?: stri
   if (!reports.length) return [];
   const ids = reports.map((r) => r.id);
   const dates = Array.from(new Set(reports.map((r) => r.activity_date)));
-  const [{ data: rippers }, { data: truckReports }, photos, { data: days }] = await Promise.all([
+  const [{ data: rippers }, { data: truckReports }, photos, { data: days }, { data: dayAtt }] = await Promise.all([
     supabase.from("collection_report_rippers").select("report_id, employee_id").in("report_id", ids),
     supabase.from("truck_daily_reports").select("*").in("activity_date", Array.from(new Set(reports.map((r) => r.activity_date)))).returns<TruckDailyReport[]>(),
     getPhotosFor("collection_report", ids),
     supabase.from("work_days").select("activity_date, status").in("activity_date", dates),
+    // Fonction du jour (pointage collecte, 1er service) : affichée quand elle diffère de la fonction habituelle
+    supabase.from("attendance").select("activity_date, employee_id, position").in("activity_date", dates).eq("team_type", "collecte").eq("shift", 1),
   ]);
   const closed = new Set((days ?? []).filter((d) => d.status === "closed").map((d) => d.activity_date));
+  const dayPos = new Map((dayAtt ?? []).map((a) => [`${a.activity_date}|${a.employee_id}`, a.position as Position]));
   const empById = new Map(employees.map((e) => [e.id, e]));
   const truckById = new Map(trucks.map((t) => [t.id, t]));
   return reports.map((r) => {
@@ -189,7 +194,13 @@ export async function getCollectionReports(filters: { date?: string; from?: stri
       ...r,
       truck: truckById.get(r.truck_id) ?? null,
       chauffeur: r.chauffeur_id ? (empById.get(r.chauffeur_id) ?? null) : null,
-      rippers: (rippers ?? []).filter((x) => x.report_id === r.id).map((x) => empById.get(x.employee_id)).filter((e): e is Employee => !!e),
+      rippers: (rippers ?? [])
+        .filter((x) => x.report_id === r.id)
+        .map((x) => {
+          const e = empById.get(x.employee_id);
+          return e ? { ...e, day_position: dayPos.get(`${r.activity_date}|${e.id}`) ?? null } : null;
+        })
+        .filter((e): e is Employee & { day_position: Position | null } => !!e),
       truckReport: (truckReports ?? []).find((t) => t.activity_date === r.activity_date && t.truck_id === r.truck_id && t.shift === "matin" && t.line_no === 1) ?? null,
       photosAvant: ph.filter((p) => p.phase === "avant"),
       photosApres: ph.filter((p) => p.phase === "apres"),

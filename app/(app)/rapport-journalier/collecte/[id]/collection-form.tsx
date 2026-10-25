@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
+import { dayFunctionLabel } from "@/lib/day-function";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,7 +11,7 @@ import { COLLECTION_STATUS_LABELS, COLLECTION_STATUS_STYLES } from "@/lib/collec
 import type { Employee, Truck } from "@/lib/data/employees";
 import type { CollectionReportFull } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
-import { POSITION_LABELS } from "@/lib/types";
+import { POSITION_LABELS, type Position } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,8 +27,8 @@ export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
   const [crew, setCrew] = useState<Set<string>>(() => new Set(report.rippers.map((r) => r.id)));
-  // Liste proposée : équipe actuelle + rippeurs actifs de la collecte
-  const crewList = [...report.rippers, ...crewOptions.filter((e) => !report.rippers.some((r) => r.id === e.id))];
+  // Liste proposée : équipe actuelle + tous les employés actifs (quelle que soit leur fonction habituelle)
+  const crewList: (Employee & { day_position?: Position | null })[] = [...report.rippers, ...crewOptions.filter((e) => !report.rippers.some((r) => r.id === e.id))];
 
   useEffect(() => {
     if (state?.ok) {
@@ -106,7 +107,10 @@ export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }
                         }
                       />
                       <span>
-                        {e.last_name} {e.first_name} <span className="text-xs text-muted-foreground">({t(POSITION_LABELS[e.position])})</span>
+                        {e.last_name} {e.first_name}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({e.day_position && e.day_position !== e.position ? dayFunctionLabel(t, e.day_position, e.position) : t(POSITION_LABELS[e.position])})
+                        </span>
                       </span>
                     </label>
                   ))}

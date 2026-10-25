@@ -1,4 +1,5 @@
 import { Document, Page, Text, View } from "@react-pdf/renderer";
+import { dayFunctionLabel } from "@/lib/day-function";
 import type { CleaningAgent, CleaningSummaryRow, CollectionReportFull, TruckReportRow } from "@/lib/data/reports";
 import { employeeName } from "@/lib/data/employees";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
@@ -89,7 +90,7 @@ export function CollectionReportPdf({ company, date, reports, generatedBy }: { c
             {r.missing.length && !r.day_closed ? ` — ${t("à compléter : {items}", { items: r.missing.map((m) => t(m)).join(", ") })}` : ""}
           </Text>
           <Text style={{ marginBottom: 3 }}>
-            {t("Équipe")} : {r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}
+            {t("Équipe")} : {r.rippers.length ? r.rippers.map((e) => (e.day_position && e.day_position !== e.position ? `${employeeName(e)} (${dayFunctionLabel(t, e.day_position, e.position)})` : employeeName(e))).join(", ") : "—"}
           </Text>
           <Text style={{ marginBottom: 3 }}>
             {t("Lieux / secteurs")} : {r.sectors || "—"}

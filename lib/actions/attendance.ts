@@ -34,6 +34,7 @@ const payloadSchema = z.object({
   team_type: z.enum(["collecte", "nettoiement"]),
   team_lead: z.string().max(120).default(""),
   rows: z.array(rowSchema).max(500),
+  confirm_conflicts: z.boolean().optional(),
 });
 
 /** Message du congé approuvé, avec le nom de l'employé et la date (erreur CONGE_APPROUVE|nom|date de la base). */
@@ -83,7 +84,7 @@ export async function revokeLeaveOverride(id: string): Promise<ActionResult> {
 }
 
 /** Enregistre une feuille de présence complète (ajouts, modifications, suppressions). */
-export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
+export async function saveSheet(payload: SheetPayload): Promise<ActionResult & { conflicts?: string[] }> {
   const t = await getT();
   const auth = await assertModule("pointage", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
@@ -93,7 +94,7 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
     const issue = parsed.error.issues[0];
     return { ok: false, error: `${t(issue.message)} (${issue.path.join(".")})` };
   }
-  const { activity_date, team_type, team_lead, rows } = parsed.data;
+  const { activity_date, team_type, team_lead, rows, confirm_conflicts } = parsed.data;
 
   if (await isDayClosed(activity_date)) {
     return { ok: false, error: t("Cette journée est clôturée : aucune modification possible.") };
@@ -103,6 +104,30 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
   if (keys.size !== rows.length) return { ok: false, error: t("Un employé apparaît deux fois sur le même service.") };
 
   const supabase = await createClient();
+
+  // Conflits d'affectation : employé déjà pointé dans l'autre équipe (même date, même service),
+  // ou même camion pour deux chauffeurs. Enregistrement seulement après confirmation explicite.
+  const { data: others } = await supabase.from("attendance").select("employee_id, shift, team_type").eq("activity_date", activity_date).neq("team_type", team_type);
+  const otherKeys = new Map((others ?? []).map((o) => [`${o.employee_id}:${o.shift}`, o.team_type as string]));
+  const transfers = rows.filter((r) => otherKeys.has(`${r.employee_id}:${r.shift}`));
+  const conflicts: string[] = [];
+  if (transfers.length) {
+    const { data: emps } = await supabase.from("employees").select("id, last_name, first_name").in("id", transfers.map((r) => r.employee_id));
+    const nameOf = new Map((emps ?? []).map((e) => [e.id as string, `${e.last_name} ${e.first_name}`]));
+    for (const r of transfers)
+      conflicts.push(t("{name} est déjà pointé dans l'équipe {team} ce jour (service {shift}) : il sera transféré dans cette équipe.", { name: nameOf.get(r.employee_id) ?? "?", team: t(otherKeys.get(`${r.employee_id}:${r.shift}`) === "collecte" ? "Collecte" : "Nettoiement"), shift: r.shift }));
+  }
+  const DRIVING = ["chauffeur", "chauffeur_remplacant"];
+  const byTruck = new Map<string, number>();
+  for (const r of rows) if (r.truck_id && DRIVING.includes(r.position) && ["present", "repos_travaille"].includes(r.status)) byTruck.set(`${r.truck_id}:${r.shift}`, (byTruck.get(`${r.truck_id}:${r.shift}`) ?? 0) + 1);
+  const dupTrucks = [...byTruck.entries()].filter(([, n]) => n > 1).map(([k]) => k.split(":")[0]);
+  if (dupTrucks.length) {
+    const { data: tr } = await supabase.from("trucks").select("id, matricule").in("id", dupTrucks);
+    for (const x of tr ?? []) conflicts.push(t("Le camion {plate} est affecté à plusieurs chauffeurs sur le même service.", { plate: x.matricule as string }));
+  }
+  if (conflicts.length && !confirm_conflicts) {
+    return { ok: false, error: t("Affectations à confirmer avant l'enregistrement."), conflicts };
+  }
 
   // Lignes existantes de cette équipe/date, pour supprimer celles retirées de la feuille
   const { data: existing } = await supabase.from("attendance").select("id, employee_id, shift").eq("activity_date", activity_date).eq("team_type", team_type);
@@ -136,6 +161,11 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult> {
         const r = await syncCollectionReports(supabase, activity_date);
         reportNote = t("Rapport journalier collecte mis à jour : {count} équipe(s).", { count: r.teams });
         if (r.warnings.length) reportNote += " " + r.warnings.map((w) => t(w.key, w.vars)).join(" ");
+      }
+      // Employés transférés depuis l'autre équipe : son rapport du jour est recalculé aussi
+      if (transfers.length) {
+        if (team_type === "nettoiement") await syncCollectionReports(supabase, activity_date);
+        else await syncCleaningReport(supabase, activity_date);
       }
       revalidatePath("/rapport-journalier", "layout");
       revalidatePath("/rapport-camions");

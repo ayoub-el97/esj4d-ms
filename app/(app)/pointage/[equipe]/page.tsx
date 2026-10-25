@@ -1,3 +1,4 @@
+import { POSITION_LABELS } from "@/lib/types";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
@@ -47,7 +48,14 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
           <AlertDescription>{t("Journée clôturée : la feuille est en consultation seule. Un administrateur peut la rouvrir depuis le module Clôturer la journée.")}</AlertDescription>
         </Alert>
       )}
-      {sheet.holidayLabel && (
+      {sheet.elsewhere.length > 0 && (
+        <p className="mb-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {t("Pointés ce jour dans l'autre équipe (affectation du jour, non repris ici) : {list}", {
+            list: sheet.elsewhere.filter((x) => x.shift === 1).map((x) => `${x.name} (${t(POSITION_LABELS[x.position])})`).join(", "),
+          })}
+        </p>
+      )}
+            {sheet.holidayLabel && (
         <Alert className="mb-4">
           <AlertDescription>{t("Jour férié : {label}. Le statut « Jour férié » est proposé par défaut ; choisissez « Jour férié travaillé » pour un employé qui travaille (compté double, avec un jour de récupération).", { label: sheet.holidayLabel })}</AlertDescription>
         </Alert>
@@ -68,6 +76,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         trucks={sheet.trucks}
         canAuthorize={user.permissions.conges.can_edit && user.permissions.pointage.can_edit}
         isHoliday={!!sheet.holidayLabel}
+        elsewhere={sheet.elsewhere}
       />
 
       <ModuleButtons

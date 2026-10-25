@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { dayFunctionLabel } from "@/lib/day-function";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getTrucks, employeeName } from "@/lib/data/employees";
@@ -88,7 +89,7 @@ export default async function CollecteHistoriquePage({ searchParams }: { searchP
                 </div>
                 <div>
                   <dt className="inline text-muted-foreground">{t("Équipe")} : </dt>
-                  <dd className="inline">{r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}</dd>
+                  <dd className="inline">{r.rippers.length ? r.rippers.map((e) => (e.day_position && e.day_position !== e.position ? `${employeeName(e)} (${dayFunctionLabel(t, e.day_position, e.position)})` : employeeName(e))).join(", ") : "—"}</dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="inline text-muted-foreground">{t("Lieux / secteurs")} : </dt>

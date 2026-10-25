@@ -75,7 +75,7 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
   const warnings: SyncResult["warnings"] = [];
   const [{ data: att, error }, { data: chauffeurs }, { data: trucks }] = await Promise.all([
     supabase.from("attendance").select("employee_id, position, status, chauffeur_id, replacing_employee_id, truck_id").eq("activity_date", date).eq("team_type", "collecte"),
-    supabase.from("employees").select("id, last_name, first_name, truck_id").eq("position", "chauffeur"),
+    supabase.from("employees").select("id, last_name, first_name, truck_id, position"),
     supabase.from("trucks").select("id, matricule"),
   ]);
   if (error) throw new Error(error.message);
@@ -85,10 +85,20 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
   // Équipes du jour, d'après le pointage
   type Team = { truckId: string; chauffeurId: string; crew: string[] };
   const teams = new Map<string, Team>();
-  for (const titular of chauffeurs ?? []) {
+  // Chefs d'équipe du jour : chauffeurs titulaires (fiche) ou employés pointés « Chauffeur » ce jour,
+  // et toute personne à laquelle des équipiers sont rattachés dans le pointage.
+  const empById = new Map((chauffeurs ?? []).map((e) => [e.id as string, e]));
+  const heads = new Set<string>([
+    ...(chauffeurs ?? []).filter((e) => e.position === "chauffeur").map((e) => e.id as string),
+    ...rows.filter((r) => r.position === "chauffeur").map((r) => r.employee_id),
+    ...rows.map((r) => r.chauffeur_id).filter((x): x is string => !!x),
+  ]);
+  for (const headId of heads) {
+    const titular = empById.get(headId);
+    if (!titular) continue;
     const teamRows = rows.filter((r) => r.employee_id === titular.id || r.chauffeur_id === titular.id);
     const worked = teamRows.filter((r) => WORKED.includes(r.status));
-    const driver = worked.find((r) => r.employee_id === titular.id) ?? worked.find((r) => r.position === "chauffeur_remplacant");
+    const driver = worked.find((r) => r.employee_id === titular.id && (r.position === "chauffeur" || r.position === "chauffeur_remplacant")) ?? worked.find((r) => r.position === "chauffeur_remplacant" || r.position === "chauffeur");
     if (!driver) continue; // l'équipe n'a pas travaillé (ou n'a pas de chauffeur ce jour)
     const truckId = driver.truck_id ?? titular.truck_id;
     const name = `${titular.last_name} ${titular.first_name}`;

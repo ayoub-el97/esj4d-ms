@@ -42,7 +42,7 @@ export function AttendanceSheetPdf({
 
   const toRow = (r: SheetRow) => ({
     nb: String(r.order_number || ""),
-    poste: t(POSITION_LABELS[r.position]),
+    poste: r.usual_position && r.usual_position !== r.position ? `${t(POSITION_LABELS[r.position])} (${t("hab.")} ${t(POSITION_LABELS[r.usual_position])})` : t(POSITION_LABELS[r.position]),
     nom: r.name + (r.shift > 1 ? ` (${t("service {n}", { n: r.shift })})` : "") + (r.replacing_employee_id ? ` (${t("remplaçant")})` : r.is_extra ? ` (${t("renfort")})` : ""),
     repos: r.rest_day == null ? "" : t(WEEKDAY_SHORT[r.rest_day]),
     entree: WORKED_STATUSES.includes(r.status) ? r.time_in : "",

@@ -4,7 +4,7 @@ import { workMonthRange } from "@/lib/dates";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
-import type { EmployeeOption, SheetRow } from "@/lib/attendance-types";
+import type { EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
 export type WorkDay = {
@@ -116,6 +116,7 @@ export async function buildSheet(date: string, team: TeamType) {
       truck_id: a.truck_id ?? (a.position === "chauffeur" ? (e?.truck_id ?? null) : null),
       position: a.position,
       team_type: a.team_type,
+      usual_position: e?.position ?? a.position,
       order_number: e?.order_number ?? 0,
       name: e ? employeeName(e) : "—",
       matricule: e?.matricule ?? "",
@@ -127,7 +128,13 @@ export async function buildSheet(date: string, team: TeamType) {
     });
   }
 
-  const alreadyIn = new Set(rows.map((r) => r.employee_id));
+  // Employés déjà pointés ce jour dans l'autre équipe (affectation du jour) : pas de ligne par défaut ici
+  const { data: other } = await supabase.from("attendance").select("employee_id, team_type, position, shift").eq("activity_date", date).neq("team_type", team);
+  const elsewhere: ElsewhereRow[] = (other ?? []).map((o) => {
+    const e = byId.get(o.employee_id as string);
+    return { employee_id: o.employee_id as string, name: e ? employeeName(e) : "—", team_type: o.team_type as TeamType, position: o.position as Position, shift: o.shift as number };
+  });
+  const alreadyIn = new Set([...rows.map((r) => r.employee_id), ...elsewhere.map((x) => x.employee_id)]);
   for (const e of employees) {
     if (e.team_type !== team || !e.is_active || alreadyIn.has(e.id)) continue;
     const defaultStatus: AttendanceStatus = holiday
@@ -153,6 +160,7 @@ export async function buildSheet(date: string, team: TeamType) {
       truck_id: e.position === "chauffeur" ? e.truck_id : null,
       position: e.position,
       team_type: e.team_type,
+      usual_position: e.position,
       order_number: e.order_number,
       name: employeeName(e),
       matricule: e.matricule,
@@ -196,6 +204,7 @@ export async function buildSheet(date: string, team: TeamType) {
     teamLead: meta?.team_lead ?? "",
     holidayLabel: holiday?.label ?? null,
     hasSaved: (existing ?? []).length > 0,
+    elsewhere,
     options: employees.filter((e) => e.is_active).map(toOption),
     trucks: trucks.map((tr) => ({ id: tr.id, matricule: tr.matricule, brand: tr.brand })),
   };

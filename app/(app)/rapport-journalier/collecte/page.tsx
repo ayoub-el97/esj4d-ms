@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { dayFunctionLabel } from "@/lib/day-function";
 import Link from "next/link";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
@@ -68,7 +69,7 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
                   </div>
                   <div>
                     <span className="text-muted-foreground">{t("Rippeurs")} : </span>
-                    {r.rippers.length ? r.rippers.map(employeeName).join(", ") : "—"}
+                    {r.rippers.length ? r.rippers.map((e) => (e.day_position && e.day_position !== e.position ? `${employeeName(e)} (${dayFunctionLabel(t, e.day_position, e.position)})` : employeeName(e))).join(", ") : "—"}
                   </div>
                   <div>
                     <span className="text-muted-foreground">{t("Secteurs")} : </span>

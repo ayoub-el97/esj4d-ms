@@ -14,8 +14,11 @@ export type SheetRow = {
   chauffeur_id: string | null;
   /** Camion conduit ce jour-là (chauffeurs titulaires et remplaçants) */
   truck_id: string | null;
+  /** Fonction du jour (enregistrée dans le pointage de cette date) */
   position: Position;
   team_type: TeamType;
+  /** Fonction habituelle (fiche de l'employé) : jamais modifiée par le pointage */
+  usual_position?: Position;
   // Affichage
   order_number: number;
   name: string;
@@ -40,7 +43,12 @@ export type SheetPayload = {
   team_type: TeamType;
   team_lead: string;
   rows: SheetRow[];
+  /** Confirmation explicite : transférer les employés déjà pointés dans une autre équipe / accepter un camion en double */
+  confirm_conflicts?: boolean;
 };
+
+/** Employé déjà pointé ce jour dans une autre équipe (affiché sur la feuille). */
+export type ElsewhereRow = { employee_id: string; name: string; team_type: TeamType; position: Position; shift: number };
 
 export type EmployeeOption = {
   id: string;
