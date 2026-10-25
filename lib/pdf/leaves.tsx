@@ -35,7 +35,7 @@ export function LeaveBalancesPdf({ company, asOf, filterLabel, rows, generatedBy
           nom: r.name,
           eq: r.team_type ? t(TEAM_LABELS[r.team_type]) : "",
           poste: r.position ? t(POSITION_LABELS[r.position]) : "",
-          entree: r.hire_date ? formatDateFr(r.hire_date) : t("non renseignée"),
+          entree: r.hire_date ? formatDateFr(r.hire_date) : r.accrual_from ? `${t("Non renseignée")} (${t("décompte depuis le {date}", { date: formatDateFr(r.accrual_from) })})` : t("Date de début non renseignée"),
           acq: String(r.accrued),
           pris: String(r.taken),
           adj: r.adjustments ? String(r.adjustments) : "",

@@ -24,6 +24,7 @@ const employeeSchema = z
     chauffeur_id: optionalUuid,
     substitute_id: optionalUuid,
     hire_date: optionalDate,
+    in_service_before_start: z.boolean().default(false),
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
     job_title: z.string().trim().max(60).default(""),
@@ -37,6 +38,8 @@ const employeeSchema = z
     chauffeur_id: d.position === "rippeur" ? d.chauffeur_id : null,
     // Remplaçant attitré : pour les titulaires (chauffeur, rippeur) uniquement
     substitute_id: d.position === "chauffeur" || d.position === "rippeur" ? d.substitute_id : null,
+    // Le drapeau ne sert que si la date est inconnue
+    in_service_before_start: d.hire_date ? false : d.in_service_before_start,
   }))
   .refine((d) => d.position !== "autre" || d.job_title.length > 0, { message: "Indiquez le libellé de la fonction.", path: ["job_title"] });
 
@@ -58,6 +61,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     chauffeur_id: formData.get("chauffeur_id"),
     substitute_id: formData.get("substitute_id"),
     hire_date: formData.get("hire_date"),
+    in_service_before_start: formData.get("in_service_before_start") === "on",
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
     job_title: formData.get("job_title") ?? "",
@@ -206,7 +210,7 @@ export async function deleteTruck(id: string): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 // Saisie de plusieurs employés en une fois
 // ---------------------------------------------------------------------------
-export type BulkEmployeeInput = { matricule: string; last_name: string; first_name: string; position: string; rest_day: string; hire_date: string; phone: string };
+export type BulkEmployeeInput = { matricule: string; last_name: string; first_name: string; position: string; rest_day: string; hire_date: string; phone: string; in_service_before_start?: boolean };
 export type BulkResult = { created: number; errors: { line: number; error: string }[] };
 
 /**
@@ -234,6 +238,7 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       chauffeur_id: null,
       substitute_id: null,
       hire_date: r.hire_date,
+      in_service_before_start: !!r.in_service_before_start,
       phone: r.phone ?? "",
       is_active: true,
     });

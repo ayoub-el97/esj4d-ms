@@ -10,7 +10,7 @@ export { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
 // Tous les soldes sont calculés par la base (fonctions leave_balances, recovery_balances,
 // days_taken, recovery_credits) : écrans et PDF affichent exactement les mêmes chiffres.
 
-type EmpInfo = { name: string; order_number: number; matricule: string; team_type: TeamType | null; position: Position | null; hire_date: string | null; is_active: boolean };
+type EmpInfo = { name: string; order_number: number; matricule: string; team_type: TeamType | null; position: Position | null; hire_date: string | null; in_service_before_start: boolean; is_active: boolean };
 
 function info(e: Employee | undefined): EmpInfo {
   return {
@@ -20,6 +20,7 @@ function info(e: Employee | undefined): EmpInfo {
     team_type: e?.team_type ?? null,
     position: e?.position ?? null,
     hire_date: e?.hire_date ?? null,
+    in_service_before_start: e?.in_service_before_start ?? false,
     is_active: e?.is_active ?? false,
   };
 }
@@ -93,6 +94,8 @@ export type LeaveBalance = EmpInfo & {
   planned: number;
   adjustments: number;
   balance: number;
+  /** Début du décompte des congés (null = date de début non renseignée : aucun congé calculé) */
+  accrual_from: string | null;
 };
 
 export type BalanceFilters = { team?: string; q?: string; includeInactive?: boolean };
@@ -102,7 +105,7 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
   const [{ data, error }, employees] = await Promise.all([supabase.rpc("leave_balances", { p_as_of: asOf }), getEmployees()]);
   if (error) throw new Error(error.message);
   const byId = new Map(employees.map((e) => [e.id, e]));
-  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number };
+  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number; accrual_from?: string | null };
   return ((data ?? []) as Raw[])
     .map((r) => ({
       ...info(byId.get(r.employee_id)),
@@ -113,6 +116,7 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
       planned: Number(r.planned),
       adjustments: Number(r.adjustments),
       balance: Number(r.balance),
+      accrual_from: r.accrual_from ?? null,
     }))
     .filter((r) => (f.includeInactive ? true : r.is_active))
     .filter((r) => !f.team || r.team_type === f.team)

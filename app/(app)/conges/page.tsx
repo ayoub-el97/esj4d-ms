@@ -199,7 +199,19 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
                 </TableCell>
                 <TableCell>{b.team_type ? t(TEAM_LABELS[b.team_type]) : ""}</TableCell>
                 <TableCell>{b.position ? t(POSITION_LABELS[b.position]) : ""}</TableCell>
-                <TableCell>{b.hire_date ? formatDateFr(b.hire_date) : <span className="text-destructive">{t("non renseignée")}</span>}</TableCell>
+                <TableCell>
+                  {b.hire_date ? (
+                    formatDateFr(b.hire_date)
+                  ) : b.accrual_from ? (
+                    <span className="text-xs text-muted-foreground" title={t("Date de début non renseignée : congés décomptés depuis le début du projet.")}>
+                      {t("Non renseignée")} · {t("décompte depuis le {date}", { date: formatDateFr(b.accrual_from) })}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-destructive" title={t("Aucun congé n'est calculé tant que la date de début n'est pas renseignée.")}>
+                      {t("Date de début non renseignée")}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell className="text-end">{b.accrued}</TableCell>
                 <TableCell className="text-end">{b.taken}</TableCell>
                 <TableCell className="text-end">{b.adjustments || ""}</TableCell>

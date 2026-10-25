@@ -141,7 +141,16 @@ export function EmployeesTable({
                   {e.substitute_label && <div className="text-xs">{t("Remplaçant : {name}", { name: e.substitute_label })}</div>}
                 </TableCell>
                 <TableCell>{e.rest_day == null ? "—" : t(WEEKDAY_LABELS[e.rest_day])}</TableCell>
-                <TableCell>{e.hire_date ? formatDateFr(e.hire_date) : "—"}</TableCell>
+                <TableCell>
+                  {e.hire_date ? (
+                    formatDateFr(e.hire_date)
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">
+                      {t("Non renseignée")}
+                      {e.in_service_before_start && <span className="block not-italic">{t("en poste au début du projet")}</span>}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {e.is_active ? <Badge>{t("Actif")}</Badge> : <Badge variant="destructive">{t("Inactif")}</Badge>}
                   {e.departure_date && (

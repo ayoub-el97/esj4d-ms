@@ -1,8 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Webhook WhatsApp : appelé par Meta (signature vérifiée dans la route)
-const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook"];
+const PUBLIC_PATHS = ["/login"];
 
 /**
  * Rafraîchit la session Supabase à chaque requête et protège les pages :

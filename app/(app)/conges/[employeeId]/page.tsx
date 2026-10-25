@@ -51,7 +51,16 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
         </Suspense>
       </ModuleHeader>
 
-      {!employee.hire_date && <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{t("Date d'entrée non renseignée : aucun congé n'est acquis. Renseignez-la dans la fiche employé.")}</p>}
+      {!employee.hire_date &&
+        (employee.in_service_before_start ? (
+          <p className="mb-4 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+            {t("Date de début non renseignée : employé déjà en poste au début du projet, ses congés sont décomptés depuis la date de début du projet.")}
+          </p>
+        ) : (
+          <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            {t("Date de début non renseignée : aucun congé n'est calculé. Renseignez la date réelle dans la fiche employé, ou cochez « Déjà en poste au début du projet ».")}
+          </p>
+        ))}
 
       <h2 className="mb-2 text-lg font-semibold">{t("Congés")}</h2>
       <Stats

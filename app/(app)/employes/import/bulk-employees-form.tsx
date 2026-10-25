@@ -62,6 +62,7 @@ export function BulkEmployeesForm({ returnTo }: { returnTo: string }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(() => Array.from({ length: 5 }, emptyRow));
   const [paste, setPaste] = useState("");
+  const [inService, setInService] = useState(true);
   const [showPaste, setShowPaste] = useState(false);
   const [pending, start] = useTransition();
   const [summary, setSummary] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export function BulkEmployeesForm({ returnTo }: { returnTo: string }) {
     const filled = rows.filter((r) => !isBlank(r));
     if (!filled.length) return toast.error(t("Remplissez au moins une ligne."));
     start(async () => {
-      const r = await createEmployeesBulk(filled.map(({ matricule, last_name, first_name, position, rest_day, hire_date, phone }) => ({ matricule, last_name, first_name, position, rest_day, hire_date, phone })));
+      const r = await createEmployeesBulk(filled.map(({ matricule, last_name, first_name, position, rest_day, hire_date, phone }) => ({ matricule, last_name, first_name, position, rest_day, hire_date, phone, in_service_before_start: !hire_date && inService })));
       if (!r.ok || !r.data) return void toast.error(r.ok ? t("Réponse invalide") : r.error);
       const { created, errors } = r.data;
       // Lignes enregistrées retirées ; lignes en erreur conservées avec la raison
@@ -111,6 +112,14 @@ export function BulkEmployeesForm({ returnTo }: { returnTo: string }) {
           <Plus /> {t("5 lignes de plus")}
         </Button>
       </div>
+
+      <label className="flex items-start gap-2 rounded-xl border bg-card p-3 text-sm">
+        <input type="checkbox" checked={inService} onChange={(e) => setInService(e.target.checked)} className="mt-0.5 size-4" />
+        <span>
+          {t("Les employés sans date d'entrée étaient déjà en poste au début du projet")}
+          <span className="block text-xs text-muted-foreground">{t("La date d'entrée est facultative. Pour ces lignes, les congés sont décomptés depuis la date de début du projet ; sans cette case, aucun congé n'est calculé tant que la date n'est pas renseignée.")}</span>
+        </span>
+      </label>
 
       {showPaste && (
         <div className="space-y-2 rounded-xl border bg-card p-4">

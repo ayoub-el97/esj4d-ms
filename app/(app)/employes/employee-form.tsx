@@ -28,6 +28,7 @@ export function EmployeeForm({
   const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
+  const [hireDate, setHireDate] = useState(employee?.hire_date ?? "");
 
   const others = collecte.filter((e) => e.id !== employee?.id);
   const chauffeurs = others.filter((e) => e.position === "chauffeur");
@@ -136,9 +137,20 @@ export function EmployeeForm({
               </NativeSelect>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="hire_date">{t("Date de début de travail")}</Label>
-              <Input id="hire_date" name="hire_date" type="date" defaultValue={employee?.hire_date ?? ""} />
-              <p className="text-xs text-muted-foreground">{t("Sert au calcul des congés acquis.")}</p>
+              <Label htmlFor="hire_date">{t("Date de début de travail (facultatif)")}</Label>
+              <Input id="hire_date" name="hire_date" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+              <p className="text-xs text-muted-foreground">
+                {t("Laissez vide si la date réelle est inconnue (employé déjà en poste avant l'application) : aucune date n'est supposée. Sert au calcul des congés acquis.")}
+              </p>
+              {!hireDate && (
+                <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-2 text-xs">
+                  <input type="checkbox" name="in_service_before_start" defaultChecked={employee?.in_service_before_start ?? false} className="mt-0.5 size-4" />
+                  <span>
+                    <span className="font-medium">{t("Déjà en poste au début du projet")}</span>
+                    <span className="block text-muted-foreground">{t("Les congés sont alors décomptés depuis la date de début du projet (Paramètres › Réglages). Sinon, aucun congé n'est calculé tant que la date de début n'est pas renseignée.")}</span>
+                  </span>
+                </label>
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="work_schedule">{t("Horaire habituel (facultatif)")}</Label>

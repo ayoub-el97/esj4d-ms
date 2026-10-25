@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WhatsAppProvider } from "@/components/whatsapp-button";
 import { getCurrentUser } from "@/lib/auth";
 import { getBranding } from "@/lib/data/settings";
 import { getReminderAlerts } from "@/lib/data/reminders";
@@ -46,9 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <div className="flex flex-1">
         <Sidebar {...navProps} />
-        <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">
-          <WhatsAppProvider canSend={user.permissions.whatsapp.can_edit}>{children}</WhatsAppProvider>
-        </main>
+        <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-8 lg:pb-10">{children}</main>
       </div>
 
       <MobileTabBar {...navProps} />
