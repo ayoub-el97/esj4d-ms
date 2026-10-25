@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { NativeSelect } from "@/components/native-select";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 
 /** `label` des variantes : clés de traduction (texte français). */
 type Choice = { label: string; params: Record<string, string> };
@@ -60,6 +61,8 @@ export function PdfExportButton({
       <Button variant="outline" onClick={() => { setEmailResult(null); setOpen(true); }}>
         <FileDown /> {t(label)}
       </Button>
+      {/* Même rapport, mêmes paramètres que l'export PDF */}
+      <WhatsAppButton kind={kind} params={active} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[90vh] flex-col sm:max-w-5xl">
           <DialogHeader>

@@ -24,7 +24,8 @@ export type AppModule =
   | "cloture"
   | "employes"
   | "parametres"
-  | "achats";
+  | "achats"
+  | "whatsapp";
 
 export const MODULE_LABELS: Record<AppModule, string> = {
   pointage: "Pointage",
@@ -40,6 +41,7 @@ export const MODULE_LABELS: Record<AppModule, string> = {
   employes: "Employés",
   parametres: "Paramètres",
   achats: "Achats de matériel",
+  whatsapp: "Envoi WhatsApp",
 };
 
 /**
@@ -51,6 +53,7 @@ export function defaultPermission(module: AppModule, role: AppRole): { can_view:
     if (role === "admin" || role === "secretaire") return { can_view: true, can_edit: true };
     if (role === "lecture") return { can_view: true, can_edit: false };
   }
+  if (module === "whatsapp" && (role === "admin" || role === "secretaire")) return { can_view: true, can_edit: true };
   return { can_view: false, can_edit: false };
 }
 
