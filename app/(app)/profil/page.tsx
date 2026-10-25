@@ -55,6 +55,7 @@ export default async function ProfilPage({ searchParams }: { searchParams: Promi
       {tab === "employes" && canEmployees && (
         <EmployeesTab
           canEdit={user.permissions.employes.can_edit}
+          canDelete={user.role === "admin" && user.permissions.employes.can_edit}
           filters={sp}
           okMessage={sp.ok ? (sp.ok === "cree" ? t("Employé créé.") : t("Employé modifié.")) : undefined}
           addLabel={t("Nouvel équipier")}
@@ -91,7 +92,7 @@ async function VehiclesTab({ canEdit }: { canEdit: boolean }) {
   return <TrucksUI trucks={trucks} canEdit={canEdit} />;
 }
 
-async function EmployeesTab({ canEdit, filters, okMessage, addLabel, bulkLabel }: { canEdit: boolean; filters: SP; okMessage?: string; addLabel: string; bulkLabel: string }) {
+async function EmployeesTab({ canEdit, canDelete, filters, okMessage, addLabel, bulkLabel }: { canEdit: boolean; canDelete: boolean; filters: SP; okMessage?: string; addLabel: string; bulkLabel: string }) {
   const { rows } = await getEmployeeRows(filters);
   return (
     <div className="space-y-3">
@@ -110,7 +111,7 @@ async function EmployeesTab({ canEdit, filters, okMessage, addLabel, bulkLabel }
           </LinkButton>
         </div>
       )}
-      <EmployeesTable rows={rows} canEdit={canEdit} filters={filters} returnTo="/profil?onglet=employes" />
+      <EmployeesTable rows={rows} canEdit={canEdit} canDelete={canDelete} filters={filters} returnTo="/profil?onglet=employes" />
     </div>
   );
 }

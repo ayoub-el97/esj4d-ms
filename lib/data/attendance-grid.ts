@@ -45,11 +45,11 @@ export async function getLiveGrid(month: string, startDay?: number): Promise<Gri
     fetchRecords(from, to),
     supabase.from("holidays").select("date, label").gte("date", from).lte("date", to),
   ]);
-  return buildGrid({ month, from, to, employees: periodEmployees(employees, records, to), records, holidays: holidays ?? [] });
+  return buildGrid({ month, from, to, employees: periodEmployees(employees, records, to, from), records, holidays: holidays ?? [] });
 }
 
 /** Employés de la période : pointés dans la période, ou actifs et embauchés au plus tard à la fin. */
-function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, records: { employee_id: string; position: Position; team_type: TeamType }[], to: string): GridEmployee[] {
+function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, records: { employee_id: string; position: Position; team_type: TeamType }[], to: string, from = to): GridEmployee[] {
   // Fonction et équipe de la période : les plus fréquentes au pointage (une affectation ponctuelle,
   // ex. balayeur pointé ripeur un jour, ne change pas la fonction affichée) ; sinon la fiche.
   const seen = new Map<string, { positions: Position[]; teams: TeamType[] }>();
@@ -66,7 +66,9 @@ function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, re
     lastSnapshot.set(id, { position: mostFrequent(x.positions, e?.position)!, team_type: mostFrequent(x.teams, e?.team_type)! });
   }
   return employees
-    .filter((e) => lastSnapshot.has(e.id) || (e.is_active && (!e.hire_date || e.hire_date <= to)))
+    // Pointé dans la période, ou présent dans l'entreprise pendant la période (embauché avant la fin,
+    // actif ou parti après le début) : un employé parti reste dans les périodes où il a travaillé
+    .filter((e) => lastSnapshot.has(e.id) || ((e.is_active || (!!e.departure_date && e.departure_date >= from)) && (!e.hire_date || e.hire_date <= to)))
     .map((e) => ({
       id: e.id,
       order_number: e.order_number,
@@ -92,7 +94,7 @@ export async function getOvertimeGrid(month: string, f: GridFilters = {}, startD
   const supabase = await createClient();
   const [employees, records, { data: holidays }] = await Promise.all([getEmployees(), fetchRecords(from, to), supabase.from("holidays").select("date, label").gte("date", from).lte("date", to)]);
   // Filtres équipe / fonction / nom : mêmes règles que la grille
-  const base = buildGrid({ month, from, to, employees: periodEmployees(employees, records, to), records: [], holidays: holidays ?? [] });
+  const base = buildGrid({ month, from, to, employees: periodEmployees(employees, records, to, from), records: [], holidays: holidays ?? [] });
   const kept = filterGrid(base, f).rows;
   const hours = new Map<string, number>();
   for (const r of records) {

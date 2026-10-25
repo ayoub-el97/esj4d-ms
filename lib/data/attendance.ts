@@ -3,7 +3,7 @@ import { getProjectStart } from "@/lib/data/settings";
 import { workMonthRange } from "@/lib/dates";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
+import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
 import type { EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
@@ -136,7 +136,8 @@ export async function buildSheet(date: string, team: TeamType) {
   });
   const alreadyIn = new Set([...rows.map((r) => r.employee_id), ...elsewhere.map((x) => x.employee_id)]);
   for (const e of employees) {
-    if (e.team_type !== team || !e.is_active || alreadyIn.has(e.id)) continue;
+    // Actif, ou parti après cette date (le pointage rétroactif reste possible jusqu'au dernier jour)
+    if (e.team_type !== team || !availableOn(e, date) || alreadyIn.has(e.id)) continue;
     const defaultStatus: AttendanceStatus = holiday
       ? "ferie"
       : onLeave.has(e.id)
@@ -205,7 +206,7 @@ export async function buildSheet(date: string, team: TeamType) {
     holidayLabel: holiday?.label ?? null,
     hasSaved: (existing ?? []).length > 0,
     elsewhere,
-    options: employees.filter((e) => e.is_active).map(toOption),
+    options: employees.filter((e) => availableOn(e, date)).map(toOption),
     trucks: trucks.map((tr) => ({ id: tr.id, matricule: tr.matricule, brand: tr.brand })),
   };
 }

@@ -65,7 +65,9 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
-  const { id, ...values } = parsed.data;
+  const { id, ...rest } = parsed.data;
+  // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
+  const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();
   const { error } = id ? await supabase.from("employees").update(values).eq("id", id) : await supabase.from("employees").insert(values);
   if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
@@ -253,4 +255,86 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
     revalidatePath("/pointage", "layout");
   }
   return { ok: true, data: result };
+}
+
+// ---------------------------------------------------------------------------
+// Départ, réactivation, suppression définitive
+// ---------------------------------------------------------------------------
+const departureSchema = z.object({
+  id: z.string().uuid(),
+  departure_date: z.string().date("Date de départ invalide."),
+  departure_reason: z.enum(["demission", "fin_contrat", "licenciement", "autre"], { message: "Choisissez le motif de départ." }),
+  departure_comment: z.string().trim().max(500).default(""),
+});
+
+function refreshEmployees() {
+  revalidatePath("/employes");
+  revalidatePath("/profil");
+  revalidatePath("/pointage", "layout");
+}
+
+/** Départ de l'employé : désactivation (jamais de suppression), historique intact. Journalisé. */
+export async function deactivateEmployee(input: { id: string; departure_date: string; departure_reason: string; departure_comment?: string }): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const parsed = departureSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
+  const { id, ...values } = parsed.data;
+  const supabase = await createClient();
+  const { data: emp } = await supabase.from("employees").select("hire_date").eq("id", id).maybeSingle();
+  if (!emp) return { ok: false, error: t("Employé introuvable.") };
+  if (emp.hire_date && values.departure_date < emp.hire_date) return { ok: false, error: t("La date de départ ne peut pas précéder la date de début de travail.") };
+  const { error } = await supabase.from("employees").update({ ...values, is_active: false }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+  refreshEmployees();
+  return { ok: true, message: t("Départ enregistré : l'employé est désactivé. Son historique est conservé.") };
+}
+
+/** Réactivation : l'employé redevient sélectionnable ; le départ précédent reste dans le journal. */
+export async function reactivateEmployee(id: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { error } = await supabase.from("employees").update({ is_active: true, departure_date: null, departure_reason: null, departure_comment: "" }).eq("id", id);
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+  refreshEmployees();
+  return { ok: true, message: t("Employé réactivé.") };
+}
+
+export type EmployeeDependency = { table_name: string; label: string; records: number };
+
+/** Enregistrements qui font référence à l'employé (vérifié par la base sur toutes les tables liées). */
+export async function checkEmployeeDeletion(id: string): Promise<ActionResult<{ dependencies: EmployeeDependency[]; canDelete: boolean }>> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("employee_dependencies", { p_employee: id });
+  if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+  const dependencies = ((data ?? []) as EmployeeDependency[]).map((d) => ({ ...d, records: Number(d.records) }));
+  return { ok: true, data: { dependencies, canDelete: dependencies.length === 0 && auth.user.role === "admin" } };
+}
+
+/** Suppression définitive (administrateur, aucun enregistrement lié, matricule saisi pour confirmer). */
+export async function deleteEmployee(id: string, confirmMatricule: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("employes", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (auth.user.role !== "admin") return { ok: false, error: t("Seul un administrateur peut supprimer définitivement un employé.") };
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_employee", { p_employee: id, p_confirm_matricule: confirmMatricule });
+  if (error) {
+    const m = error.message.match(/EMPLOYE_HISTORIQUE\|(.*)$/);
+    if (m) return { ok: false, error: t("Suppression impossible : l'employé figure dans {list}. Désactivez-le pour conserver l'historique.", { list: m[1] }) };
+    if (error.message.includes("CONFIRMATION_INVALIDE")) return { ok: false, error: t("Le matricule saisi ne correspond pas : suppression annulée.") };
+    if (error.message.includes("SUPPRESSION_REFUSEE")) return { ok: false, error: t("Seul un administrateur peut supprimer définitivement un employé.") };
+    return { ok: false, error: t(friendlyDbError(error.message)) };
+  }
+  refreshEmployees();
+  return { ok: true, message: t("Employé supprimé définitivement (aucun historique ne le concernait). La suppression est inscrite au journal.") };
 }

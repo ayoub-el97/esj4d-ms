@@ -43,7 +43,7 @@ export default async function EmployesPage({
         </Alert>
       )}
 
-      <EmployeesTable rows={rows} canEdit={user.permissions.employes.can_edit} filters={sp} />
+      <EmployeesTable rows={rows} canEdit={user.permissions.employes.can_edit} canDelete={user.role === "admin" && user.permissions.employes.can_edit} filters={sp} />
       <ModuleButtons />
     </div>
   );

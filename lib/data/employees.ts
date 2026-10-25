@@ -35,10 +35,16 @@ export type Employee = {
   job_title: string;
   /** Horaire habituel (texte libre, informatif) */
   work_schedule: string;
+  /** Départ : dernier jour de travail, motif, commentaire (employé désactivé) */
+  departure_date: string | null;
+  departure_reason: DepartureReason | null;
+  departure_comment: string;
 };
 
+export type DepartureReason = "demission" | "fin_contrat" | "licenciement" | "autre";
+
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active, job_title, work_schedule";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();
@@ -79,7 +85,7 @@ export async function getEmployeeRows(f: EmployeeFilters): Promise<{ rows: Emplo
   const rows = employees
     .filter((e) => !f.equipe || e.team_type === f.equipe)
     .filter((e) => !f.poste || e.position === f.poste)
-    .filter((e) => (f.statut === "inactif" ? !e.is_active : f.statut === "tous" ? true : e.is_active))
+    .filter((e) => (f.statut === "inactif" ? !e.is_active : f.statut === "partis" ? !!e.departure_date : f.statut === "tous" ? true : e.is_active))
     .filter((e) => !q || `${e.last_name} ${e.first_name} ${e.matricule}`.toLowerCase().includes(q))
     .map((e) => ({
       ...e,
@@ -88,6 +94,11 @@ export async function getEmployeeRows(f: EmployeeFilters): Promise<{ rows: Emplo
       substitute_label: e.substitute_id ? (namesById.get(e.substitute_id) ?? "") : "",
     }));
   return { rows, total: employees.length, active: employees.filter((e) => e.is_active).length };
+}
+
+/** Employé proposé sur une feuille de pointage à cette date : actif, ou parti après cette date (saisie rétroactive). */
+export function availableOn(e: Pick<Employee, "is_active" | "departure_date">, date: string): boolean {
+  return e.is_active || (!!e.departure_date && date <= e.departure_date);
 }
 
 export type RestDayChange = { id: number; old_rest_day: number | null; new_rest_day: number | null; changed_by_email: string | null; changed_at: string };
