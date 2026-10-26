@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { cleaningGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours } from "@/lib/overtime";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,7 +12,7 @@ import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import type { TFunction } from "@/lib/i18n/config";
 import { formatDateTimeFr } from "@/lib/dates";
-import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType , POSITIONS, type Position} from "@/lib/types";
+import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType , POSITIONS, type Position, WEEKDAY_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -167,8 +168,20 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
 
   // Regroupement : collecte = par chauffeur ; nettoiement = liste simple
   const groups = useMemo(() => {
-    type Group = { key: string; title: string | null; chauffeurId: string | null; idx: number[] };
-    if (team === "nettoiement") return [{ key: "all", title: null, chauffeurId: null, idx: rows.map((_, i) => i) }] as Group[];
+    type Group = { key: string; title: string | null; chauffeurId: string | null; idx: number[]; tone?: string };
+    if (team === "nettoiement")
+      return cleaningGroups(rows).map((g, n) => ({
+        key: g.key,
+        chauffeurId: null,
+        idx: g.idx,
+        tone: g.restDay === "autres" ? undefined : n % 2 ? "bg-sky-50 text-sky-950 dark:bg-sky-950/40 dark:text-sky-100" : "bg-emerald-50 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100",
+        title:
+          g.restDay === "autres"
+            ? t("Autres fonctions — {count} employé(s)", { count: g.employees })
+            : g.restDay === null
+              ? t("Repos non défini — {count} employé(s)", { count: g.employees })
+              : t("Repos : {day} — {count} employé(s)", { day: t(WEEKDAY_LABELS[g.restDay]), count: g.employees }),
+      })) as Group[];
     const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
     const used = new Set<number>();
     const result: Group[] = [];
@@ -194,6 +207,9 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     if (others.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: others });
     return result;
   }, [rows, team, t, trucks]);
+
+  // Numérotation 1, 2, 3… dans l'ordre affiché (jamais un identifiant)
+  const numbers = useMemo(() => displayNumbers(rows, groups.flatMap((g) => g.idx)), [rows, groups]);
 
   const supervisorNames = useMemo(
     () =>
@@ -260,7 +276,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-2 py-2 text-start">{t("NB")}</th>
+              <th className="px-2 py-2 text-start" title={t("Numéro d'ordre dans la liste (calculé automatiquement, ce n'est pas un matricule)")}>{t("N°")}</th>
               <th className="px-2 py-2 text-start">{t("Poste")}</th>
               <th className="px-2 py-2 text-start">{t("Nom et prénom")}</th>
               <th className="px-2 py-2 text-start">{t("Repos")}</th>
@@ -283,6 +299,8 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 t={t}
                 dow={dow}
                 title={g.title}
+                tone={g.tone}
+                numbers={numbers}
                 rows={rows}
                 idx={g.idx}
                 canEdit={canEdit}
@@ -331,7 +349,8 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
             </span>
           ))}
           <span className="rounded-md border px-2 py-1">
-            {t("Total")} : <strong>{rows.length}</strong>
+            {t("Employés")} : <strong>{new Set(rows.map((r) => r.employee_id)).size}</strong>
+            {rows.length !== new Set(rows.map((r) => r.employee_id)).size && <span> · {t("{count} ligne(s)", { count: rows.length })}</span>}
           </span>
         </div>
         {canEdit && (
@@ -374,6 +393,8 @@ function GroupRows({
   t,
   dow,
   title,
+  tone,
+  numbers,
   rows,
   idx,
   canEdit,
@@ -390,6 +411,9 @@ function GroupRows({
   teams,
   onAddMember,
 }: {
+  tone?: string;
+  /** Numéro d'affichage de chaque ligne (1, 2, 3… dans l'ordre de la liste) */
+  numbers: Map<number, number>;
   t: TFunction;
   dow: number;
   title: string | null;
@@ -412,8 +436,8 @@ function GroupRows({
   return (
     <>
       {title && (
-        <tr className="bg-indigo-50/60">
-          <td colSpan={11} className="px-2 py-1.5 text-xs font-semibold text-indigo-900">
+        <tr className={cn("bg-indigo-50/60", tone && "border-t-2 border-t-emerald-300")}>
+          <td colSpan={11} className={cn("px-2 py-1.5 text-xs font-semibold text-indigo-900", tone)}>
             <span>{title}</span>
             {canEdit && onAddMember && (
               <button type="button" onClick={onAddMember} className="ms-3 inline-flex items-center gap-1 text-indigo-700 hover:underline">
@@ -432,7 +456,9 @@ function GroupRows({
         const coveredBySubstitute = substituteRow?.replacing_employee_id === r.employee_id;
         return (
           <tr key={`${r.employee_id}-${r.shift}`} className={cn("border-t", STATUS_COLORS[r.status], r.is_extra && "italic")}>
-            <td className="px-2 py-1 text-muted-foreground">{r.order_number || "—"}</td>
+            <td className="px-2 py-1 font-semibold tabular-nums text-muted-foreground" title={[r.matricule && `${t("Matricule")} ${r.matricule}`, r.order_number && `${t("NB")} ${r.order_number}`].filter(Boolean).join(" · ") || undefined}>
+              {numbers.get(i) ?? ""}
+            </td>
             <td className="px-2 py-1">
               {canEdit ? (
                 <NativeSelect

@@ -112,12 +112,12 @@ export const POSITION_LABELS: Record<Position, string> = {
 };
 /** Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre */
 export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placement: "top" | "after" }[] = [
-  { position: "directeur", title: "Direction", placement: "top" },
   { position: "chef_equipe", title: "Chef d'équipe", placement: "top" },
   { position: "superviseur", title: "Superviseur", placement: "top" },
   { position: "agent_securite", title: "Sécurité", placement: "after" },
   { position: "mecanicien", title: "Mécanicien", placement: "after" },
   { position: "gardien", title: "Gardien", placement: "after" },
+  { position: "directeur", title: "Direction", placement: "after" },
   { position: "autre", title: "Autres fonctions", placement: "after" },
 ];
 export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];

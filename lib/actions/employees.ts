@@ -15,7 +15,11 @@ const restDaySchema = z.preprocess((v) => (v === "" || v == null ? null : Number
 const employeeSchema = z
   .object({
     id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
-    matricule: z.string().trim().min(1, "Matricule requis."),
+    // Facultatif : vide = aucun matricule (null) ; l'employé est identifié par son id interne
+    matricule: z.preprocess((v) => {
+      const s = String(v ?? "").trim();
+      return s ? s : null;
+    }, z.string().max(40, "Matricule trop long (40 caractères maximum).").nullable()),
     last_name: z.string().trim().min(1, "Nom requis."),
     first_name: z.string().trim().min(1, "Prénom requis."),
     position: z.enum(POSITIONS as [Position, ...Position[]]),
@@ -68,6 +72,19 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     work_schedule: formData.get("work_schedule") ?? "",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
+
+  // Doublon : même nom et prénom, sans matricule pour les distinguer
+  const supabaseCheck = await createClient();
+  const homonym = await findHomonym(supabaseCheck, parsed.data.last_name, parsed.data.first_name, parsed.data.matricule, parsed.data.id);
+  if (homonym && formData.get("confirm_homonym") !== "on") {
+    return {
+      ok: false,
+      error: t("Un employé nommé {name} existe déjà ({matricule}). Ajoutez un matricule pour les distinguer, ou cochez « Autre personne portant le même nom ».", {
+        name: homonym.name,
+        matricule: homonym.matricule ? t("matricule {m}", { m: homonym.matricule }) : t("sans matricule"),
+      }),
+    };
+  }
 
   const { id, ...rest } = parsed.data;
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
@@ -177,6 +194,22 @@ export async function setTruckActive(id: string, isActive: boolean): Promise<Act
   return { ok: true, message: isActive ? t("Camion réactivé.") : t("Camion désactivé.") };
 }
 
+const nameKey = (last: string, first: string) => `${last} ${first}`.trim().replace(/\s+/g, " ").toLowerCase();
+const likeExact = (s: string) => s.trim().replace(/\s+/g, " ").replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/**
+ * Employé existant portant le même nom et prénom (sans tenir compte des majuscules), qui ne peut pas
+ * être distingué par le matricule (l'un des deux n'en a pas, ou c'est le même). Deux homonymes avec
+ * des matricules différents sont acceptés.
+ */
+async function findHomonym(supabase: Awaited<ReturnType<typeof createClient>>, last: string, first: string, matricule: string | null, excludeId?: string): Promise<{ name: string; matricule: string | null } | null> {
+  let q = supabase.from("employees").select("id, last_name, first_name, matricule").ilike("last_name", likeExact(last)).ilike("first_name", likeExact(first)).limit(5);
+  if (excludeId) q = q.neq("id", excludeId);
+  const { data } = await q;
+  const hit = (data ?? []).find((e) => !e.matricule || !matricule || e.matricule === matricule);
+  return hit ? { name: `${hit.last_name} ${hit.first_name}`, matricule: hit.matricule } : null;
+}
+
 function friendlyDbError(message: string): string {
   if (message.includes("trucks_internal_number_uniq")) return "Ce numéro interne de camion existe déjà.";
   if (message.includes("duplicate key") && message.includes("matricule")) return "Ce matricule existe déjà.";
@@ -227,6 +260,7 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
 
   const supabase = await createClient();
   const result: BulkResult = { created: 0, errors: [] };
+  const batch = new Map<string, string>();
   for (const [i, r] of rows.entries()) {
     const parsed = employeeSchema.safeParse({
       matricule: r.matricule,
@@ -242,6 +276,17 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       phone: r.phone ?? "",
       is_active: true,
     });
+    if (parsed.success) {
+      // Doublons : dans la base et dans les lignes déjà acceptées de cet envoi
+      const key = nameKey(parsed.data.last_name, parsed.data.first_name);
+      const inBatch = batch.get(key);
+      const homonym = inBatch !== undefined && (!inBatch || !parsed.data.matricule || inBatch === parsed.data.matricule) ? { name: `${parsed.data.last_name} ${parsed.data.first_name}` } : await findHomonym(supabase, parsed.data.last_name, parsed.data.first_name, parsed.data.matricule);
+      if (homonym) {
+        result.errors.push({ line: i + 1, error: t("Doublon : un employé nommé {name} existe déjà. Ajoutez un matricule pour distinguer deux personnes portant le même nom.", { name: homonym.name }) });
+        continue;
+      }
+      batch.set(key, parsed.data.matricule ?? "");
+    }
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       const msg = issue.path[0] === "position" ? "Poste invalide." : issue.path[0] === "hire_date" ? "Date d'entrée invalide." : issue.path[0] === "rest_day" ? "Jour de repos invalide." : issue.message;
@@ -336,7 +381,7 @@ export async function deleteEmployee(id: string, confirmMatricule: string): Prom
   if (error) {
     const m = error.message.match(/EMPLOYE_HISTORIQUE\|(.*)$/);
     if (m) return { ok: false, error: t("Suppression impossible : l'employé figure dans {list}. Désactivez-le pour conserver l'historique.", { list: m[1] }) };
-    if (error.message.includes("CONFIRMATION_INVALIDE")) return { ok: false, error: t("Le matricule saisi ne correspond pas : suppression annulée.") };
+    if (error.message.includes("CONFIRMATION_INVALIDE")) return { ok: false, error: t("La confirmation saisie ne correspond pas : suppression annulée.") };
     if (error.message.includes("SUPPRESSION_REFUSEE")) return { ok: false, error: t("Seul un administrateur peut supprimer définitivement un employé.") };
     return { ok: false, error: t(friendlyDbError(error.message)) };
   }

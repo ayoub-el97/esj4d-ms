@@ -18,6 +18,7 @@ export type Truck = {
 export type Employee = {
   id: string;
   order_number: number;
+  /** Matricule facultatif (chaîne vide si absent) ; l'identifiant fiable est id */
   matricule: string;
   last_name: string;
   first_name: string;
@@ -67,13 +68,13 @@ export async function getEmployees(opts: { team?: TeamType; onlyActive?: boolean
   if (opts.team) q = q.eq("team_type", opts.team);
   if (opts.onlyActive) q = q.eq("is_active", true);
   const { data } = await q.returns<Employee[]>();
-  return data ?? [];
+  return (data ?? []).map((e) => ({ ...e, matricule: e.matricule ?? "" }));
 }
 
 export async function getEmployee(id: string): Promise<Employee | null> {
   const supabase = await createClient();
   const { data } = await supabase.from("employees").select(EMPLOYEE_COLUMNS).eq("id", id).maybeSingle<Employee>();
-  return data;
+  return data ? { ...data, matricule: data.matricule ?? "" } : null;
 }
 
 export type EmployeeFilters = { equipe?: string; poste?: string; statut?: string; q?: string };

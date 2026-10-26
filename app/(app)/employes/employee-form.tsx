@@ -56,8 +56,11 @@ export function EmployeeForm({
               <Input id="first_name" name="first_name" defaultValue={employee?.first_name} required />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="matricule">{t("Matricule / identifiant")}</Label>
-              <Input id="matricule" name="matricule" defaultValue={employee?.matricule} required />
+              <Label htmlFor="matricule">{t("Matricule (facultatif)")}</Label>
+              <Input id="matricule" name="matricule" defaultValue={employee?.matricule} maxLength={40} />
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" name="confirm_homonym" className="size-3.5" /> {t("Autre personne portant le même nom (homonyme)")}
+              </label>
             </div>
             <div className="space-y-1">
               <Label>{t("Numéro d'ordre (NB)")}</Label>

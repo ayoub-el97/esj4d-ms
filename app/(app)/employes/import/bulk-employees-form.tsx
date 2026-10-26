@@ -150,7 +150,7 @@ export function BulkEmployeesForm({ returnTo }: { returnTo: string }) {
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-              <Input aria-label={t("Matricule")} placeholder={t("Matricule")} value={r.matricule} onChange={(e) => update(r.key, { matricule: e.target.value })} />
+              <Input aria-label={t("Matricule (facultatif)")} placeholder={t("Matricule (facultatif)")} value={r.matricule} onChange={(e) => update(r.key, { matricule: e.target.value })} />
               <Input aria-label={t("Nom")} placeholder={t("Nom")} value={r.last_name} onChange={(e) => update(r.key, { last_name: e.target.value })} />
               <Input aria-label={t("Prénom")} placeholder={t("Prénom")} value={r.first_name} onChange={(e) => update(r.key, { first_name: e.target.value })} />
               <NativeSelect aria-label={t("Poste")} value={r.position} onChange={(e) => update(r.key, { position: e.target.value })}>

@@ -1,13 +1,14 @@
 import { Text, View } from "@react-pdf/renderer";
+import { cleaningGroups } from "@/lib/sheet-order";
 import { fmtHours } from "@/lib/overtime";
 import type { SheetRow } from "@/lib/attendance-types";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
-import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
+import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType , WEEKDAY_LABELS } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
 const COLUMNS: Column[] = [
-  { key: "nb", label: "NB", width: 5, align: "center" },
+  { key: "nb", label: "N°", width: 5, align: "center" },
   { key: "poste", label: "Poste", width: 10 },
   { key: "nom", label: "Nom et prénom", width: 24 },
   { key: "repos", label: "Repos", width: 7, align: "center" },
@@ -41,8 +42,10 @@ export function AttendanceSheetPdf({
   const title = team === "collecte" ? t("Feuille de présence des équipes de collecte") : t("Feuille de présence des équipes de nettoiement");
   const tableRows: (Record<string, string> & { _group?: string })[] = [];
 
+  // Numérotation 1, 2, 3… dans l'ordre de la feuille (premier service de chaque employé)
+  const numbered = new Set<string>();
   const toRow = (r: SheetRow) => ({
-    nb: String(r.order_number || ""),
+    nb: numbered.has(r.employee_id) ? "" : (numbered.add(r.employee_id), String(numbered.size)),
     poste: r.usual_position && r.usual_position !== r.position ? `${t(POSITION_LABELS[r.position])} (${t("hab.")} ${t(POSITION_LABELS[r.usual_position])})` : t(POSITION_LABELS[r.position]),
     nom: r.name + (r.shift > 1 ? ` (${t("service {n}", { n: r.shift })})` : "") + (r.replacing_employee_id ? ` (${t("remplaçant")})` : r.is_extra ? ` (${t("renfort")})` : ""),
     repos: r.rest_day == null ? "" : t(WEEKDAY_SHORT[r.rest_day]),
@@ -98,7 +101,18 @@ export function AttendanceSheetPdf({
       others.forEach((r) => tableRows.push(toRow(r)));
     }
   } else {
-    rows.forEach((r) => tableRows.push(toRow(r)));
+    // Balayeurs par jour de repos (dimanche → samedi), puis autres fonctions
+    for (const g of cleaningGroups(rows)) {
+      tableRows.push({
+        _group:
+          g.restDay === "autres"
+            ? t("Autres fonctions — {count} employé(s)", { count: g.employees })
+            : g.restDay === null
+              ? t("Repos non défini — {count} employé(s)", { count: g.employees })
+              : t("Repos : {day} — {count} employé(s)", { day: t(WEEKDAY_LABELS[g.restDay]), count: g.employees }),
+      });
+      g.idx.forEach((i) => tableRows.push(toRow(rows[i])));
+    }
   }
 
   return (

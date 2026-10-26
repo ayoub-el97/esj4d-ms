@@ -126,7 +126,7 @@ export function EmployeesTable({
             {rows.map((e) => (
               <TableRow key={e.id} className={!e.is_active ? "opacity-60" : undefined}>
                 <TableCell>{e.order_number}</TableCell>
-                <TableCell className="font-mono text-xs">{e.matricule}</TableCell>
+                <TableCell className="font-mono text-xs">{e.matricule || <span className="font-sans text-muted-foreground">—</span>}</TableCell>
                 <TableCell className="font-medium">
                   <Link href={editHref(e.id)} className="hover:underline">
                     {e.last_name} {e.first_name}
@@ -309,7 +309,9 @@ function DeleteDialog({
           </ul>
         ) : (
           <div className="space-y-1">
-            <Label htmlFor="confirm_matricule">{t("Pour confirmer, saisissez le matricule « {matricule} »", { matricule: employee.matricule })}</Label>
+            <Label htmlFor="confirm_matricule">
+              {employee.matricule ? t("Pour confirmer, saisissez le matricule « {matricule} »", { matricule: employee.matricule }) : t("Pour confirmer, saisissez le mot « SUPPRIMER »")}
+            </Label>
             <Input id="confirm_matricule" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
           </div>
         )}
@@ -324,7 +326,7 @@ function DeleteDialog({
               </Button>
             )
           ) : (
-            <Button variant="destructive" disabled={pending || typed.trim() !== employee.matricule} onClick={() => onConfirm(typed.trim())}>
+            <Button variant="destructive" disabled={pending || typed.trim() !== (employee.matricule || "SUPPRIMER")} onClick={() => onConfirm(typed.trim())}>
               <Trash2 /> {t("Supprimer définitivement")}
             </Button>
           )}
