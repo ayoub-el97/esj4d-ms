@@ -67,6 +67,7 @@ begin
     public.material_purchase_payments,
     public.material_purchases,
     public.photos,
+    public.reminder_completions,
     public.reminders,
     public.truck_daily_reports,
     public.truck_repairs,

@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, BellRing } from "lucide-react";
-import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
-import { reminderState, type Reminder } from "@/lib/reminder-types";
+import type { ReminderWithStatus } from "@/lib/data/reminders";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useDueLabel } from "@/components/reminders-panel";
+import { ruleLabel, statusLabel } from "@/components/reminders-panel";
 
 const SHOWN_KEY = "esj-reminders-notified";
 
@@ -17,9 +16,8 @@ const SHOWN_KEY = "esj-reminders-notified";
  * Si l'utilisateur l'a autorisé, une notification du navigateur est affichée
  * une fois par jour et par rappel, à l'ouverture de l'application.
  */
-export function NotificationBell({ alerts, today }: { alerts: Reminder[]; today: string }) {
+export function NotificationBell({ alerts, today }: { alerts: ReminderWithStatus[]; today: string }) {
   const { t } = useT();
-  const dueLabel = useDueLabel();
   const [open, setOpen] = useState(false);
   // Lu au premier rendu côté navigateur ; n'influence que le menu (fermé à l'hydratation)
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(() =>
@@ -38,9 +36,8 @@ export function NotificationBell({ alerts, today }: { alerts: Reminder[]; today:
     }
     for (const r of alerts) {
       if (shown[r.id] === today) continue;
-      const { state, days } = reminderState(r, today);
       try {
-        new Notification(r.title, { body: `${formatDateFr(r.remind_date)} — ${dueLabel(state, days)}`, tag: `rappel-${r.id}` });
+        new Notification(r.title, { body: `${ruleLabel(t, r)} — ${statusLabel(t, r)}`, tag: `rappel-${r.id}` });
       } catch {
         // certains navigateurs mobiles n'autorisent les notifications que via un service worker
       }
@@ -51,7 +48,7 @@ export function NotificationBell({ alerts, today }: { alerts: Reminder[]; today:
     } catch {
       // stockage indisponible (navigation privée) : sans conséquence
     }
-  }, [permission, alerts, today, dueLabel]);
+  }, [permission, alerts, today, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,13 +74,14 @@ export function NotificationBell({ alerts, today }: { alerts: Reminder[]; today:
           ) : (
             <ul className="max-h-72 space-y-2 overflow-y-auto">
               {alerts.map((r) => {
-                const { state, days } = reminderState(r, today);
+                const state = r.status.state;
                 return (
                   <li key={r.id} className={cn("rounded-lg border-s-4 bg-muted/50 p-2 text-sm", state === "overdue" ? "border-s-red-500" : state === "today" ? "border-s-orange-500" : "border-s-amber-400")}>
-                    <div className="font-medium">{r.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDateFr(r.remind_date)} · {dueLabel(state, days)}
+                    <div className="font-medium">
+                      {r.title}
+                      {r.priority === "urgent" && <span className="ms-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white">{t("Urgente")}</span>}
                     </div>
+                    <div className="text-xs text-muted-foreground">{statusLabel(t, r)}</div>
                   </li>
                 );
               })}

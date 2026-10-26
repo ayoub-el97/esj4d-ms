@@ -2,11 +2,11 @@ import Link from "next/link";
 import { ChevronRight, ClipboardCheck, Fuel, Plus, TriangleAlert } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getI18n } from "@/lib/i18n/server";
-import { getReminders } from "@/lib/data/reminders";
+import { countCompletedToday, getRemindersWithStatus } from "@/lib/data/reminders";
+import { DueRemindersDialog } from "@/components/due-reminders-dialog";
 import { formatDateLongFr, todayISO } from "@/lib/dates";
 import { ADMIN_MODULES, DASHBOARD_MODULES } from "@/lib/modules";
 import { NavIcon } from "@/lib/nav-icons";
-import { isAlert, reminderState } from "@/lib/reminder-types";
 import { RemindersPanel } from "@/components/reminders-panel";
 import { FleetAlertsCard } from "@/components/fleet-alerts";
 import { getSetupHint } from "@/lib/data/setup";
@@ -14,12 +14,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const [user, { t, locale }, reminders] = await Promise.all([getCurrentUser(), getI18n(), getReminders()]);
+  const [user, { t, locale }, { list: reminders }, completedToday] = await Promise.all([getCurrentUser(), getI18n(), getRemindersWithStatus(), countCompletedToday()]);
   const { error } = await searchParams;
   const today = todayISO();
-  // Alertes d'abord, puis les 5 prochains rappels
-  const alerts = reminders.filter((r) => isAlert(reminderState(r, today).state));
-  const next = reminders.filter((r) => !isAlert(reminderState(r, today).state)).slice(0, 5);
+  // À traiter (en retard, du jour, proches), puis les 3 prochains
+  const alerts = reminders.filter((r) => ["overdue", "today", "later_today", "soon"].includes(r.status.state));
+  const next = reminders.filter((r) => r.status.state === "upcoming").slice(0, 3);
+  const dueNow = reminders.filter((r) => r.status.state === "overdue" || r.status.state === "today");
+  const stats = [
+    { label: t("Rappels du jour"), value: reminders.filter((r) => r.status.state === "today" || r.status.state === "later_today").length, cls: "text-orange-700 dark:text-orange-400" },
+    { label: t("Rappels en retard"), value: reminders.filter((r) => r.status.state === "overdue").length, cls: "text-red-700 dark:text-red-400" },
+    { label: t("Rappels importants"), value: alerts.filter((r) => r.priority !== "normal").length, cls: "" },
+    { label: t("Terminés aujourd'hui"), value: completedToday, cls: "text-emerald-700 dark:text-emerald-400" },
+  ];
 
   const visible = DASHBOARD_MODULES.filter((m) => user.permissions[m.key].can_view);
   const admin = ADMIN_MODULES.filter((m) => (m.href === "/profil" ? user.permissions.parametres.can_view || user.permissions.employes.can_view : user.permissions[m.key].can_view));
@@ -65,7 +72,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             {t("Tous les rappels")} <ChevronRight className="size-4 rtl:rotate-180" />
           </Link>
         </div>
-        <RemindersPanel reminders={[...alerts, ...next]} today={today} emptyText={t("Aucun rappel. Créez-en un pour être alerté à l'approche d'une date.")} />
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-lg border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+              <p className={cn("text-xl font-bold tabular-nums", s.value > 0 && s.cls)}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+        <RemindersPanel reminders={[...alerts, ...next]} today={today} emptyText={t("Aucun rappel. Créez-en un : une seule fois, chaque jour, certains jours de la semaine ou chaque mois.")} />
+        <DueRemindersDialog reminders={dueNow} today={today} />
       </section>
 
       {user.permissions.rapport_camions.can_view && <FleetAlertsCard />}
