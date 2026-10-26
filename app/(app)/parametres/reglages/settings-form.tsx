@@ -51,6 +51,13 @@ export function SettingsForm({ settings }: { settings: AppSettings }) {
               {t("Les « mois » sont comptés à partir de cette date, pour les employés et les rapports mensuels : début le 08/10/2026 → 1er mois du 08/10/2026 au 07/11/2026. Laisser vide pour des mois calendaires (du 1er au dernier jour).")}
             </p>
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="normal_end_time">{t("Heure de fin normale (heures supplémentaires automatiques)")}</Label>
+            <Input id="normal_end_time" name="normal_end_time" type="time" defaultValue={settings.normal_end_time} className="w-32" />
+            <p className="text-xs text-muted-foreground">
+              {t("Une seule heure pour toute l'entreprise. Chaque demi-heure entamée après cette heure (heure de sortie réelle) compte 0,5 h : 15:30 pour une fin à 14:00 → 1,5 h ; 15:31 → 2 h. Les heures saisies à la main dans le Pointage sont toujours ajoutées en totalité. Laisser vide pour désactiver le calcul automatique.")}
+            </p>
+          </div>
           <fieldset className="space-y-2 rounded-lg border p-3">
             <legend className="px-1 text-sm font-medium">{t("Alertes camions (Problèmes et réparations)")}</legend>
             <div className="grid gap-3 sm:grid-cols-2">

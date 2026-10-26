@@ -47,7 +47,10 @@ export type AttendanceRecord = {
   status: AttendanceStatus;
   time_in: string | null;
   time_out: string | null;
+  /** Total = automatique + manuel (colonne calculée par la base) */
   overtime_hours: number;
+  overtime_manual: number;
+  overtime_auto: number;
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;
@@ -108,7 +111,8 @@ export async function buildSheet(date: string, team: TeamType) {
       status: a.status,
       time_in: (a.time_in ?? "").slice(0, 5),
       time_out: (a.time_out ?? "").slice(0, 5),
-      overtime_hours: Number(a.overtime_hours),
+      overtime_manual: Number(a.overtime_manual),
+      overtime_auto: Number(a.overtime_auto),
       observation: a.observation,
       replacing_employee_id: a.replacing_employee_id,
       chauffeur_id: a.chauffeur_id,
@@ -154,7 +158,8 @@ export async function buildSheet(date: string, team: TeamType) {
       status: defaultStatus,
       time_in: "",
       time_out: "",
-      overtime_hours: 0,
+      overtime_manual: 0,
+      overtime_auto: 0,
       observation: "",
       replacing_employee_id: null,
       chauffeur_id: e.position === "rippeur" ? e.chauffeur_id : null,

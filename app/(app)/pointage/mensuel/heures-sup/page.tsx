@@ -84,6 +84,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <p className="text-xs text-muted-foreground">{t("Total des heures supplémentaires")}</p>
           <p className="mt-1 text-2xl font-bold tabular-nums">{fmt(grid.total)} h</p>
+          <p className="text-xs text-muted-foreground">{t("dont automatiques {auto} h + manuelles {manual} h", { auto: fmt(grid.auto), manual: fmt(grid.manual) })}</p>
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <p className="text-xs text-muted-foreground">{t("Employés avec des heures supplémentaires")}</p>
@@ -107,9 +108,11 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
                   {d.slice(8, 10)}/{d.slice(5, 7)}
                 </th>
               ))}
-              <th rowSpan={2} className="sticky top-0 z-20 border-b bg-muted px-2 text-center font-semibold">
-                {t("Total HS")}
-              </th>
+              {(["Auto", "Manuel", "Total"] as const).map((h) => (
+                <th key={h} rowSpan={2} className="sticky top-0 z-20 border-e border-b bg-muted px-2 text-center font-semibold">
+                  {t(h)}
+                </th>
+              ))}
             </tr>
             <tr>
               {grid.dates.map((d) => (
@@ -122,7 +125,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
           <tbody>
             {grid.rows.length === 0 && (
               <tr>
-                <td colSpan={5 + grid.dates.length} className="p-6 text-center text-muted-foreground">
+                <td colSpan={7 + grid.dates.length} className="p-6 text-center text-muted-foreground">
                   {t("Aucun employé pour cette période et ces filtres.")}
                 </td>
               </tr>
@@ -134,33 +137,56 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
                 <td className="truncate border-e border-b px-2">{r.first_name}</td>
                 <td className="truncate border-e border-b px-2 text-muted-foreground">{r.job_title || t(POSITION_LABELS[r.position] ?? r.position)}</td>
                 {grid.dates.map((d) => (
-                  <td key={d} className={cn("h-7 min-w-8 border-e border-b text-center tabular-nums", r.hours[d] ? "bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200" : "text-muted-foreground/40")}>
-                    {r.hours[d] ? fmt(r.hours[d]) : ""}
+                  <td
+                    key={d}
+                    className={cn("h-7 min-w-9 border-e border-b text-center leading-tight tabular-nums", r.hours[d] ? "bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200" : "text-muted-foreground/40")}
+                    title={r.hours[d] ? t("Automatiques {auto} h + manuelles {manual} h = {total} h", { auto: fmt(r.hours[d].auto), manual: fmt(r.hours[d].manual), total: fmt(r.hours[d].total) }) : undefined}
+                  >
+                    {r.hours[d] ? (
+                      <>
+                        {fmt(r.hours[d].total)}
+                        {r.hours[d].auto > 0 && r.hours[d].manual > 0 && <span className="block text-[9px] font-normal opacity-70">{fmt(r.hours[d].auto)}+{fmt(r.hours[d].manual)}</span>}
+                      </>
+                    ) : (
+                      ""
+                    )}
                   </td>
                 ))}
+                <td className="border-e border-b bg-muted/40 px-2 text-center tabular-nums">{r.auto ? fmt(r.auto) : "—"}</td>
+                <td className="border-e border-b bg-muted/40 px-2 text-center tabular-nums">{r.manual ? fmt(r.manual) : "—"}</td>
                 <td className="border-b bg-muted/40 px-2 text-center font-bold tabular-nums">{r.total ? fmt(r.total) : "—"}</td>
               </tr>
             ))}
           </tbody>
           {grid.rows.length > 0 && (
             <tfoot>
-              <tr className="[&>td]:border-t-2">
-                <td colSpan={4} className="sticky start-0 z-10 border-e border-b bg-muted px-2 font-semibold">
-                  {t("Total du jour (heures)")}
-                </td>
-                {grid.dates.map((d) => (
-                  <td key={d} className="h-7 border-e border-b bg-muted/40 text-center font-semibold tabular-nums">
-                    {grid.dayTotals[d] ? fmt(grid.dayTotals[d]) : "0"}
+              {(
+                [
+                  ["auto", "Heures automatiques du jour"],
+                  ["manual", "Heures manuelles du jour"],
+                  ["total", "Total du jour (heures)"],
+                ] as const
+              ).map(([k, label], i) => (
+                <tr key={k} className={i === 0 ? "[&>td]:border-t-2" : ""}>
+                  <td colSpan={4} className={cn("sticky start-0 z-10 border-e border-b bg-muted px-2", k === "total" ? "font-bold" : "font-semibold")}>
+                    {t(label)}
                   </td>
-                ))}
-                <td className="border-b bg-muted px-2 text-center font-bold tabular-nums">{fmt(grid.total)}</td>
-              </tr>
+                  {grid.dates.map((d) => (
+                    <td key={d} className={cn("h-7 border-e border-b bg-muted/40 text-center tabular-nums", k === "total" && "font-bold")}>
+                      {fmt(grid.dayTotals[d]?.[k] ?? 0)}
+                    </td>
+                  ))}
+                  <td className="border-e border-b bg-muted px-2 text-center tabular-nums">{k === "auto" ? fmt(grid.auto) : ""}</td>
+                  <td className="border-e border-b bg-muted px-2 text-center tabular-nums">{k === "manual" ? fmt(grid.manual) : ""}</td>
+                  <td className="border-b bg-muted px-2 text-center font-bold tabular-nums">{k === "total" ? fmt(grid.total) : ""}</td>
+                </tr>
+              ))}
             </tfoot>
           )}
         </table>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {t("Heures supplémentaires telles que saisies dans la colonne « HS » de la feuille de pointage (somme des services du jour). Aucun calcul automatique n'est ajouté : même total que la synthèse mensuelle. Les heures ne sont saisissables que pour les statuts travaillés.")}
+        {t("Total = heures automatiques + heures manuelles, toujours additionnées. Automatiques : chaque demi-heure entamée après l'heure de fin normale de l'entreprise (heure de sortie réelle, 1er service). Manuelles : heures accordées par le responsable dans la colonne « HS » du Pointage, ajoutées en totalité. Même total que la synthèse mensuelle.")}
       </p>
 
       <ModuleButtons pdfSlot={<PdfExportButton kind="pointage-hs" params={params} />} historyHref="/pointage/historique" />

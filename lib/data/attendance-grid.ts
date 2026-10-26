@@ -13,11 +13,11 @@ export async function getPeriodStartDay(): Promise<number> {
 /** Toutes les lignes de pointage de la période (lecture par pages de 1000). */
 async function fetchRecords(from: string, to: string) {
   const supabase = await createClient();
-  const out: (GridRecord & { position: Position; team_type: TeamType; overtime_hours: number })[] = [];
+  const out: (GridRecord & { position: Position; team_type: TeamType; overtime_hours: number; overtime_auto: number; overtime_manual: number })[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await supabase
       .from("attendance")
-      .select("employee_id, activity_date, status, position, team_type, shift, overtime_hours")
+      .select("employee_id, activity_date, status, position, team_type, shift, overtime_hours, overtime_auto, overtime_manual")
       .gte("activity_date", from)
       .lte("activity_date", to)
       .order("activity_date")
@@ -81,8 +81,9 @@ function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, re
     }));
 }
 
-export type OvertimeRow = GridEmployee & { hours: Record<string, number>; total: number };
-export type OvertimeGrid = { month: string; from: string; to: string; dates: string[]; holidays: Record<string, string>; rows: OvertimeRow[]; dayTotals: Record<string, number>; total: number };
+export type OvertimeSplit = { auto: number; manual: number; total: number };
+export type OvertimeRow = GridEmployee & { hours: Record<string, OvertimeSplit>; auto: number; manual: number; total: number };
+export type OvertimeGrid = { month: string; from: string; to: string; dates: string[]; holidays: Record<string, string>; rows: OvertimeRow[]; dayTotals: Record<string, OvertimeSplit>; auto: number; manual: number; total: number };
 
 /**
  * Heures supplémentaires de la période, telles que saisies dans le Pointage (colonne HS) :
@@ -96,27 +97,34 @@ export async function getOvertimeGrid(month: string, f: GridFilters = {}, startD
   // Filtres équipe / fonction / nom : mêmes règles que la grille
   const base = buildGrid({ month, from, to, employees: periodEmployees(employees, records, to, from), records: [], holidays: holidays ?? [] });
   const kept = filterGrid(base, f).rows;
-  const hours = new Map<string, number>();
+  // Automatique + manuel, toujours additionnés (somme des services du jour)
+  const hours = new Map<string, OvertimeSplit>();
   for (const r of records) {
-    const h = Number(r.overtime_hours) || 0;
-    if (h) hours.set(`${r.employee_id}|${r.activity_date}`, (hours.get(`${r.employee_id}|${r.activity_date}`) ?? 0) + h);
+    const auto = Number(r.overtime_auto) || 0;
+    const manual = Number(r.overtime_manual) || 0;
+    if (!auto && !manual) continue;
+    const k = `${r.employee_id}|${r.activity_date}`;
+    const x = hours.get(k) ?? { auto: 0, manual: 0, total: 0 };
+    hours.set(k, { auto: x.auto + auto, manual: x.manual + manual, total: x.total + auto + manual });
   }
   const dates = periodDates(from, to);
-  const dayTotals: Record<string, number> = Object.fromEntries(dates.map((d) => [d, 0]));
+  const dayTotals: Record<string, OvertimeSplit> = Object.fromEntries(dates.map((d) => [d, { auto: 0, manual: 0, total: 0 }]));
   const rows: OvertimeRow[] = kept.map((e) => {
-    const h: Record<string, number> = {};
-    let total = 0;
+    const h: Record<string, OvertimeSplit> = {};
+    const sum = { auto: 0, manual: 0, total: 0 };
     for (const d of dates) {
       const v = hours.get(`${e.id}|${d}`);
-      if (v) {
-        h[d] = v;
-        total += v;
-        dayTotals[d] += v;
+      if (!v) continue;
+      h[d] = v;
+      for (const k of ["auto", "manual", "total"] as const) {
+        sum[k] += v[k];
+        dayTotals[d][k] += v[k];
       }
     }
-    return { id: e.id, order_number: e.order_number, matricule: e.matricule, last_name: e.last_name, first_name: e.first_name, position: e.position, job_title: e.job_title, team_type: e.team_type, hours: h, total };
+    return { id: e.id, order_number: e.order_number, matricule: e.matricule, last_name: e.last_name, first_name: e.first_name, position: e.position, job_title: e.job_title, team_type: e.team_type, hours: h, ...sum };
   });
-  return { month, from, to, dates, holidays: base.holidays, rows, dayTotals, total: rows.reduce((s, r) => s + r.total, 0) };
+  const tot = (k: keyof OvertimeSplit) => rows.reduce((s, r) => s + r[k], 0);
+  return { month, from, to, dates, holidays: base.holidays, rows, dayTotals, auto: tot("auto"), manual: tot("manual"), total: tot("total") };
 }
 
 export type PeriodSnapshot = {

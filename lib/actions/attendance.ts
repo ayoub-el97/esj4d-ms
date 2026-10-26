@@ -20,7 +20,8 @@ const rowSchema = z.object({
   status: z.enum(ATTENDANCE_STATUSES as [string, ...string[]]),
   time_in: optionalTime,
   time_out: optionalTime,
-  overtime_hours: z.coerce.number().min(0).max(24),
+  // Saisie manuelle uniquement : la part automatique et le total sont calculés par la base
+  overtime_manual: z.coerce.number().min(0).max(24),
   observation: z.string().max(500).default(""),
   replacing_employee_id: optionalUuid,
   chauffeur_id: optionalUuid,

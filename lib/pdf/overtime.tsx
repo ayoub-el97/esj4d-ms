@@ -9,7 +9,7 @@ import { usePdf } from "./context";
 const PAGE_W = 1191;
 const PAD = 18;
 const ID = { nb: 20, nom: 74, prenom: 64, fonction: 62 };
-const TOTAL_W = 34;
+const TOTAL_W = 30;
 const B = "#9ca3af";
 const s = StyleSheet.create({
   page: { padding: PAD, paddingBottom: 28, fontSize: 7, fontFamily: "Helvetica", color: "#111" },
@@ -26,7 +26,7 @@ const trunc = (v: string, n: number) => (v.length > n ? `${v.slice(0, n - 1)}…
 export function OvertimePdf({ grid, company, generatedBy, today, monthName, filtersLabel }: { grid: OvertimeGrid; company: string; generatedBy: string; today: string; monthName: string; filtersLabel: string }) {
   const { t, locale, logoUrl, companyDetails } = usePdf();
   const idW = ID.nb + ID.nom + ID.prenom + ID.fonction;
-  const dayW = Math.min(30, (PAGE_W - 2 * PAD - idW - TOTAL_W - 2) / Math.max(grid.dates.length, 1));
+  const dayW = Math.min(30, (PAGE_W - 2 * PAD - idW - 3 * TOTAL_W - 2) / Math.max(grid.dates.length, 1));
   const title = t("Heures supplémentaires");
   const ids = (a: string, b: string, c: string, d: string, head = false) => (
     <>
@@ -78,6 +78,7 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
               </Text>
             ))}
             <Text style={{ fontSize: 8, color: "#555" }}>{t("Total des heures supplémentaires")} : {fmt(grid.total)} h</Text>
+            <Text style={{ fontSize: 8, color: "#555" }}>{t("dont automatiques {auto} h + manuelles {manual} h", { auto: fmt(grid.auto), manual: fmt(grid.manual) })}</Text>
           </View>
         </View>
         <View fixed>
@@ -90,9 +91,11 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
                 </Text>
               </View>
             ))}
-            <View style={[s.cell, s.head, { width: TOTAL_W }]}>
-              <Text style={s.txt}>{t("Total HS")}</Text>
-            </View>
+            {["Auto", "Manuel", "Total"].map((h) => (
+              <View key={h} style={[s.cell, s.head, { width: TOTAL_W }]}>
+                <Text style={s.txt}>{t(h)}</Text>
+              </View>
+            ))}
           </View>
           <View style={s.row}>
             {ids("", "", "", "", true)}
@@ -101,9 +104,11 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
                 <Text style={s.txt}>{WEEKDAY_INITIALS[weekdayOf(d)]}</Text>
               </View>
             ))}
-            <View style={[s.cell, s.head, { width: TOTAL_W }]}>
-              <Text style={s.txt}> </Text>
-            </View>
+            {[0, 1, 2].map((k) => (
+              <View key={k} style={[s.cell, s.head, { width: TOTAL_W }]}>
+                <Text style={s.txt}> </Text>
+              </View>
+            ))}
           </View>
         </View>
         {grid.rows.map((r) => (
@@ -111,30 +116,44 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
             {ids(String(r.order_number), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, { width: dayW }, r.hours[d] ? { backgroundColor: "#e0e7ff" } : {}]}>
-                <Text style={[s.txt, r.hours[d] ? { fontFamily: "Helvetica-Bold" } : {}]}>{r.hours[d] ? fmt(r.hours[d]) : ""}</Text>
+                <Text style={[s.txt, r.hours[d] ? { fontFamily: "Helvetica-Bold" } : {}]}>{r.hours[d] ? fmt(r.hours[d].total) : ""}</Text>
               </View>
             ))}
-            <View style={[s.cell, { width: TOTAL_W, backgroundColor: "#f3f4f6" }]}>
-              <Text style={[s.txt, { fontFamily: "Helvetica-Bold" }]}>{r.total ? fmt(r.total) : "—"}</Text>
-            </View>
+            {(["auto", "manual", "total"] as const).map((k) => (
+              <View key={k} style={[s.cell, { width: TOTAL_W, backgroundColor: "#f3f4f6" }]}>
+                <Text style={[s.txt, k === "total" ? { fontFamily: "Helvetica-Bold" } : {}]}>{r[k] ? fmt(r[k]) : "—"}</Text>
+              </View>
+            ))}
           </View>
         ))}
         {grid.rows.length > 0 && (
-          <View style={[s.row, { marginTop: 2 }]} wrap={false}>
-            <View style={[s.cell, s.head, { width: idW, borderLeftWidth: 0.5, borderRightWidth: 1 }]}>
-              <Text style={s.left}>{t("Total du jour (heures)")}</Text>
-            </View>
-            {grid.dates.map((d) => (
-              <View key={d} style={[s.cell, { width: dayW, backgroundColor: "#f3f4f6" }]}>
-                <Text style={[s.txt, { fontFamily: "Helvetica-Bold" }]}>{grid.dayTotals[d] ? fmt(grid.dayTotals[d]) : "0"}</Text>
+          <View style={{ marginTop: 2 }} wrap={false}>
+            {(
+              [
+                ["auto", "Heures automatiques du jour"],
+                ["manual", "Heures manuelles du jour"],
+                ["total", "Total du jour (heures)"],
+              ] as const
+            ).map(([k, label]) => (
+              <View key={k} style={s.row}>
+                <View style={[s.cell, s.head, { width: idW, borderLeftWidth: 0.5, borderRightWidth: 1 }]}>
+                  <Text style={s.left}>{t(label)}</Text>
+                </View>
+                {grid.dates.map((d) => (
+                  <View key={d} style={[s.cell, { width: dayW, backgroundColor: "#f3f4f6" }]}>
+                    <Text style={[s.txt, k === "total" ? { fontFamily: "Helvetica-Bold" } : {}]}>{fmt(grid.dayTotals[d]?.[k] ?? 0)}</Text>
+                  </View>
+                ))}
+                {(["auto", "manual", "total"] as const).map((c) => (
+                  <View key={c} style={[s.cell, s.head, { width: TOTAL_W }]}>
+                    <Text style={s.txt}>{c === k ? fmt(grid[k]) : ""}</Text>
+                  </View>
+                ))}
               </View>
             ))}
-            <View style={[s.cell, s.head, { width: TOTAL_W }]}>
-              <Text style={s.txt}>{fmt(grid.total)}</Text>
-            </View>
           </View>
         )}
-        <Text style={{ fontSize: 7.5, color: "#555", marginTop: 6 }}>{t("Heures supplémentaires telles que saisies dans la colonne « HS » de la feuille de pointage (somme des services du jour).")}</Text>
+        <Text style={{ fontSize: 7.5, color: "#555", marginTop: 6 }}>{t("Total = heures automatiques (demi-heures entamées après l'heure de fin normale) + heures manuelles accordées dans le Pointage, toujours additionnées.")}</Text>
         <View style={s.footer} fixed>
           <Text>{t("{company} — généré le {date} par {user}", { company, date: new Date().toLocaleString(locale === "en" ? "en-GB" : "fr-FR"), user: generatedBy })}</Text>
           <Text render={({ pageNumber, totalPages }) => t("Page {n} / {total}", { n: pageNumber, total: totalPages ?? pageNumber })} />

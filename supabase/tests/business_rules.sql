@@ -43,7 +43,7 @@ update public.employees set rest_day = 0 where id = (select b1 from ids);
 -- ---------------------------------------------------------------------------
 -- 2-3. Jour de repos travaillé : un seul crédit, même si réenregistré ou doublé
 -- ---------------------------------------------------------------------------
-insert into public.attendance (activity_date, employee_id, status, time_in, time_out, overtime_hours, position, team_type)
+insert into public.attendance (activity_date, employee_id, status, time_in, time_out, overtime_manual, position, team_type)
 select '2026-10-18', b1, 'repos_travaille', '06:00', '14:00', 2, 'balayeur', 'nettoiement' from ids;
 do $$ begin
   assert (select count(*) from public.recovery_credits(null, '2026-12-31') where employee_id = (select b1 from ids)) = 1, 'un crédit attendu';
@@ -51,10 +51,10 @@ do $$ begin
 end $$;
 
 -- Réenregistrement (même ligne mise à jour) + second service le même jour
-insert into public.attendance (activity_date, employee_id, status, time_in, time_out, overtime_hours, position, team_type)
+insert into public.attendance (activity_date, employee_id, status, time_in, time_out, overtime_manual, position, team_type)
 select '2026-10-18', b1, 'repos_travaille', '06:00', '15:00', 3, 'balayeur', 'nettoiement' from ids
-on conflict (activity_date, employee_id, shift) do update set time_out = excluded.time_out, overtime_hours = excluded.overtime_hours;
-insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, overtime_hours, position, team_type)
+on conflict (activity_date, employee_id, shift) do update set time_out = excluded.time_out, overtime_manual = excluded.overtime_manual;
+insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, overtime_manual, position, team_type)
 select '2026-10-18', b1, 2, 'repos_travaille', '18:00', '22:00', 1, 'balayeur', 'nettoiement' from ids;
 do $$ begin
   assert (select count(*) from public.recovery_credits(null, '2026-12-31') where employee_id = (select b1 from ids)) = 1, 'crédit compté deux fois';
@@ -64,9 +64,9 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- 4-5. Rapports travailleurs : mois courant et mois choisi, sans double comptage
 -- ---------------------------------------------------------------------------
-insert into public.attendance (activity_date, employee_id, status, overtime_hours, position, team_type)
+insert into public.attendance (activity_date, employee_id, status, overtime_manual, position, team_type)
 select d::date, b1, 'present', 1, 'balayeur', 'nettoiement' from ids, generate_series('2026-10-19'::date, '2026-10-21'::date, interval '1 day') d;
-insert into public.attendance (activity_date, employee_id, status, overtime_hours, position, team_type)
+insert into public.attendance (activity_date, employee_id, status, overtime_manual, position, team_type)
 select '2026-11-03', b1, 'present', 0.5, 'balayeur', 'nettoiement' from ids;
 do $$
 declare oct record; nov record; cur integer;
@@ -740,4 +740,52 @@ do $$ begin
 end $$;
 
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- 23. Heures sup. : automatique (demi-heure entamée après la fin normale) + manuel, toujours additionnés
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  e uuid := (select id from public.employees where matricule = 'B001');
+  r public.attendance;
+begin
+  update public.settings set value = '"14:00"' where key = 'normal_end_time';
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, overtime_manual, position, team_type)
+  values ('2026-11-20', e, 1, 'present', '07:00', '15:30', 1, 'balayeur', 'nettoiement') returning * into r;
+  assert r.overtime_auto = 1.5 and r.overtime_manual = 1 and r.overtime_hours = 2.5, format('15:30 + 1 h manuelle : auto %s, manuel %s, total %s (attendu 1,5 + 1 = 2,5)', r.overtime_auto, r.overtime_manual, r.overtime_hours);
+
+  update public.attendance set time_out = '15:31' where id = r.id returning * into r;
+  assert r.overtime_auto = 2 and r.overtime_manual = 1 and r.overtime_hours = 3, format('15:31 : auto %s (attendu 2), manuel conservé %s, total %s', r.overtime_auto, r.overtime_manual, r.overtime_hours);
+
+  update public.attendance set overtime_manual = 2.5 where id = r.id returning * into r;
+  assert r.overtime_auto = 2 and r.overtime_hours = 4.5, 'modification de la seule saisie manuelle : automatique inchangé, total additionné';
+
+  update public.attendance set overtime_auto = 9 where id = r.id returning * into r;
+  assert r.overtime_auto = 2, 'la part automatique ne peut pas être saisie à la main';
+
+  update public.settings set value = '"13:00"' where key = 'normal_end_time';
+  update public.attendance set observation = 'x' where id = r.id returning * into r;
+  assert r.overtime_auto = 2, 'changement de l''heure de fin normale : historique non réécrit';
+  update public.attendance set time_out = '14:01' where id = r.id returning * into r;
+  assert r.overtime_auto = 1.5, format('nouvelle sortie 14:01 avec fin 13:00 : auto %s (attendu 1,5)', r.overtime_auto);
+
+  update public.attendance set time_out = '12:30' where id = r.id returning * into r;
+  assert r.overtime_auto = 0 and r.overtime_hours = 2.5, 'sortie avant la fin normale : seule la part manuelle compte';
+
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, position, team_type)
+  values ('2026-11-20', e, 2, 'present', '15:00', '20:00', 'balayeur', 'nettoiement') returning * into r;
+  assert r.overtime_auto = 0, '2e service : pas d''heures sup. automatiques';
+
+  update public.attendance set status = 'absent' where employee_id = e and activity_date = '2026-11-20' and shift = 1 returning * into r;
+  assert r.overtime_auto = 0 and r.overtime_manual = 0 and r.overtime_hours = 0, 'statut non travaillé : aucune heure sup.';
+
+  delete from public.attendance where employee_id = e and activity_date = '2026-11-20';
+  update public.settings set value = '""' where key = 'normal_end_time';
+  insert into public.attendance (activity_date, employee_id, shift, status, time_out, overtime_manual, position, team_type)
+  values ('2026-11-21', e, 1, 'present', '18:00', 1, 'balayeur', 'nettoiement') returning * into r;
+  assert r.overtime_auto = 0 and r.overtime_hours = 1, 'heure de fin normale non configurée : seule la part manuelle';
+  delete from public.attendance where id = r.id;
+  raise notice 'OK 23 heures sup. : automatique + manuel additionnés, manuel conservé, historique préservé';
+end $$;
+
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='

@@ -1,4 +1,5 @@
 import { Text, View } from "@react-pdf/renderer";
+import { fmtHours } from "@/lib/overtime";
 import type { SheetRow } from "@/lib/attendance-types";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
 import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType } from "@/lib/types";
@@ -12,7 +13,7 @@ const COLUMNS: Column[] = [
   { key: "repos", label: "Repos", width: 7, align: "center" },
   { key: "entree", label: "H. entrée", width: 9, align: "center" },
   { key: "sortie", label: "H. sortie", width: 9, align: "center" },
-  { key: "hs", label: "HS", width: 6, align: "center" },
+  { key: "hs", label: "HS (auto+man.)", width: 6, align: "center" },
   { key: "statut", label: "Statut / motif", width: 12 },
   { key: "obs", label: "Observation", width: 18 },
 ];
@@ -47,7 +48,13 @@ export function AttendanceSheetPdf({
     repos: r.rest_day == null ? "" : t(WEEKDAY_SHORT[r.rest_day]),
     entree: WORKED_STATUSES.includes(r.status) ? r.time_in : "",
     sortie: WORKED_STATUSES.includes(r.status) ? r.time_out : "",
-    hs: WORKED_STATUSES.includes(r.status) && r.overtime_hours ? String(r.overtime_hours) : "",
+    hs: (() => {
+      if (!WORKED_STATUSES.includes(r.status)) return "";
+      const auto = Number(r.overtime_auto) || 0;
+      const manual = Number(r.overtime_manual) || 0;
+      if (!auto && !manual) return "";
+      return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)}+${fmtHours(manual)})` : fmtHours(auto + manual);
+    })(),
     statut: t(ATTENDANCE_STATUS_LABELS[r.status]),
     obs: r.observation,
   });

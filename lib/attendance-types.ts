@@ -8,7 +8,10 @@ export type SheetRow = {
   status: AttendanceStatus;
   time_in: string;
   time_out: string;
-  overtime_hours: number;
+  /** Heures sup. saisies par le responsable (ajoutées en totalité) */
+  overtime_manual: number;
+  /** Heures sup. automatiques (calculées par la base depuis l'heure de sortie) */
+  overtime_auto: number;
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;
