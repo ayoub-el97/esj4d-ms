@@ -63,9 +63,15 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
         ))}
 
       <h2 className="mb-2 text-lg font-semibold">{t("Congés")}</h2>
+      <p className="mb-2 text-sm text-muted-foreground">
+        {t("Solde restant = solde initial + congés acquis depuis le début du suivi − congés approuvés pris depuis le début du suivi + corrections.")}{" "}
+        {lb?.tracking_start ? t("Début du suivi : {date}.", { date: formatDateFr(lb.tracking_start) }) : t("Début du suivi : non défini (date de début du projet vide).")}
+        {lb?.taken_before != null && <> {t("Congés déjà pris avant le système (information) : {days} j.", { days: lb.taken_before })}</>}
+      </p>
       <Stats
         t={t}
         items={[
+          ["Solde initial (registres papier)", lb?.initial_balance ?? 0],
           ["Mois complets de service", lb?.months ?? 0],
           ["Congés acquis", lb?.accrued ?? 0],
           ["Congés pris", lb?.taken ?? 0],
@@ -211,7 +217,7 @@ function DaysCard({ t, title, days }: { t: TFunction; title: string; days: { day
   );
 }
 
-function AdjustmentsCard({ t, title, adjustments, form }: { t: TFunction; title: string; adjustments: { id: string; days: number; reason: string; created_at: string }[]; form: React.ReactNode }) {
+function AdjustmentsCard({ t, title, adjustments, form }: { t: TFunction; title: string; adjustments: { id: string; days: number; reason: string; created_at: string; category?: string; created_by_name?: string }[]; form: React.ReactNode }) {
   return (
     <Card>
       <CardHeader>
@@ -225,8 +231,12 @@ function AdjustmentsCard({ t, title, adjustments, form }: { t: TFunction; title:
           <ul className="space-y-1 text-sm">
             {adjustments.map((a) => (
               <li key={a.id}>
-                <span className="font-medium">{a.days > 0 ? `+${a.days}` : a.days}</span> — {a.reason}
-                <div className="text-xs text-muted-foreground">{formatDateTimeFr(a.created_at)}</div>
+                <span className="font-medium">{a.days > 0 ? `+${a.days}` : a.days}</span>
+                {a.category === "solde_initial" && <span className="ms-1 rounded bg-sky-100 px-1.5 text-[11px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">{t("Solde initial")}</span>} — {a.reason}
+                <div className="text-xs text-muted-foreground">
+                  {formatDateTimeFr(a.created_at)}
+                  {a.created_by_name ? ` · ${a.created_by_name}` : ""}
+                </div>
               </li>
             ))}
           </ul>

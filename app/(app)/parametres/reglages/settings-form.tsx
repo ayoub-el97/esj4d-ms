@@ -88,6 +88,13 @@ export function SettingsForm({ settings }: { settings: AppSettings }) {
           <div className="space-y-1">
             <Label htmlFor="leave_days_per_month">{t("Congés acquis par mois (jours)")}</Label>
             <Input id="leave_days_per_month" name="leave_days_per_month" type="number" step="0.5" min="0" defaultValue={settings.leave_days_per_month} required />
+            <label className="mt-2 flex items-start gap-2 text-sm">
+              <input type="checkbox" name="leave_accrual_enabled" defaultChecked={settings.leave_accrual_enabled} className="mt-0.5 size-4" />
+              <span>
+                {t("Calculer automatiquement les congés acquis")}
+                <span className="block text-xs text-muted-foreground">{t("Décochez pendant la vérification des registres papier : le solde se limite alors au solde initial, aux corrections et aux congés pris.")}</span>
+              </span>
+            </label>
             <p className="text-xs text-muted-foreground">{t("Règle initiale : 1,5 jour par mois (3 jours tous les deux mois).")}</p>
           </div>
           <fieldset className="space-y-2">

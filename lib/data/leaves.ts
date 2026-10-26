@@ -96,16 +96,22 @@ export type LeaveBalance = EmpInfo & {
   balance: number;
   /** Début du décompte des congés (null = date de début non renseignée : aucun congé calculé) */
   accrual_from: string | null;
+  /** Solde initial repris des registres papier (corrections « solde initial ») */
+  initial_balance: number;
+  /** Début du suivi des congés dans l'application */
+  tracking_start: string | null;
+  /** Congés déjà pris avant le système (information) */
+  taken_before: number | null;
 };
 
-export type BalanceFilters = { team?: string; q?: string; includeInactive?: boolean };
+export type BalanceFilters = { team?: string; q?: string; includeInactive?: boolean; position?: string; status?: string };
 
 export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Promise<LeaveBalance[]> {
   const supabase = await createClient();
   const [{ data, error }, employees] = await Promise.all([supabase.rpc("leave_balances", { p_as_of: asOf }), getEmployees()]);
   if (error) throw new Error(error.message);
   const byId = new Map(employees.map((e) => [e.id, e]));
-  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number; accrual_from?: string | null };
+  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number; accrual_from?: string | null; initial_balance?: number; tracking_start?: string | null; taken_before?: number | null };
   return ((data ?? []) as Raw[])
     .map((r) => ({
       ...info(byId.get(r.employee_id)),
@@ -117,16 +123,22 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
       adjustments: Number(r.adjustments),
       balance: Number(r.balance),
       accrual_from: r.accrual_from ?? null,
+      initial_balance: Number(r.initial_balance ?? 0),
+      tracking_start: r.tracking_start ?? null,
+      taken_before: r.taken_before == null ? null : Number(r.taken_before),
     }))
-    .filter((r) => (f.includeInactive ? true : r.is_active))
+    .filter((r) => (f.status === "tous" || f.includeInactive ? true : f.status === "inactifs" ? !r.is_active : r.is_active))
     .filter((r) => !f.team || r.team_type === f.team)
+    .filter((r) => !f.position || r.position === f.position)
+    // « À compléter » : ni date d'entrée ni solde initial (aucun congé ne peut être calculé de façon sûre)
+    .filter((r) => f.status !== "a-completer" || (!r.hire_date && !r.initial_balance))
     .filter((r) => matchesQuery(r, f.q))
     .sort((a, b) => a.order_number - b.order_number);
 }
 
 export type AccrualLine = { month_index: number; credit_date: string; days: number; cumulative: number };
 export type TakenDay = { day: string; source: "pointage" | "demande" };
-export type Adjustment = { id: string; employee_id: string; days: number; reason: string; kind: "conge" | "recuperation"; created_at: string };
+export type Adjustment = { id: string; employee_id: string; days: number; reason: string; kind: "conge" | "recuperation"; category?: "correction" | "solde_initial"; created_at: string; created_by?: string | null; created_by_name?: string };
 
 /** Détail d'un employé : acquisitions mois par mois, jours pris, ajustements. */
 export async function getLeaveDetail(employeeId: string, asOf: string) {
@@ -139,7 +151,7 @@ export async function getLeaveDetail(employeeId: string, asOf: string) {
   return {
     schedule: ((schedule ?? []) as AccrualLine[]).map((s) => ({ ...s, days: Number(s.days), cumulative: Number(s.cumulative) })),
     taken: ((taken ?? []) as (TakenDay & { employee_id: string })[]).filter((d) => d.employee_id === employeeId).sort((a, b) => b.day.localeCompare(a.day)),
-    adjustments: ((adjustments ?? []) as Adjustment[]).map((a) => ({ ...a, days: Number(a.days) })),
+    adjustments: await withAuthors(supabase, ((adjustments ?? []) as Adjustment[]).map((a) => ({ ...a, days: Number(a.days) }))),
   };
 }
 
@@ -263,6 +275,15 @@ export async function getRecoveryDetail(employeeId: string, asOf: string) {
   return {
     credits,
     taken: ((taken ?? []) as (TakenDay & { employee_id: string })[]).filter((d) => d.employee_id === employeeId).sort((a, b) => b.day.localeCompare(a.day)),
-    adjustments: ((adjustments ?? []) as Adjustment[]).map((a) => ({ ...a, days: Number(a.days) })),
+    adjustments: await withAuthors(supabase, ((adjustments ?? []) as Adjustment[]).map((a) => ({ ...a, days: Number(a.days) }))),
   };
+}
+
+/** Nom de l'utilisateur qui a saisi chaque correction (historique : date, utilisateur, motif, jours). */
+async function withAuthors(supabase: Awaited<ReturnType<typeof createClient>>, list: Adjustment[]): Promise<Adjustment[]> {
+  const ids = [...new Set(list.map((a) => a.created_by).filter((x): x is string => !!x))];
+  if (!ids.length) return list;
+  const { data } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+  const names = new Map((data ?? []).map((p) => [p.id as string, (p.full_name as string) || (p.email as string)]));
+  return list.map((a) => ({ ...a, created_by_name: a.created_by ? (names.get(a.created_by) ?? "") : "" }));
 }

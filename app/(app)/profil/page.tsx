@@ -75,7 +75,7 @@ async function CompanyTab({ canEdit }: { canEdit: boolean }) {
     <CompanyForm
       companyName={settings.company_name}
       agencyName={settings.agency_name}
-      details={{ address: settings.company_address, phone: settings.company_phone, email: settings.company_email, legal: settings.company_legal }}
+      details={{ address: settings.company_address, phone: settings.company_phone, email: settings.company_email, legal: settings.company_legal, contractStart: settings.company_contract_start, contractEnd: settings.company_contract_end, contractRef: settings.company_contract_ref, alertDays: settings.contract_alert_days }}
       logoUrl={logoUrl(settings.company_logo_path)}
       canEdit={canEdit}
     />

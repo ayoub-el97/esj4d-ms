@@ -9,6 +9,14 @@ export type AppSettings = {
   director_email: string;
   timezone: string;
   leave_days_per_month: number;
+  /** Acquisition automatique des congés (désactivable pendant la vérification des registres) */
+  leave_accrual_enabled: boolean;
+  /** Contrat de la société (service), dates « aaaa-mm-jj » et référence */
+  company_contract_start: string;
+  company_contract_end: string;
+  company_contract_ref: string;
+  /** Alertes avant la fin du contrat, en jours (ex. « 90,60,30 ») */
+  contract_alert_days: string;
   double_day_on_rest_day: boolean;
   double_day_two_shifts: boolean;
   company_logo_path: string;
@@ -36,6 +44,11 @@ const DEFAULTS: AppSettings = {
   director_email: "",
   timezone: "Africa/Casablanca",
   leave_days_per_month: 1.5,
+  leave_accrual_enabled: true,
+  company_contract_start: "",
+  company_contract_end: "",
+  company_contract_ref: "",
+  contract_alert_days: "90,60,30",
   double_day_on_rest_day: true,
   double_day_two_shifts: true,
   company_logo_path: "",

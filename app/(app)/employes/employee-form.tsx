@@ -17,6 +17,7 @@ export function EmployeeForm({
   trucks,
   collecte,
   returnTo = "/employes",
+  canEditLeave = false,
 }: {
   employee: Employee | null;
   trucks: Truck[];
@@ -24,6 +25,8 @@ export function EmployeeForm({
   collecte: Employee[];
   /** Page de retour après enregistrement (/employes ou /profil?onglet=employes) */
   returnTo?: string;
+  /** Données de reprise des congés modifiables (administrateur) */
+  canEditLeave?: boolean;
 }) {
   const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
@@ -160,6 +163,38 @@ export function EmployeeForm({
                 </label>
               )}
             </div>
+            <fieldset className="space-y-2 rounded-lg border p-3 sm:col-span-2" disabled={!canEditLeave}>
+              <legend className="px-1 text-sm font-medium">{t("Congés — reprise des registres papier")}</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="leave_tracking_start">{t("Date de début dans le système (facultatif)")}</Label>
+                  <Input id="leave_tracking_start" name="leave_tracking_start" type="date" defaultValue={employee?.leave_tracking_start ?? ""} />
+                  <p className="text-xs text-muted-foreground">{t("Début du suivi des congés dans l'application. Vide = date de début du projet (Paramètres › Réglages).")}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="leave_taken_before">{t("Congés déjà pris avant le système (facultatif)")}</Label>
+                  <Input id="leave_taken_before" name="leave_taken_before" type="number" step="0.5" min="0" defaultValue={employee?.leave_taken_before ?? ""} />
+                  <p className="text-xs text-muted-foreground">{t("Pour information : déjà compris dans le solde initial, jamais déduit une seconde fois.")}</p>
+                </div>
+              </div>
+              {employee && (
+                <p className="text-xs">
+                  {t("Le solde initial (registres papier) se saisit dans")}{" "}
+                  <a className="text-primary underline" href={`/conges/${employee.id}`}>
+                    {t("Congé / Récupération › fiche de l'employé")}
+                  </a>{" "}
+                  {t("(motif obligatoire, historique conservé).")}
+                </p>
+              )}
+              {!canEditLeave && <p className="text-xs text-muted-foreground">{t("Modifiable par l'administrateur uniquement.")}</p>}
+            </fieldset>
+            {employee?.departure_date && (
+              <div className="space-y-1">
+                <Label>{t("Date de fin de travail")}</Label>
+                <Input value={employee.departure_date.split("-").reverse().join("/")} disabled />
+                <p className="text-xs text-muted-foreground">{t("Enregistrée lors du départ (Actions › Désactiver).")}</p>
+              </div>
+            )}
             <div className="space-y-1">
               <Label htmlFor="work_schedule">{t("Horaire habituel (facultatif)")}</Label>
               <Input id="work_schedule" name="work_schedule" defaultValue={employee?.work_schedule ?? ""} maxLength={80} placeholder={t("Ex. Matin 06:00 – 13:00")} />

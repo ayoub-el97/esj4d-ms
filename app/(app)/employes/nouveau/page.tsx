@@ -9,14 +9,14 @@ export const generateMetadata = pageTitle("Nouvel équipier");
 const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
 
 export default async function NouvelEquipierPage({ searchParams }: { searchParams: Promise<{ retour?: string }> }) {
-  const [, t] = await Promise.all([requireModule("employes", "edit"), getT()]);
+  const [user, t] = await Promise.all([requireModule("employes", "edit"), getT()]);
   const { retour } = await searchParams;
   const returnTo = retour && RETURN_TARGETS.includes(retour) ? retour : "/employes";
   const [trucks, collecte] = await Promise.all([getTrucks(true), getEmployees({ team: "collecte", onlyActive: true })]);
   return (
     <div>
       <ModuleHeader title={t("Nouvel équipier")} backHref={returnTo} />
-      <EmployeeForm employee={null} trucks={trucks} collecte={collecte} returnTo={returnTo} />
+      <EmployeeForm employee={null} trucks={trucks} collecte={collecte} returnTo={returnTo} canEditLeave={user.role === "admin"} />
     </div>
   );
 }

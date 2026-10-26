@@ -169,7 +169,9 @@ const adjustmentSchema = z.object({
   kind: z.enum(["conge", "recuperation"]),
   days: z.coerce.number().refine((n) => n !== 0, "Indiquez un nombre de jours (positif ou négatif)."),
   reason: z.string().trim().min(3, "Le motif est obligatoire."),
-});
+  // « solde_initial » : reprise des registres papier (congés uniquement)
+  category: z.enum(["correction", "solde_initial"]).default("correction"),
+}).refine((d) => d.category === "correction" || d.kind === "conge", { message: "Le solde initial ne concerne que les congés.", path: ["category"] });
 
 export async function addLeaveAdjustment(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const t = await getT();
@@ -179,7 +181,7 @@ export async function addLeaveAdjustment(_prev: ActionResult | null, formData: F
   const parsed = adjustmentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const supabase = await createClient();
-  const { error } = await supabase.from("leave_adjustments").insert(parsed.data);
+  const { error } = await supabase.from("leave_adjustments").insert({ ...parsed.data, created_by: auth.user.id });
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/conges");
   return { ok: true, message: t("Ajustement enregistré (tracé dans le journal d'audit).") };

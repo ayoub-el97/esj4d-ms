@@ -14,7 +14,7 @@ export const generateMetadata = pageTitle("Fiche employé");
 const RETURN_TARGETS = ["/employes", "/profil?onglet=employes"];
 
 export default async function EmployePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ retour?: string }> }) {
-  const [, t] = await Promise.all([requireModule("employes", "edit"), getT()]);
+  const [user, t] = await Promise.all([requireModule("employes", "edit"), getT()]);
   const { id } = await params;
   const { retour } = await searchParams;
   const returnTo = retour && RETURN_TARGETS.includes(retour) ? retour : "/employes";
@@ -25,7 +25,7 @@ export default async function EmployePage({ params, searchParams }: { params: Pr
   return (
     <div className="space-y-6">
       <ModuleHeader title={t("Fiche employé")} subtitle={t("NB {nb} · {matricule}", { nb: employee.order_number, matricule: employee.matricule })} backHref={returnTo} />
-      <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} />
+      <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} canEditLeave={user.role === "admin"} />
 
       <Card>
         <CardHeader>

@@ -258,6 +258,16 @@ export function AdjustmentForm({ employeeId, kind }: { employeeId: string; kind:
       <input type="hidden" name="employee_id" value={employeeId} />
       <input type="hidden" name="kind" value={kind} />
       <ActionMessage state={state} />
+      {kind === "conge" && (
+        <div className="space-y-1">
+          <Label htmlFor="category-conge">{t("Type")}</Label>
+          <NativeSelect id="category-conge" name="category" defaultValue="correction">
+            <option value="correction">{t("Correction du solde")}</option>
+            <option value="solde_initial">{t("Solde initial (registres papier)")}</option>
+          </NativeSelect>
+          <p className="text-xs text-muted-foreground">{t("Solde initial : jours disponibles au début du suivi dans l'application, d'après les registres papier (une correction ultérieure s'ajoute avec un motif).")}</p>
+        </div>
+      )}
       <div className="grid grid-cols-[100px_1fr] gap-2">
         <div className="space-y-1">
           <Label htmlFor={`days-${kind}`}>{t("Jours (+ / −)")}</Label>

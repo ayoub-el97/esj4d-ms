@@ -237,7 +237,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
     }
     case "conges-soldes": {
       const asOf = range.date ?? new Date().toISOString().slice(0, 10);
-      const rows = await getLeaveBalances(asOf, { team: params.equipe || undefined, q: params.q || undefined });
+      const rows = await getLeaveBalances(asOf, { team: params.equipe || undefined, q: params.q || undefined, position: params.poste || undefined, status: params.statut || undefined });
       const filterLabel = [params.equipe ? t(TEAM_LABELS[params.equipe as keyof typeof TEAM_LABELS] ?? params.equipe) : "", params.q ? `« ${params.q} »` : ""].filter(Boolean).join(" · ");
       return done("conges", `${t("Solde de congés")} ${formatDateFr(asOf)}`, `conges-soldes-${asOf}.pdf`, createElement(LeaveBalancesPdf, { ...common, asOf, filterLabel, rows }));
     }

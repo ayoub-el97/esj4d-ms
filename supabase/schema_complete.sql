@@ -3430,3 +3430,965 @@ alter table public.trucks add column if not exists internal_number text not null
 alter table public.trucks add column if not exists truck_type text not null default '';
 create unique index if not exists trucks_internal_number_uniq on public.trucks (lower(internal_number)) where internal_number <> '';
 
+-- ===== supabase/migrations/024_depart_employes.sql =====
+-- =============================================================================
+-- 024 — Départ, désactivation et suppression des employés
+--
+--  * Départ (démission, fin de contrat, licenciement, autre) : l'employé est DÉSACTIVÉ,
+--    jamais supprimé. departure_date = dernier jour de travail : il reste proposé sur les
+--    feuilles de pointage des dates antérieures ou égales (saisie rétroactive) ; tout
+--    l'historique (pointage, rapports, congés…) est conservé tel quel.
+--  * Suppression définitive : uniquement par la fonction delete_employee (administrateur),
+--    seulement si l'employé n'apparaît dans AUCUN enregistrement (vérification automatique
+--    de toutes les tables liées), avec confirmation par le matricule. Les liens de
+--    configuration (remplaçant attitré, équipe d'un rippeur, chef d'équipe) sont retirés ;
+--    l'historique des jours de repos de la fiche part avec elle. Journalisé (audit_log).
+--  * La suppression directe par l'API est fermée (plus de politique DELETE sur employees).
+-- =============================================================================
+
+alter table public.employees add column if not exists departure_date date;
+alter table public.employees add column if not exists departure_reason text;
+alter table public.employees add column if not exists departure_comment text not null default '';
+alter table public.employees drop constraint if exists employees_departure_reason_chk;
+alter table public.employees add constraint employees_departure_reason_chk
+  check (departure_reason is null or departure_reason in ('demission', 'fin_contrat', 'licenciement', 'autre'));
+alter table public.employees drop constraint if exists employees_departure_chk;
+alter table public.employees add constraint employees_departure_chk
+  check ((departure_date is null) = (departure_reason is null));
+
+-- Écriture : création et modification seulement (la suppression passe par delete_employee)
+drop policy if exists "employees_write" on public.employees;
+drop policy if exists "employees_insert" on public.employees;
+create policy "employees_insert" on public.employees for insert to authenticated with check (public.can_edit('employes'));
+drop policy if exists "employees_update" on public.employees;
+create policy "employees_update" on public.employees for update to authenticated
+  using (public.can_edit('employes')) with check (public.can_edit('employes'));
+
+-- ---------- Enregistrements qui font référence à un employé ----------------------------
+-- Toutes les clés étrangères vers employees sont lues dans le catalogue (aucune table oubliée,
+-- y compris les tables ajoutées plus tard). Exclus : liens de configuration et historique de la fiche.
+create or replace function public.employee_dependencies(p_employee uuid)
+returns table (table_name text, label text, records bigint)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  fk record;
+  n bigint;
+begin
+  if not public.can_view('employes') then
+    raise exception 'ACCES_REFUSE: consultation non autorisée.';
+  end if;
+  for fk in
+    select c.conrelid::regclass::text as tbl, a.attname as col
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
+     where c.contype = 'f' and c.confrelid = 'public.employees'::regclass
+       and c.conrelid::regclass::text not in ('employees', 'public.employees', 'team_leads', 'public.team_leads', 'employee_rest_day_history', 'public.employee_rest_day_history')
+  loop
+    execute format('select count(*) from %s where %I = $1', fk.tbl, fk.col) into n using p_employee;
+    if n > 0 then
+      table_name := regexp_replace(fk.tbl, '^public\.', '');
+      label := case table_name
+        when 'attendance' then 'Pointage'
+        when 'attendance_leave_overrides' then 'Modifications autorisées sur congé'
+        when 'cleaning_report_agents' then 'Rapports de nettoiement'
+        when 'collection_reports' then 'Rapports de collecte (chauffeur)'
+        when 'collection_report_rippers' then 'Rapports de collecte (équipier)'
+        when 'truck_daily_reports' then 'Rapport camions'
+        when 'fuel_entries' then 'Pleins de carburant'
+        when 'leave_requests' then 'Demandes de congé'
+        when 'leave_adjustments' then 'Corrections de solde de congé'
+        when 'recovery_requests' then 'Demandes de récupération'
+        when 'warnings' then 'Avertissements'
+        when 'work_task_agents' then 'Programme de travail'
+        when 'photos' then 'Photos'
+        else table_name end;
+      records := n;
+      return next;
+    end if;
+  end loop;
+end;
+$$;
+grant execute on function public.employee_dependencies(uuid) to authenticated;
+
+-- ---------- Suppression définitive (administrateur, sans historique, confirmée) ----------
+create or replace function public.delete_employee(p_employee uuid, p_confirm_matricule text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  e public.employees;
+  deps text;
+begin
+  if not public.is_admin() then
+    raise exception 'SUPPRESSION_REFUSEE: seul un administrateur peut supprimer définitivement un employé.';
+  end if;
+  select * into e from public.employees where id = p_employee for update;
+  if not found then
+    raise exception 'EMPLOYE_INTROUVABLE';
+  end if;
+  if coalesce(trim(p_confirm_matricule), '') <> e.matricule then
+    raise exception 'CONFIRMATION_INVALIDE: saisissez le matricule exact pour confirmer.';
+  end if;
+  select string_agg(d.label || ' (' || d.records || ')', ', ') into deps from public.employee_dependencies(p_employee) d;
+  if deps is not null then
+    raise exception 'EMPLOYE_HISTORIQUE|%', deps;
+  end if;
+  -- Liens de configuration uniquement (aucun historique)
+  update public.employees set substitute_id = null where substitute_id = p_employee;
+  update public.employees set chauffeur_id = null where chauffeur_id = p_employee;
+  update public.team_leads set employee_id = null where employee_id = p_employee;
+  delete from public.employees where id = p_employee;   -- journalisé par employees_audit (DELETE, ancienne fiche)
+end;
+$$;
+grant execute on function public.delete_employee(uuid, text) to authenticated;
+
+-- ===== supabase/migrations/025_whatsapp.sql =====
+-- =============================================================================
+-- 025 — Envoi des rapports par WhatsApp (API officielle WhatsApp Business Cloud de Meta)
+--
+--  * whatsapp_config (une seule ligne) : identifiants Meta, destinataires, modèle de message.
+--    AUCUNE politique RLS : lisible et modifiable uniquement par le serveur (clé service_role),
+--    après vérification du rôle administrateur. Le jeton d'accès n'est jamais renvoyé au navigateur.
+--    (Les variables d'environnement WHATSAPP_ACCESS_TOKEN / WHATSAPP_APP_SECRET /
+--    WHATSAPP_VERIFY_TOKEN de Vercel ont priorité sur les valeurs enregistrées ici.)
+--  * whatsapp_messages : journal de chaque envoi (rapport, destinataire, expéditeur, date,
+--    statut, identifiant WhatsApp, erreur, nouvelle tentative). Écrit par le serveur seulement ;
+--    lisible par l'administrateur et par l'expéditeur.
+--  * Nouveau droit « Envoi WhatsApp » (Paramètres › Permissions) : par défaut administrateur
+--    et secrétaire ; il faut aussi le droit de consulter le rapport envoyé.
+-- =============================================================================
+
+alter type public.app_module add value if not exists 'whatsapp';
+
+create or replace function public.module_default_permission(p_module text, p_role text, p_edit boolean)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when p_module = 'achats' then
+      case p_role when 'admin' then true when 'secretaire' then true when 'lecture' then not p_edit else false end
+    when p_module = 'whatsapp' then
+      case p_role when 'admin' then true when 'secretaire' then true else false end
+    else false
+  end;
+$$;
+
+create table if not exists public.whatsapp_config (
+  id                  smallint primary key default 1 check (id = 1),
+  api_version         text not null default 'v26.0',
+  phone_number_id     text not null default '',
+  waba_id             text not null default '',
+  access_token        text not null default '',
+  app_secret          text not null default '',
+  verify_token        text not null default '',
+  manager_name        text not null default '',
+  manager_number      text not null default '',
+  extra_recipients    jsonb not null default '[]'::jsonb,   -- [{ "name": "...", "number": "212..." }]
+  default_message     text not null default '',
+  attach_pdf          boolean not null default true,
+  send_mode           text not null default 'modele' check (send_mode in ('modele', 'session')),
+  template_name       text not null default '',
+  template_lang       text not null default 'fr',
+  group_enabled       boolean not null default false,
+  group_id            text not null default '',
+  group_subject       text not null default '',
+  group_invite_link   text not null default '',
+  updated_at          timestamptz not null default now(),
+  updated_by          uuid references auth.users (id)
+);
+insert into public.whatsapp_config (id) values (1) on conflict (id) do nothing;
+alter table public.whatsapp_config enable row level security;
+-- Pas de politique : accès serveur uniquement (service_role).
+
+create table if not exists public.whatsapp_messages (
+  id               uuid primary key default gen_random_uuid(),
+  report_kind      text not null,
+  report_params    jsonb not null default '{}'::jsonb,
+  report_title     text not null,
+  recipient_kind   text not null check (recipient_kind in ('directeur', 'destinataire', 'groupe', 'test')),
+  recipient_label  text not null default '',
+  recipient        text not null,                -- numéro (chiffres, format international) ou identifiant de groupe
+  message_text     text not null default '',
+  with_pdf         boolean not null default false,
+  send_mode        text not null default 'modele',
+  status           text not null default 'envoi_en_cours' check (status in ('envoi_en_cours', 'envoye', 'remis', 'lu', 'echec')),
+  wa_message_id    text,
+  error            text not null default '',
+  dedupe_key       text not null,
+  retry_of         uuid references public.whatsapp_messages (id),
+  status_at        timestamptz,
+  created_at       timestamptz not null default now(),
+  created_by       uuid not null references auth.users (id),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists whatsapp_messages_created_idx on public.whatsapp_messages (created_at desc);
+create index if not exists whatsapp_messages_dedupe_idx on public.whatsapp_messages (dedupe_key, created_at desc);
+create unique index if not exists whatsapp_messages_wa_id_uniq on public.whatsapp_messages (wa_message_id) where wa_message_id is not null;
+-- Un seul envoi en cours à la fois pour un même rapport et un même destinataire (double clic)
+create unique index if not exists whatsapp_messages_inflight_uniq on public.whatsapp_messages (dedupe_key) where status = 'envoi_en_cours';
+
+alter table public.whatsapp_messages enable row level security;
+drop policy if exists "whatsapp_messages_select" on public.whatsapp_messages;
+create policy "whatsapp_messages_select" on public.whatsapp_messages for select to authenticated
+  using (public.is_admin() or created_by = auth.uid());
+-- Écriture : serveur uniquement (service_role), après vérification des droits.
+
+-- ===== supabase/migrations/026_sans_whatsapp_date_entree.sql =====
+-- =============================================================================
+-- 026 — Retrait de WhatsApp et date de début de travail facultative
+--
+--  1) WhatsApp retiré : tables whatsapp_config (identifiants Meta, jeton) et
+--     whatsapp_messages (journal des envois) supprimées ; droit « Envoi WhatsApp »
+--     retiré des permissions. Aucune donnée métier n'est touchée (rapports, employés…).
+--     (La valeur 'whatsapp' de l'énumération app_module reste, inutilisée : Postgres
+--     ne permet pas de retirer une valeur d'énumération sans risque.)
+--  2) Date de début de travail (employees.hire_date) facultative et JAMAIS supposée :
+--     * date renseignée : règle inchangée (congés acquis depuis max(date d'entrée, début du projet)) ;
+--     * date inconnue : AUCUN congé calculé, sauf si l'employé est explicitement marqué
+--       « déjà en poste au début du projet » (in_service_before_start) : les congés sont
+--       alors décomptés depuis la date de début du projet (réglage project_start_date),
+--       date connue et affichée comme telle. La date d'enregistrement dans l'application
+--       n'est jamais utilisée comme date d'entrée.
+--     Les dates déjà enregistrées ne sont pas modifiées.
+-- =============================================================================
+
+-- ---------- 1) WhatsApp -----------------------------------------------------------
+drop table if exists public.whatsapp_messages;
+drop table if exists public.whatsapp_config;
+delete from public.role_permissions where module::text = 'whatsapp';
+
+create or replace function public.module_default_permission(p_module text, p_role text, p_edit boolean)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when p_module = 'achats' then
+      case p_role when 'admin' then true when 'secretaire' then true when 'lecture' then not p_edit else false end
+    else false
+  end;
+$$;
+
+-- ---------- 2) Date de début de travail facultative --------------------------------
+alter table public.employees alter column hire_date drop not null;   -- déjà facultative ; sans effet sinon
+alter table public.employees add column if not exists in_service_before_start boolean not null default false;
+
+-- Début du décompte des congés : jamais une date supposée
+create or replace function public.accrual_start(p_hire date, p_in_service_before_start boolean)
+returns date
+language sql
+stable
+set search_path = public
+as $$
+  select case
+    when p_hire is not null then
+      case when public.project_start() is null then p_hire else greatest(p_hire, public.project_start()) end
+    when p_in_service_before_start then public.project_start()   -- null si aucun début de projet
+    else null
+  end;
+$$;
+
+-- Ancienne signature (une seule date) : même règle, sans repli sur le début du projet
+create or replace function public.accrual_start(p_hire date)
+returns date
+language sql
+stable
+set search_path = public
+as $$
+  select public.accrual_start(p_hire, false);
+$$;
+
+drop function if exists public.leave_balances(date);
+create function public.leave_balances(p_as_of date default current_date)
+returns table (
+  employee_id   uuid,
+  hire_date     date,
+  months        integer,
+  accrued       numeric,
+  taken         numeric,
+  planned       numeric,
+  adjustments   numeric,
+  balance       numeric,
+  accrual_from  date
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_rate numeric := coalesce((select value::numeric from public.settings where key = 'leave_days_per_month'), 1.5);
+begin
+  perform public.assert_can_read_balances();
+  return query
+  with tk as (
+    select t.employee_id, count(*)::numeric as n from public.days_taken('conge', null, p_as_of) t group by t.employee_id
+  ),
+  pl as (
+    select lr.employee_id, count(distinct d)::numeric as n
+      from public.leave_requests lr, generate_series(greatest(lr.start_date, p_as_of + 1), lr.end_date, interval '1 day') d
+     where lr.status = 'acceptee' and lr.end_date > p_as_of
+     group by lr.employee_id
+  ),
+  adj as (
+    select la.employee_id, sum(la.days) as n from public.leave_adjustments la
+     where la.kind = 'conge' and la.created_at::date <= p_as_of group by la.employee_id
+  ),
+  st as (
+    select e.id, public.accrual_start(e.hire_date, e.in_service_before_start) as s from public.employees e
+  )
+  select e.id, e.hire_date,
+         public.service_months(st.s, p_as_of),
+         public.service_months(st.s, p_as_of) * v_rate,
+         coalesce(tk.n, 0), coalesce(pl.n, 0), coalesce(adj.n, 0),
+         public.service_months(st.s, p_as_of) * v_rate - coalesce(tk.n, 0) + coalesce(adj.n, 0),
+         st.s
+    from public.employees e
+    join st on st.id = e.id
+    left join tk on tk.employee_id = e.id
+    left join pl on pl.employee_id = e.id
+    left join adj on adj.employee_id = e.id;
+end;
+$$;
+grant execute on function public.leave_balances(date) to authenticated;
+
+create or replace function public.leave_accrual_schedule(p_employee uuid, p_as_of date default current_date)
+returns table (month_index integer, credit_date date, days numeric, cumulative numeric)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_rate numeric := coalesce((select value::numeric from public.settings where key = 'leave_days_per_month'), 1.5);
+  v_start date;
+begin
+  perform public.assert_can_read_balances();
+  select public.accrual_start(hire_date, in_service_before_start) into v_start from public.employees where id = p_employee;
+  if v_start is null then
+    return;   -- date de début inconnue : aucun congé acquis
+  end if;
+  return query
+  select n, (v_start + make_interval(months => n))::date, v_rate, n * v_rate
+    from generate_series(1, public.service_months(v_start, p_as_of)) n;
+end;
+$$;
+
+-- ===== supabase/migrations/027_heures_sup_auto_manuel.sql =====
+-- =============================================================================
+-- 027 — Heures supplémentaires : automatique + manuel (toujours additionnés)
+--
+--  * attendance.overtime_manual : heures saisies par le responsable (ancienne colonne « HS »,
+--    valeurs existantes reprises telles quelles).
+--  * attendance.overtime_auto : calculé par la base depuis l'heure de sortie réelle et l'heure de
+--    fin normale de l'entreprise (réglage normal_end_time, « HH:MM », vide = calcul désactivé).
+--    Règle de l'entreprise : chaque demi-heure entamée après l'heure de fin normale compte 0,5 h.
+--    Seulement pour un statut travaillé (Présent, Repos travaillé) et le 1er service du jour.
+--    Recalculé uniquement quand l'heure de sortie (ou le statut / le service) change : la saisie
+--    manuelle n'est jamais modifiée, et un changement ultérieur de l'heure de fin normale ne
+--    réécrit pas l'historique.
+--  * attendance.overtime_hours devient le TOTAL = automatique + manuel (colonne calculée) : tous les
+--    totaux existants (synthèse mensuelle, rapports travailleurs…) additionnent donc les deux.
+--  * Lignes existantes : automatique = 0 (le réglage est vide à l'installation) → totaux inchangés.
+-- =============================================================================
+
+insert into public.settings (key, value) values ('normal_end_time', '""') on conflict (key) do nothing;
+
+alter table public.attendance add column if not exists overtime_manual numeric(5,2) not null default 0;
+alter table public.attendance add column if not exists overtime_auto numeric(5,2) not null default 0;
+
+-- Reprise des heures déjà saisies (déclencheurs suspendus : journées clôturées et journal non concernés)
+alter table public.attendance disable trigger user;
+update public.attendance set overtime_manual = overtime_hours where overtime_manual = 0 and overtime_hours <> 0;
+alter table public.attendance enable trigger user;
+
+alter table public.attendance drop constraint if exists attendance_overtime_manual_chk;
+alter table public.attendance add constraint attendance_overtime_manual_chk check (overtime_manual >= 0 and overtime_manual <= 24);
+alter table public.attendance drop constraint if exists attendance_overtime_auto_chk;
+alter table public.attendance add constraint attendance_overtime_auto_chk check (overtime_auto >= 0 and overtime_auto <= 24);
+
+alter table public.attendance drop column overtime_hours;
+alter table public.attendance add column overtime_hours numeric(6,2) generated always as (overtime_manual + overtime_auto) stored;
+
+-- Heure de fin normale (réglage), null si non configurée
+create or replace function public.normal_end_time()
+returns time
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case when (value #>> '{}') ~ '^\d{1,2}:\d{2}$' then (value #>> '{}')::time end
+    from public.settings where key = 'normal_end_time';
+$$;
+
+-- Calcul : demi-heures entamées après l'heure de fin normale
+create or replace function public.auto_overtime(p_time_out time, p_end time, p_status text, p_shift integer)
+returns numeric
+language sql
+immutable
+as $$
+  select case
+    when p_time_out is null or p_end is null or p_shift <> 1 or p_status not in ('present', 'repos_travaille') or p_time_out <= p_end then 0
+    else ceil(extract(epoch from (p_time_out - p_end)) / 1800.0) * 0.5
+  end::numeric;
+$$;
+
+-- Statut non travaillé : pas d'heures (ni sortie, ni heures sup.)
+create or replace function public.clear_times_when_not_worked()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status::text not in ('present', 'repos_travaille') then
+    new.time_in := null;
+    new.time_out := null;
+    new.overtime_manual := 0;
+    new.overtime_auto := 0;
+  end if;
+  return new;
+end;
+$$;
+
+-- Composante automatique : calculée par la base, jamais saisie par le navigateur.
+-- (Nom en « zz » : s'exécute après attendance_clear_times.)
+create or replace function public.attendance_overtime_auto()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT'
+     or new.time_out is distinct from old.time_out
+     or new.status is distinct from old.status
+     or new.shift is distinct from old.shift then
+    new.overtime_auto := least(24, public.auto_overtime(new.time_out, public.normal_end_time(), new.status::text, new.shift));
+  else
+    new.overtime_auto := old.overtime_auto;   -- inchangé (ex. seule la saisie manuelle a été modifiée)
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists attendance_zz_overtime_auto on public.attendance;
+create trigger attendance_zz_overtime_auto before insert or update on public.attendance
+  for each row execute function public.attendance_overtime_auto();
+
+-- ===== supabase/migrations/028_heures_sup_depuis_entree.sql =====
+-- =============================================================================
+-- 028 — Heures sup. automatiques calculées depuis l'heure d'entrée réelle
+--
+--  Règles de l'entreprise (remplacent l'heure de fin normale unique de la migration 027) :
+--   * Journée standard : 8 heures à partir de l'heure d'entrée enregistrée.
+--     Fin prévue = entrée + 8 h (06:00 → 14:00 ; 16:00 → 00:00 le lendemain ; 18:00 → 02:00).
+--   * Sortie avant ou à la fin prévue : journée complète, 0 heure sup. automatique (rien n'est déduit).
+--   * Sortie après la fin prévue : dépassement arrondi à l'heure entière supérieure
+--     (30 min → 1 h ; 1 h 15 → 2 h ; 2 h → 2 h), y compris après minuit
+--     (sortie plus « petite » que l'entrée = lendemain).
+--   * Entrée ou sortie manquante, statut non travaillé : 0.
+--   * Heures manuelles : inchangées, toujours ajoutées (total = automatique + manuel).
+--  Historique : les lignes existantes ne sont PAS recalculées ; la nouvelle règle s'applique à toute
+--  ligne créée, et à toute ligne dont l'heure d'entrée, de sortie ou le statut est modifié.
+-- =============================================================================
+
+create or replace function public.auto_overtime(p_time_in time, p_time_out time, p_status text)
+returns numeric
+language sql
+immutable
+as $$
+  select case
+    when p_time_in is null or p_time_out is null or p_status not in ('present', 'repos_travaille') then 0
+    else greatest(0, ceil(
+      (extract(epoch from (p_time_out - p_time_in)) + case when p_time_out < p_time_in then 86400 else 0 end - 8 * 3600) / 3600.0
+    ))
+  end::numeric;
+$$;
+
+create or replace function public.attendance_overtime_auto()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT'
+     or new.time_in is distinct from old.time_in
+     or new.time_out is distinct from old.time_out
+     or new.status is distinct from old.status then
+    new.overtime_auto := least(24, public.auto_overtime(new.time_in, new.time_out, new.status::text));
+  else
+    new.overtime_auto := old.overtime_auto;   -- inchangé (ex. seule la saisie manuelle a été modifiée)
+  end if;
+  return new;
+end;
+$$;
+
+-- Ancienne règle (heure de fin unique) retirée
+drop function if exists public.auto_overtime(time, time, text, integer);
+drop function if exists public.normal_end_time();
+delete from public.settings where key = 'normal_end_time';
+
+-- ===== supabase/migrations/029_matricule_facultatif.sql =====
+-- =============================================================================
+-- 029 — Matricule des employés facultatif
+--
+--  * employees.matricule peut rester vide (null). S'il est renseigné, il reste unique
+--    (la contrainte unique existante accepte plusieurs valeurs nulles).
+--  * Les enregistrements sont identifiés par leur identifiant interne (id), jamais par le matricule.
+--  * Les doublons sans matricule sont empêchés par l'application (même nom et prénom).
+--  * Suppression définitive : confirmation par le matricule, ou par le mot SUPPRIMER si l'employé
+--    n'en a pas. Aucune donnée existante n'est modifiée.
+-- =============================================================================
+
+alter table public.employees alter column matricule drop not null;
+-- Un matricule vide est enregistré comme absent (jamais une chaîne vide)
+alter table public.employees drop constraint if exists employees_matricule_not_blank;
+alter table public.employees add constraint employees_matricule_not_blank check (matricule is null or length(trim(matricule)) > 0) not valid;
+
+create or replace function public.delete_employee(p_employee uuid, p_confirm_matricule text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  e public.employees;
+  deps text;
+begin
+  if not public.is_admin() then
+    raise exception 'SUPPRESSION_REFUSEE: seul un administrateur peut supprimer définitivement un employé.';
+  end if;
+  select * into e from public.employees where id = p_employee for update;
+  if not found then
+    raise exception 'EMPLOYE_INTROUVABLE';
+  end if;
+  if coalesce(trim(p_confirm_matricule), '') is distinct from coalesce(e.matricule, 'SUPPRIMER') then
+    raise exception 'CONFIRMATION_INVALIDE: saisissez le matricule exact (ou SUPPRIMER si l''employé n''a pas de matricule).';
+  end if;
+  select string_agg(d.label || ' (' || d.records || ')', ', ') into deps from public.employee_dependencies(p_employee) d;
+  if deps is not null then
+    raise exception 'EMPLOYE_HISTORIQUE|%', deps;
+  end if;
+  update public.employees set substitute_id = null where substitute_id = p_employee;
+  update public.employees set chauffeur_id = null where chauffeur_id = p_employee;
+  update public.team_leads set employee_id = null where employee_id = p_employee;
+  delete from public.employees where id = p_employee;
+end;
+$$;
+
+-- ===== supabase/migrations/030_depart_maladie.sql =====
+-- =============================================================================
+-- 030 — Départ anticipé pour maladie
+--
+--  Cas normal (inchangé) : statut travaillé = journée standard de 8 h, même en partant avant la
+--  fin prévue ; heures sup. automatiques au-delà de entrée + 8 h, + heures manuelles.
+--
+--  Cas exceptionnel, choisi explicitement (attendance.sick_departure) :
+--   * statut obligatoirement « Absent maladie » ;
+--   * 0 heure standard (ce n'est pas un jour travaillé) ;
+--   * heures réellement travaillées avant le départ saisies UNIQUEMENT en heures sup. manuelles
+--     (overtime_manual) ; aucune heure sup. automatique ;
+--   * heure d'entrée, heure de départ, heures et commentaire (observation) conservés.
+--  Les autres statuts non travaillés gardent leur règle : heures effacées.
+--  Aucune ligne existante n'est modifiée.
+-- =============================================================================
+
+alter table public.attendance add column if not exists sick_departure boolean not null default false;
+alter table public.attendance drop constraint if exists attendance_sick_departure_chk;
+alter table public.attendance add constraint attendance_sick_departure_chk
+  check (not sick_departure or status = 'absent_maladie');
+
+create or replace function public.clear_times_when_not_worked()
+returns trigger
+language plpgsql
+as $$
+begin
+  -- L'option ne vaut que pour « Absent maladie » (changement de statut : option retirée)
+  if new.status::text <> 'absent_maladie' then
+    new.sick_departure := false;
+  end if;
+  if new.status::text = 'absent_maladie' and new.sick_departure then
+    -- Départ anticipé pour maladie : heures conservées, comptées seulement en heures sup. manuelles
+    new.overtime_auto := 0;
+  elsif new.status::text not in ('present', 'repos_travaille') then
+    new.sick_departure := false;
+    new.time_in := null;
+    new.time_out := null;
+    new.overtime_manual := 0;
+    new.overtime_auto := 0;
+  end if;
+  return new;
+end;
+$$;
+
+-- ===== supabase/migrations/031_postes_secretaire_responsable.sql =====
+-- =============================================================================
+-- 031 — Postes : ajout de « Secrétaire » et « Responsable », retrait de « Agent de sécurité »
+--
+--  * Nouveaux postes secretaire et responsable (équipe administrative rattachée à la collecte,
+--    comme mécanicien, gardien, directeur : pointés sur la feuille Collecte, groupes dédiés).
+--  * « Agent de sécurité » n'est plus proposé (l'application le retire des listes et refuse de
+--    l'attribuer à une fiche). La valeur reste dans la base : les employés qui l'ont et tout leur
+--    historique (pointage, rapports) sont conservés tels quels ; leur poste est à mettre à jour
+--    lors de la prochaine modification de leur fiche. Aucune donnée n'est modifiée ici.
+-- =============================================================================
+
+alter type public.employee_position add value if not exists 'secretaire';
+alter type public.employee_position add value if not exists 'responsable';
+
+alter table public.employees drop constraint if exists employees_team_position_chk;
+alter table public.employees add constraint employees_team_position_chk check (
+  (position::text in ('chauffeur', 'rippeur', 'chauffeur_remplacant', 'rippeur_remplacant', 'superviseur', 'chef_equipe', 'agent_securite',
+                      'mecanicien', 'gardien', 'directeur', 'autre', 'secretaire', 'responsable') and team_type = 'collecte') or
+  (position::text = 'balayeur' and team_type = 'nettoiement')
+);
+
+-- ===== supabase/migrations/032_rappels_recurrents.sql =====
+-- =============================================================================
+-- 032 — Rappels récurrents (une fois, chaque jour, chaque semaine, jours choisis, chaque mois)
+--
+--  * reminders : fréquence, jours de la semaine (0 = dimanche … 6 = samedi), jour du mois,
+--    heure (facultative), date de début (remind_date), date de fin, pause, priorité,
+--    report (snoozed_until). Les rappels existants deviennent des rappels « une fois » (inchangés).
+--  * reminder_completions : chaque occurrence terminée (date de l'occurrence, qui, quand).
+--    Terminer une occurrence d'un rappel récurrent ne désactive jamais les suivantes.
+--    Les rappels déjà marqués « faits » sont repris comme occurrence terminée.
+--  * Les occurrences non terminées restent dues (« en retard ») jusqu'à ce qu'elles soient
+--    terminées, même si l'application n'a pas été ouverte le jour prévu.
+--  Fuseau : Africa/Casablanca (calcul effectué par l'application à l'ouverture).
+-- =============================================================================
+
+alter table public.reminders add column if not exists frequency text not null default 'once';
+alter table public.reminders add column if not exists weekdays smallint[] not null default '{}';
+alter table public.reminders add column if not exists month_day smallint;
+alter table public.reminders add column if not exists remind_time time;
+alter table public.reminders add column if not exists end_date date;
+alter table public.reminders add column if not exists paused boolean not null default false;
+alter table public.reminders add column if not exists priority text not null default 'normal';
+alter table public.reminders add column if not exists snoozed_until date;
+
+alter table public.reminders drop constraint if exists reminders_frequency_chk;
+alter table public.reminders add constraint reminders_frequency_chk check (frequency in ('once', 'daily', 'weekly', 'weekdays', 'monthly'));
+alter table public.reminders drop constraint if exists reminders_priority_chk;
+alter table public.reminders add constraint reminders_priority_chk check (priority in ('normal', 'important', 'urgent'));
+alter table public.reminders drop constraint if exists reminders_weekdays_chk;
+alter table public.reminders add constraint reminders_weekdays_chk check (
+  weekdays <@ array[0, 1, 2, 3, 4, 5, 6]::smallint[]
+  and (frequency not in ('weekly', 'weekdays') or cardinality(weekdays) >= 1)
+  and (frequency <> 'weekly' or cardinality(weekdays) = 1)
+);
+alter table public.reminders drop constraint if exists reminders_month_day_chk;
+alter table public.reminders add constraint reminders_month_day_chk check ((month_day is null or month_day between 1 and 31) and (frequency <> 'monthly' or month_day is not null));
+alter table public.reminders drop constraint if exists reminders_end_chk;
+alter table public.reminders add constraint reminders_end_chk check (end_date is null or end_date >= remind_date);
+
+-- ---------- Occurrences terminées ---------------------------------------------------
+create table if not exists public.reminder_completions (
+  id               uuid primary key default gen_random_uuid(),
+  reminder_id      uuid not null references public.reminders (id) on delete cascade,
+  occurrence_date  date not null,
+  done_at          timestamptz not null default now(),
+  done_by          uuid not null default auth.uid() references auth.users (id),
+  constraint reminder_completions_uniq unique (reminder_id, occurrence_date)
+);
+create index if not exists reminder_completions_reminder_idx on public.reminder_completions (reminder_id, occurrence_date desc);
+
+drop trigger if exists reminder_completions_audit on public.reminder_completions;
+create trigger reminder_completions_audit after insert or update or delete on public.reminder_completions
+  for each row execute function public.audit_trigger();
+
+alter table public.reminder_completions enable row level security;
+-- Visible / terminable par quiconque voit le rappel (le sien ou un rappel partagé)
+drop policy if exists "reminder_completions_select" on public.reminder_completions;
+create policy "reminder_completions_select" on public.reminder_completions for select to authenticated
+  using (exists (select 1 from public.reminders r where r.id = reminder_id and (r.created_by = auth.uid() or r.shared)));
+drop policy if exists "reminder_completions_insert" on public.reminder_completions;
+create policy "reminder_completions_insert" on public.reminder_completions for insert to authenticated
+  with check (done_by = auth.uid() and exists (select 1 from public.reminders r where r.id = reminder_id and (r.created_by = auth.uid() or r.shared)));
+-- Annuler une occurrence terminée : celui qui l'a terminée, l'auteur du rappel, ou l'administrateur (rappel partagé)
+drop policy if exists "reminder_completions_delete" on public.reminder_completions;
+create policy "reminder_completions_delete" on public.reminder_completions for delete to authenticated
+  using (done_by = auth.uid() or exists (select 1 from public.reminders r where r.id = reminder_id and (r.created_by = auth.uid() or (r.shared and public.is_admin()))));
+grant select, insert, delete on public.reminder_completions to authenticated;
+
+-- Reprise : rappels déjà « faits » → occurrence terminée (journal désactivé pour la reprise)
+alter table public.reminder_completions disable trigger user;
+insert into public.reminder_completions (reminder_id, occurrence_date, done_at, done_by)
+select r.id, r.remind_date, r.done_at, coalesce(r.done_by, r.created_by)
+  from public.reminders r
+ where r.done_at is not null
+on conflict (reminder_id, occurrence_date) do nothing;
+alter table public.reminder_completions enable trigger user;
+
+-- ===== supabase/migrations/033_conges_reprise_contrat.sql =====
+-- =============================================================================
+-- 033 — Reprise des congés depuis les registres papier, contrat de la société
+--
+--  Employés :
+--   * leave_tracking_start : « Date de début dans le système » (début du suivi des congés dans
+--     l'application). Vide = date de début du projet (réglage project_start_date).
+--   * leave_taken_before : « Congés déjà pris avant le système » (information, JAMAIS déduite :
+--     ces jours sont déjà reflétés dans le solde initial des registres papier).
+--   * Modifiables uniquement par l'administrateur (journalisés comme toute modification de fiche).
+--  Solde initial : correction de catégorie « solde_initial » (table leave_adjustments existante :
+--   date, utilisateur, motif, nombre de jours) — réservé à l'administrateur.
+--  Solde restant = solde initial + congés acquis depuis le début du suivi
+--                  − congés approuvés pris depuis le début du suivi + autres corrections.
+--   * Acquisition : réglage leave_days_per_month (1,5 j/mois) ; désactivable (leave_accrual_enabled)
+--     pendant la vérification des registres.
+--   * Début de l'acquisition : date d'entrée si elle est postérieure au début du suivi (nouvel
+--     employé) ; sinon début du suivi, seulement si l'employé est suivi (date d'entrée connue,
+--     solde initial saisi, « déjà en poste » coché ou début du suivi renseigné). Jamais une date
+--     supposée.
+--   * Seuls les congés approuvés (pointage « Congé » ou demande acceptée) sont déduits, et seulement
+--     à partir du début du suivi.
+--  Contrat de la société : réglages company_contract_start / _end / _ref et contract_alert_days ;
+--   rappels partagés générés dans « Rappels et alertes » (reminders.system_key).
+--  Aucune donnée existante n'est modifiée : sans date de début du projet ni solde initial, les soldes
+--  restent calculés comme avant.
+-- =============================================================================
+
+alter table public.employees add column if not exists leave_tracking_start date;
+alter table public.employees add column if not exists leave_taken_before numeric(5,1) check (leave_taken_before is null or leave_taken_before >= 0);
+
+-- Données sensibles de reprise : administrateur uniquement (l'éditeur SQL, sans utilisateur connecté, reste possible)
+create or replace function public.employees_leave_fields_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if auth.uid() is not null and not public.is_admin()
+     and (new.leave_tracking_start is distinct from (case when tg_op = 'UPDATE' then old.leave_tracking_start end)
+          or new.leave_taken_before is distinct from (case when tg_op = 'UPDATE' then old.leave_taken_before end)) then
+    raise exception 'REPRISE_CONGES_ADMIN: seul un administrateur peut modifier les données de reprise des congés.';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists employees_leave_fields_guard on public.employees;
+create trigger employees_leave_fields_guard before insert or update on public.employees
+  for each row execute function public.employees_leave_fields_guard();
+
+alter table public.leave_adjustments add column if not exists category text not null default 'correction';
+alter table public.leave_adjustments drop constraint if exists leave_adjustments_category_chk;
+alter table public.leave_adjustments add constraint leave_adjustments_category_chk
+  check (category in ('correction', 'solde_initial') and (category = 'correction' or kind = 'conge'));
+
+insert into public.settings (key, value) values
+  ('leave_accrual_enabled', 'true'),
+  ('company_contract_start', '""'),
+  ('company_contract_end', '""'),
+  ('company_contract_ref', '""'),
+  ('contract_alert_days', '"90,60,30"')
+on conflict (key) do nothing;
+
+alter table public.reminders add column if not exists system_key text;
+create unique index if not exists reminders_system_key_uniq on public.reminders (system_key) where system_key is not null;
+
+-- ---------- Calcul des congés -------------------------------------------------------
+create or replace function public.leave_tracking_start_of(p_tracking date)
+returns date
+language sql
+stable
+set search_path = public
+as $$
+  select coalesce(p_tracking, public.project_start());
+$$;
+
+-- Début de l'acquisition (null = aucun congé calculé)
+create or replace function public.leave_accrual_from(p_hire date, p_tracking date, p_in_service boolean, p_has_initial boolean)
+returns date
+language sql
+stable
+set search_path = public
+as $$
+  select case
+    when p_hire is not null then
+      case when public.leave_tracking_start_of(p_tracking) is null then p_hire else greatest(p_hire, public.leave_tracking_start_of(p_tracking)) end
+    when p_in_service or p_has_initial or p_tracking is not null then public.leave_tracking_start_of(p_tracking)
+    else null
+  end;
+$$;
+
+drop function if exists public.leave_balances(date);
+create function public.leave_balances(p_as_of date default current_date)
+returns table (
+  employee_id     uuid,
+  hire_date       date,
+  months          integer,
+  accrued         numeric,
+  taken           numeric,
+  planned         numeric,
+  adjustments     numeric,
+  balance         numeric,
+  accrual_from    date,
+  initial_balance numeric,
+  tracking_start  date,
+  taken_before    numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_rate numeric := coalesce((select value::numeric from public.settings where key = 'leave_days_per_month'), 1.5);
+  v_on boolean := coalesce((select (value #>> '{}')::boolean from public.settings where key = 'leave_accrual_enabled'), true);
+begin
+  perform public.assert_can_read_balances();
+  return query
+  with ini as (
+    select la.employee_id, sum(la.days) as n from public.leave_adjustments la
+     where la.kind = 'conge' and la.category = 'solde_initial' group by la.employee_id
+  ),
+  adj as (
+    select la.employee_id, sum(la.days) as n from public.leave_adjustments la
+     where la.kind = 'conge' and la.category = 'correction' and la.created_at::date <= p_as_of group by la.employee_id
+  ),
+  st as (
+    select e.id,
+           public.leave_tracking_start_of(e.leave_tracking_start) as tr,
+           public.leave_accrual_from(e.hire_date, e.leave_tracking_start, e.in_service_before_start, ini.employee_id is not null) as s,
+           coalesce(ini.n, 0) as initial
+      from public.employees e left join ini on ini.employee_id = e.id
+  ),
+  tk as (
+    select t.employee_id, count(*)::numeric as n
+      from public.days_taken('conge', null, p_as_of) t
+      join st on st.id = t.employee_id
+     where st.tr is null or t.day >= st.tr      -- congés pris avant le suivi : déjà dans le solde initial
+     group by t.employee_id
+  ),
+  pl as (
+    select lr.employee_id, count(distinct d)::numeric as n
+      from public.leave_requests lr, generate_series(greatest(lr.start_date, p_as_of + 1), lr.end_date, interval '1 day') d
+     where lr.status = 'acceptee' and lr.end_date > p_as_of
+     group by lr.employee_id
+  )
+  select e.id, e.hire_date,
+         public.service_months(st.s, p_as_of),
+         case when v_on then public.service_months(st.s, p_as_of) * v_rate else 0 end,
+         coalesce(tk.n, 0), coalesce(pl.n, 0), coalesce(adj.n, 0),
+         -- solde initial pris en compte à partir du début du suivi
+         (case when st.tr is null or p_as_of >= st.tr then st.initial else 0 end)
+           + (case when v_on then public.service_months(st.s, p_as_of) * v_rate else 0 end)
+           - coalesce(tk.n, 0) + coalesce(adj.n, 0),
+         st.s, st.initial, st.tr, e.leave_taken_before
+    from public.employees e
+    join st on st.id = e.id
+    left join tk on tk.employee_id = e.id
+    left join pl on pl.employee_id = e.id
+    left join adj on adj.employee_id = e.id;
+end;
+$$;
+grant execute on function public.leave_balances(date) to authenticated;
+
+create or replace function public.leave_accrual_schedule(p_employee uuid, p_as_of date default current_date)
+returns table (month_index integer, credit_date date, days numeric, cumulative numeric)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_rate numeric := coalesce((select value::numeric from public.settings where key = 'leave_days_per_month'), 1.5);
+  v_on boolean := coalesce((select (value #>> '{}')::boolean from public.settings where key = 'leave_accrual_enabled'), true);
+  v_start date;
+begin
+  perform public.assert_can_read_balances();
+  if not v_on then
+    return;   -- acquisition désactivée (vérification des registres en cours)
+  end if;
+  select public.leave_accrual_from(e.hire_date, e.leave_tracking_start, e.in_service_before_start,
+           exists (select 1 from public.leave_adjustments la where la.employee_id = e.id and la.kind = 'conge' and la.category = 'solde_initial'))
+    into v_start from public.employees e where e.id = p_employee;
+  if v_start is null then
+    return;
+  end if;
+  return query
+  select n, (v_start + make_interval(months => n))::date, v_rate, n * v_rate
+    from generate_series(1, public.service_months(v_start, p_as_of)) n;
+end;
+$$;
+
+-- ---------- Contrat de la société : rappels automatiques -------------------------------
+-- Rappels partagés « une seule fois » dans « Rappels et alertes », identifiés par system_key :
+--   contrat:<date de fin>:<n>       n jours avant la fin (réglage contract_alert_days, ex. 90,60,30) ;
+--   contrat:<date de fin>:expire    le lendemain de la date de fin (contrat expiré).
+-- Un seuil déjà dépassé n'est pas recréé dans le passé : seul le plus proche est créé pour aujourd'hui.
+-- Les rappels déjà terminés restent dans l'historique ; ceux d'une ancienne date de fin non terminés
+-- sont retirés. Appelée à chaque enregistrement du profil de l'entreprise.
+create or replace function public.sync_contract_reminders()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_today date := (now() at time zone 'Africa/Casablanca')::date;
+  v_uid uuid := coalesce(auth.uid(), (select p.id from public.profiles p where p.role = 'admin' order by p.created_at limit 1));
+  v_txt text := nullif(trim(coalesce((select value #>> '{}' from public.settings where key = 'company_contract_end'), '')), '');
+  v_ref text := trim(coalesce((select value #>> '{}' from public.settings where key = 'company_contract_ref'), ''));
+  v_days int[];
+  v_end date;
+  v_fin text;
+  v_keys text[] := '{}';
+  v_passed int;
+  n int;
+begin
+  if auth.uid() is not null and not public.can_edit('parametres') then
+    raise exception 'ACCES_REFUSE: modification des paramètres non autorisée.';
+  end if;
+  select coalesce(array_agg(distinct trim(x)::int order by trim(x)::int desc), '{}') into v_days
+    from unnest(string_to_array(coalesce((select value #>> '{}' from public.settings where key = 'contract_alert_days'), ''), ',')) x
+   where trim(x) ~ '^[0-9]{1,3}$' and trim(x)::int between 1 and 730;
+
+  if v_txt is not null and v_uid is not null then
+    v_end := v_txt::date;
+    v_fin := to_char(v_end, 'DD/MM/YYYY');
+    foreach n in array v_days loop
+      if v_end - n >= v_today then
+        v_keys := v_keys || ('contrat:' || v_end || ':' || n);
+        insert into public.reminders (title, details, remind_date, notify_days_before, shared, frequency, priority, created_by, system_key)
+        values ('Fin du contrat de la société le ' || v_fin || ' (dans ' || n || ' jours)',
+                'Le contrat de la société' || case when v_ref <> '' then ' (réf. ' || v_ref || ')' else '' end
+                  || ' se termine le ' || v_fin || '. Préparez le renouvellement.',
+                v_end - n, 0, true, 'once', case when n <= 30 then 'urgent' else 'important' end, v_uid,
+                'contrat:' || v_end || ':' || n)
+        on conflict (system_key) where system_key is not null do nothing;
+      elsif v_end >= v_today then
+        v_passed := n;   -- ordre décroissant : reste le seuil dépassé le plus proche
+      end if;
+    end loop;
+    if v_passed is not null then
+      v_keys := v_keys || ('contrat:' || v_end || ':' || v_passed);
+      insert into public.reminders (title, details, remind_date, notify_days_before, shared, frequency, priority, created_by, system_key)
+      values ('Fin du contrat de la société le ' || v_fin || ' (moins de ' || v_passed || ' jours)',
+              'Le contrat de la société' || case when v_ref <> '' then ' (réf. ' || v_ref || ')' else '' end
+                || ' se termine le ' || v_fin || '. Préparez le renouvellement.',
+              v_today, 0, true, 'once', case when v_passed <= 30 then 'urgent' else 'important' end, v_uid,
+              'contrat:' || v_end || ':' || v_passed)
+      on conflict (system_key) where system_key is not null do nothing;
+    end if;
+    v_keys := v_keys || ('contrat:' || v_end || ':expire');
+    insert into public.reminders (title, details, remind_date, notify_days_before, shared, frequency, priority, created_by, system_key)
+    values ('Contrat de la société expiré (fin le ' || v_fin || ')',
+            'Le contrat de la société' || case when v_ref <> '' then ' (réf. ' || v_ref || ')' else '' end
+              || ' est arrivé à échéance le ' || v_fin || '. Renseignez la nouvelle date de fin dans Profil › Entreprise une fois renouvelé.',
+            v_end + 1, 0, true, 'once', 'urgent', v_uid, 'contrat:' || v_end || ':expire')
+    on conflict (system_key) where system_key is not null do nothing;
+  end if;
+
+  delete from public.reminders r
+   where r.system_key like 'contrat:%' and not (r.system_key = any (v_keys))
+     and r.done_at is null
+     and not exists (select 1 from public.reminder_completions c where c.reminder_id = r.id);
+  return cardinality(v_keys);
+end;
+$$;
+revoke all on function public.sync_contract_reminders() from public;
+grant execute on function public.sync_contract_reminders() to authenticated;
+

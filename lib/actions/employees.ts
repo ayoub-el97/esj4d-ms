@@ -29,6 +29,8 @@ const employeeSchema = z
     substitute_id: optionalUuid,
     hire_date: optionalDate,
     in_service_before_start: z.boolean().default(false),
+    leave_tracking_start: optionalDate,
+    leave_taken_before: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number({ message: "Congés déjà pris : nombre invalide." }).min(0, "Congés déjà pris : nombre invalide.").max(999).nullable()),
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
     job_title: z.string().trim().max(60).default(""),
@@ -66,6 +68,8 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     substitute_id: formData.get("substitute_id"),
     hire_date: formData.get("hire_date"),
     in_service_before_start: formData.get("in_service_before_start") === "on",
+    leave_tracking_start: formData.get("leave_tracking_start"),
+    leave_taken_before: formData.get("leave_taken_before"),
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
     job_title: formData.get("job_title") ?? "",
@@ -86,7 +90,10 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     };
   }
 
-  const { id, ...rest } = parsed.data;
+  const { id, ...rest0 } = parsed.data;
+  // Données de reprise des congés : administrateur uniquement (sinon non transmises, valeurs inchangées)
+  const { leave_tracking_start, leave_taken_before, ...rest1 } = rest0;
+  const rest = auth.user.role === "admin" ? { ...rest1, leave_tracking_start, leave_taken_before } : rest1;
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
   const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();
@@ -215,6 +222,7 @@ function friendlyDbError(message: string): string {
   if (message.includes("duplicate key") && message.includes("matricule")) return "Ce matricule existe déjà.";
   if (message.includes("REMPLACANT_INVALIDE")) return "Le remplaçant d'un chauffeur doit être un chauffeur remplaçant, celui d'un rippeur un rippeur remplaçant.";
   if (message.includes("employees_substitute_not_self")) return "Un employé ne peut pas être son propre remplaçant.";
+  if (message.includes("REPRISE_CONGES_ADMIN")) return "Seul un administrateur peut modifier les données de reprise des congés.";
   return friendlyError(message);
 }
 
@@ -273,6 +281,8 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       substitute_id: null,
       hire_date: r.hire_date,
       in_service_before_start: !!r.in_service_before_start,
+      leave_tracking_start: null,
+      leave_taken_before: null,
       phone: r.phone ?? "",
       is_active: true,
     });
@@ -293,8 +303,10 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       result.errors.push({ line: i + 1, error: t(msg) });
       continue;
     }
-    const { id: _id, ...values } = parsed.data;
+    const { id: _id, leave_tracking_start: _a, leave_taken_before: _b, ...values } = parsed.data;
     void _id;
+    void _a;
+    void _b;
     const { error } = await supabase.from("employees").insert(values);
     if (error) result.errors.push({ line: i + 1, error: t(friendlyDbError(error.message)) });
     else result.created++;

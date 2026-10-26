@@ -18,6 +18,20 @@ const companySchema = z.object({
   company_phone: z.string().trim().max(60).default(""),
   company_email: z.union([z.literal(""), z.string().trim().email("Adresse e-mail invalide.")]).default(""),
   company_legal: z.string().trim().max(300).default(""),
+  // Contrat de la société (facultatif) : rappels automatiques avant la fin et à l'expiration
+  company_contract_start: z.preprocess((v) => (v == null ? "" : String(v).trim()), z.union([z.literal(""), z.string().date("Date du contrat invalide.")])),
+  company_contract_end: z.preprocess((v) => (v == null ? "" : String(v).trim()), z.union([z.literal(""), z.string().date("Date du contrat invalide.")])),
+  company_contract_ref: z.string().trim().max(120).default(""),
+  contract_alert_days: z
+    .string()
+    .trim()
+    .default("")
+    .transform((s) => [...new Set(s.split(/[\s,;]+/).filter(Boolean).map(Number))])
+    .refine((a) => a.every((n) => Number.isInteger(n) && n >= 1 && n <= 730), "Alertes : indiquez des nombres de jours séparés par des virgules (ex. 90,60,30).")
+    .transform((a) => a.sort((x, y) => y - x).join(",")),
+}).refine((d) => !d.company_contract_start || !d.company_contract_end || d.company_contract_end >= d.company_contract_start, {
+  message: "La date de fin du contrat ne peut pas précéder la date de début.",
+  path: ["company_contract_end"],
 });
 
 export async function saveCompanyProfile(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -31,6 +45,10 @@ export async function saveCompanyProfile(_prev: ActionResult | null, formData: F
     company_phone: formData.get("company_phone") ?? "",
     company_email: String(formData.get("company_email") ?? "").trim(),
     company_legal: formData.get("company_legal") ?? "",
+    company_contract_start: formData.get("company_contract_start") ?? "",
+    company_contract_end: formData.get("company_contract_end") ?? "",
+    company_contract_ref: formData.get("company_contract_ref") ?? "",
+    contract_alert_days: formData.get("contract_alert_days") ?? "",
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
@@ -38,7 +56,10 @@ export async function saveCompanyProfile(_prev: ActionResult | null, formData: F
   const rows = Object.entries(parsed.data).map(([key, value]) => ({ key, value }));
   const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  // Rappels du contrat (90/60/30 jours avant la fin, expiration) recalculés d'après les dates enregistrées
+  const sync = await supabase.rpc("sync_contract_reminders");
   revalidatePath("/", "layout");
+  if (sync.error) return { ok: true, message: t("Profil enregistré, mais les rappels du contrat n'ont pas pu être mis à jour : {message}", { message: friendlyError(sync.error.message) }) };
   return { ok: true, message: t("Profil de l'entreprise enregistré.") };
 }
 

@@ -33,6 +33,10 @@ export type Employee = {
   hire_date: string | null;
   /** Date inconnue mais employé déjà en poste au début du projet : congés décomptés depuis le début du projet */
   in_service_before_start: boolean;
+  /** « Date de début dans le système » : début du suivi des congés (vide = début du projet) */
+  leave_tracking_start: string | null;
+  /** « Congés déjà pris avant le système » : information (déjà comprise dans le solde initial) */
+  leave_taken_before: number | null;
   phone: string;
   is_active: boolean;
   /** Libellé libre de la fonction (poste « Autre fonction ») */
@@ -48,7 +52,7 @@ export type Employee = {
 export type DepartureReason = "demission" | "fin_contrat" | "licenciement" | "autre";
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, leave_tracking_start, leave_taken_before, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();

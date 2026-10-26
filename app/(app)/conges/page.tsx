@@ -5,7 +5,7 @@ import { getEmployees, employeeName } from "@/lib/data/employees";
 import { getAvailableCredits, getLeaveBalances, getLeaveRequests, getRecoveryBalances, getRecoveryRequests } from "@/lib/data/leaves";
 import { formatDateFr, isISODate, todayISO } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
+import { POSITION_LABELS, TEAM_LABELS, ALL_POSITIONS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
@@ -23,7 +23,7 @@ export const generateMetadata = pageTitle("Congé / Récupération");
 
 type Section = "demande-conge" | "demande-recuperation" | "solde-conges" | "solde-recuperation";
 const SECTIONS: Section[] = ["demande-conge", "demande-recuperation", "solde-conges", "solde-recuperation"];
-type SP = { section?: string; q?: string; equipe?: string; date?: string; from?: string; to?: string };
+type SP = { section?: string; q?: string; equipe?: string; date?: string; from?: string; to?: string; poste?: string; statut?: string };
 
 export default async function CongesPage({ searchParams }: { searchParams: Promise<SP> }) {
   const [user, t] = await Promise.all([requireModule("conges"), getT()]);
@@ -153,15 +153,47 @@ async function BalanceFilters({ section, sp, withPeriod }: { section: Section; s
 async function LeaveBalanceSection({ sp }: { sp: SP }) {
   const t = await getT();
   const asOf = isISODate(sp.date) ? sp.date : todayISO();
-  const rows = await getLeaveBalances(asOf, { team: sp.equipe, q: sp.q });
+  const rows = await getLeaveBalances(asOf, { team: sp.equipe, q: sp.q, position: sp.poste, status: sp.statut });
   const pdfParams: Record<string, string> = { date: asOf };
   if (sp.equipe) pdfParams.equipe = sp.equipe;
   if (sp.q) pdfParams.q = sp.q;
+  if (sp.poste) pdfParams.poste = sp.poste;
+  if (sp.statut) pdfParams.statut = sp.statut;
   return (
     <div>
       <BalanceFilters section="solde-conges" sp={sp} withPeriod={false} />
+      <form className="-mt-2 mb-4 flex flex-wrap items-end gap-3">
+        <input type="hidden" name="section" value="solde-conges" />
+        {sp.q && <input type="hidden" name="q" value={sp.q} />}
+        {sp.equipe && <input type="hidden" name="equipe" value={sp.equipe} />}
+        {sp.date && <input type="hidden" name="date" value={sp.date} />}
+        <div className="space-y-1">
+          <Label htmlFor="poste">{t("Poste")}</Label>
+          <NativeSelect id="poste" name="poste" defaultValue={sp.poste ?? ""}>
+            <option value="">{t("Tous")}</option>
+            {ALL_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {t(POSITION_LABELS[p])}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="statut">{t("Statut")}</Label>
+          <NativeSelect id="statut" name="statut" defaultValue={sp.statut ?? ""}>
+            <option value="">{t("Actifs")}</option>
+            <option value="inactifs">{t("Inactifs")}</option>
+            <option value="tous">{t("Tous")}</option>
+            <option value="a-completer">{t("À compléter (ni date d'entrée ni solde initial)")}</option>
+          </NativeSelect>
+        </div>
+        <Button type="submit" variant="outline">
+          <Search /> {t("Filtrer")}
+        </Button>
+      </form>
       <p className="mb-2 text-xs text-muted-foreground">
-        {t("Solde = congés acquis − congés effectivement pris + corrections. Acquisition : 1,5 jour par mois complet de service, à chaque mois anniversaire de la date d'entrée (taux réglable).")}
+        {t("Solde restant = solde initial + congés acquis depuis le début du suivi − congés approuvés pris depuis le début du suivi + corrections.")}{" "}
+        {t("Acquisition : 1,5 jour par mois complet (taux réglable), depuis le début du suivi ou la date d'entrée si elle est postérieure. Les congés pris avant le système ne sont jamais déduits une seconde fois.")}
       </p>
       <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>
@@ -173,17 +205,20 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
               <TableHead>{t("Équipe")}</TableHead>
               <TableHead>{t("Poste")}</TableHead>
               <TableHead>{t("Date d'entrée")}</TableHead>
+              <TableHead>{t("Début du suivi")}</TableHead>
+              <TableHead className="text-end">{t("Solde initial")}</TableHead>
               <TableHead className="text-end">{t("Acquis au {date}", { date: formatDateFr(asOf) })}</TableHead>
               <TableHead className="text-end">{t("Pris")}</TableHead>
               <TableHead className="text-end">{t("Corrections")}</TableHead>
               <TableHead className="text-end">{t("Solde restant")}</TableHead>
               <TableHead className="text-end">{t("Acceptés à venir")}</TableHead>
+              <TableHead>{t("Statut")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                <TableCell colSpan={14} className="text-center text-muted-foreground">
                   {t("Aucun employé ne correspond aux filtres.")}
                 </TableCell>
               </TableRow>
@@ -212,6 +247,8 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
                     </span>
                   )}
                 </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">{b.tracking_start ? formatDateFr(b.tracking_start) : "—"}</TableCell>
+                <TableCell className="text-end">{b.initial_balance || ""}</TableCell>
                 <TableCell className="text-end">{b.accrued}</TableCell>
                 <TableCell className="text-end">{b.taken}</TableCell>
                 <TableCell className="text-end">{b.adjustments || ""}</TableCell>
@@ -219,6 +256,9 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
                   <Badge variant={b.balance < 0 ? "destructive" : "secondary"}>{b.balance}</Badge>
                 </TableCell>
                 <TableCell className="text-end text-muted-foreground">{b.planned || ""}</TableCell>
+                <TableCell>
+                  <Badge variant={b.is_active ? "secondary" : "outline"}>{b.is_active ? t("Actif") : t("Inactif")}</Badge>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
