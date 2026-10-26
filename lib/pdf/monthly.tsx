@@ -1,4 +1,5 @@
 import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
+import { expectedEnd, fmtHours } from "@/lib/overtime";
 import type { MonthlyReport } from "@/lib/data/monthly";
 import type { WorkerReport } from "@/lib/data/worker";
 import { employeeName } from "@/lib/data/employees";
@@ -87,10 +88,11 @@ export function WorkerReportPdf({ company, report, generatedBy }: { company: str
   const attCols: Column[] = [
     { key: "date", label: "Date", width: 14 },
     { key: "st", label: "Statut", width: 16 },
-    { key: "in", label: "Entrée", width: 10 },
-    { key: "out", label: "Sortie", width: 10 },
-    { key: "hs", label: "HS", width: 8, align: "right" },
-    { key: "obs", label: "Observation", width: 42 },
+    { key: "in", label: "Entrée", width: 9 },
+    { key: "fin", label: "Fin prévue", width: 9 },
+    { key: "out", label: "Sortie", width: 9 },
+    { key: "hs", label: "HS (auto+man.)", width: 13, align: "right" },
+    { key: "obs", label: "Observation", width: 30 },
   ];
   const s = report.summary;
   return (
@@ -110,8 +112,17 @@ export function WorkerReportPdf({ company, report, generatedBy }: { company: str
             date: formatDateFr(a.activity_date) + (a.shift > 1 ? ` (s${a.shift})` : ""),
             st: t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus]),
             in: a.time_in?.slice(0, 5) ?? "",
+            fin: (() => {
+              const x = a.time_in && ["present", "repos_travaille"].includes(a.status) ? expectedEnd(a.time_in) : null;
+              return x ? `${x.time}${x.nextDay ? " +1" : ""}` : "";
+            })(),
             out: a.time_out?.slice(0, 5) ?? "",
-            hs: Number(a.overtime_hours) ? String(a.overtime_hours) : "",
+            hs: (() => {
+              const auto = Number(a.overtime_auto) || 0;
+              const manual = Number(a.overtime_manual) || 0;
+              if (!auto && !manual) return "";
+              return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)}+${fmtHours(manual)})` : fmtHours(auto + manual);
+            })(),
             obs: a.observation,
           }))}
         />

@@ -1856,4 +1856,13 @@ export const en: Messages = {
   "Heures manuelles du jour": "Manual hours of the day",
   "Auto": "Auto",
   "Manuel": "Manual",
+  "(lendemain)": "(next day)",
+  "Fin prévue": "Expected end",
+  "HS (auto + manuel)": "OT (auto + manual)",
+  "Heures supplémentaires : journée standard de 8 h à partir de l'heure d'entrée de chaque employé. Au-delà de la fin prévue (entrée + 8 h, même après minuit), le dépassement est arrondi à l'heure supérieure (30 min → 1 h ; 1 h 15 → 2 h). Les heures saisies à la main dans le Pointage sont toujours ajoutées.": "Overtime: standard 8-hour day from each employee's start time. Beyond the expected end (start + 8 h, even after midnight), the excess is rounded up to the next hour (30 min → 1 h; 1 h 15 → 2 h). Hours entered manually in attendance are always added.",
+  "Journée standard de 8 h à partir de l'heure d'entrée": "Standard 8-hour day from the start time",
+  "Total = automatiques + manuelles": "Total = automatic + manual",
+  "Total = heures automatiques (dépassement de l'heure d'entrée + 8 h, arrondi à l'heure supérieure) + heures manuelles accordées dans le Pointage, toujours additionnées.": "Total = automatic hours (excess over start time + 8 h, rounded up to the next hour) + manual hours granted in attendance, always added together.",
+  "Total = heures automatiques + heures manuelles, toujours additionnées. Automatiques : dépassement de la fin prévue (heure d'entrée + 8 h, y compris après minuit), arrondi à l'heure supérieure. Manuelles : heures accordées par le responsable dans la colonne « HS » du Pointage, ajoutées en totalité. Même total que la synthèse mensuelle.": "Total = automatic hours + manual hours, always added together. Automatic: excess over the expected end (start time + 8 h, including after midnight), rounded up to the next hour. Manual: hours granted by the manager in the \"OT\" column of attendance, added in full. Same total as the monthly summary.",
+  "fin prévue {time}": "expected end {time}",
 };

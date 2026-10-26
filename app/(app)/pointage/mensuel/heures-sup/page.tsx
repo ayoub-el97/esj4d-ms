@@ -186,7 +186,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
         </table>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {t("Total = heures automatiques + heures manuelles, toujours additionnées. Automatiques : chaque demi-heure entamée après l'heure de fin normale de l'entreprise (heure de sortie réelle, 1er service). Manuelles : heures accordées par le responsable dans la colonne « HS » du Pointage, ajoutées en totalité. Même total que la synthèse mensuelle.")}
+        {t("Total = heures automatiques + heures manuelles, toujours additionnées. Automatiques : dépassement de la fin prévue (heure d'entrée + 8 h, y compris après minuit), arrondi à l'heure supérieure. Manuelles : heures accordées par le responsable dans la colonne « HS » du Pointage, ajoutées en totalité. Même total que la synthèse mensuelle.")}
       </p>
 
       <ModuleButtons pdfSlot={<PdfExportButton kind="pointage-hs" params={params} />} historyHref="/pointage/historique" />

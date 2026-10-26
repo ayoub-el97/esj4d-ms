@@ -22,8 +22,6 @@ export type AppSettings = {
   project_start_date: string;
   /** Jour de début de la période de pointage (1 à 28) : du 8 au 7 par défaut */
   pointage_period_start_day: number;
-  /** Heure de fin normale de l'entreprise (« HH:MM ») pour les heures sup. automatiques ; vide = désactivé */
-  normal_end_time: string;
   /** Alertes camions : seuils (jours d'immobilisation, nombre de pannes sur la fenêtre) */
   truck_alert_orange_days: number;
   truck_alert_red_days: number;
@@ -47,7 +45,6 @@ const DEFAULTS: AppSettings = {
   company_legal: "",
   project_start_date: "",
   pointage_period_start_day: 8,
-  normal_end_time: "",
   truck_alert_orange_days: 3,
   truck_alert_red_days: 7,
   truck_alert_orange_count: 3,

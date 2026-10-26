@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { expectedEnd, fmtHours } from "@/lib/overtime";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getAttendanceHistory } from "@/lib/data/attendance";
@@ -100,8 +101,9 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
               <TableHead>{t("Poste")}</TableHead>
               <TableHead>{t("Statut")}</TableHead>
               <TableHead>{t("Entrée")}</TableHead>
+              <TableHead>{t("Fin prévue")}</TableHead>
               <TableHead>{t("Sortie")}</TableHead>
-              <TableHead>{t("HS")}</TableHead>
+              <TableHead title={t("Total = automatiques + manuelles")}>{t("HS (auto + manuel)")}</TableHead>
               <TableHead>{t("Observation")}</TableHead>
               <TableHead>{t("Dernière saisie")}</TableHead>
             </TableRow>
@@ -134,8 +136,17 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
                 <TableCell>{t(POSITION_LABELS[r.position as Position])}</TableCell>
                 <TableCell>{t(ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus])}</TableCell>
                 <TableCell>{r.time_in?.slice(0, 5) ?? ""}</TableCell>
+                <TableCell className="text-muted-foreground">{(() => {
+                  const x = r.time_in && ["present", "repos_travaille"].includes(r.status) ? expectedEnd(r.time_in) : null;
+                  return x ? `${x.time}${x.nextDay ? " +1" : ""}` : "";
+                })()}</TableCell>
                 <TableCell>{r.time_out?.slice(0, 5) ?? ""}</TableCell>
-                <TableCell>{Number(r.overtime_hours) || ""}</TableCell>
+                <TableCell className="whitespace-nowrap">{(() => {
+                  const auto = Number(r.overtime_auto) || 0;
+                  const manual = Number(r.overtime_manual) || 0;
+                  if (!auto && !manual) return "";
+                  return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)} + ${fmtHours(manual)})` : fmtHours(auto + manual);
+                })()}</TableCell>
                 <TableCell className="max-w-48 truncate">{r.observation}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {formatDateTimeFr(r.updated_at)}

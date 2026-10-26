@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { expectedEnd, fmtHours } from "@/lib/overtime";
 import { notFound } from "next/navigation";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
@@ -95,8 +96,9 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                     <TableHead>{t("Date")}</TableHead>
                     <TableHead>{t("Statut")}</TableHead>
                     <TableHead>{t("Entrée")}</TableHead>
+                    <TableHead>{t("Fin prévue")}</TableHead>
                     <TableHead>{t("Sortie")}</TableHead>
-                    <TableHead>{t("HS")}</TableHead>
+                    <TableHead>{t("HS (auto + manuel)")}</TableHead>
                     <TableHead>{t("Observation")}</TableHead>
                     <TableHead>{t("Saisi le")}</TableHead>
                   </TableRow>
@@ -104,7 +106,7 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                 <TableBody>
                   {report.attendance.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
                         {t("Aucun pointage sur la période.")}
                       </TableCell>
                     </TableRow>
@@ -123,8 +125,17 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                       </TableCell>
                       <TableCell>{t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus])}</TableCell>
                       <TableCell>{a.time_in?.slice(0, 5)}</TableCell>
+                      <TableCell className="text-muted-foreground">{(() => {
+                  const x = a.time_in && ["present", "repos_travaille"].includes(a.status) ? expectedEnd(a.time_in) : null;
+                  return x ? `${x.time}${x.nextDay ? " +1" : ""}` : "";
+                })()}</TableCell>
                       <TableCell>{a.time_out?.slice(0, 5)}</TableCell>
-                      <TableCell>{Number(a.overtime_hours) || ""}</TableCell>
+                      <TableCell className="whitespace-nowrap">{(() => {
+                  const auto = Number(a.overtime_auto) || 0;
+                  const manual = Number(a.overtime_manual) || 0;
+                  if (!auto && !manual) return "";
+                  return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)} + ${fmtHours(manual)})` : fmtHours(auto + manual);
+                })()}</TableCell>
                       <TableCell className="max-w-48 truncate">{a.observation}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTimeFr(a.updated_at)}</TableCell>
                     </TableRow>

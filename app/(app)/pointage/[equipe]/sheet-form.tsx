@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { autoOvertime, fmtHours } from "@/lib/overtime";
+import { autoOvertime, expectedEnd, fmtHours } from "@/lib/overtime";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, Lock, Plus, Save, Trash2, UserPlus } from "lucide-react";
@@ -40,8 +40,6 @@ type Props = {
   isHoliday?: boolean;
   /** Employés déjà pointés ce jour dans l'autre équipe */
   elsewhere?: ElsewhereRow[];
-  /** Heure de fin normale de l'entreprise (« HH:MM ») : heures sup. automatiques ; vide = désactivé */
-  normalEnd?: string;
 };
 
 /** Fonctions du jour rattachées à une équipe de camion (chauffeur). */
@@ -64,7 +62,7 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [], normalEnd = "" }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [] }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -271,7 +269,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
               <th className="px-2 py-2 text-start">{t("H. sortie")}</th>
               <th className="px-2 py-2 text-start" title={t("Heures supplémentaires : automatiques (après l'heure de fin normale) + manuelles (accordées par le responsable)")}>
                 {t("HS")}
-                <span className="block text-[10px] font-normal text-muted-foreground">{normalEnd ? t("auto + manuel") : t("manuel")}</span>
+                <span className="block text-[10px] font-normal text-muted-foreground">{t("auto + manuel")}</span>
               </th>
               <th className="px-2 py-2 text-start">{t("Observation")}</th>
               <th className="px-2 py-2 text-start">{t("Saisie")}</th>
@@ -295,7 +293,6 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
                 onAssignSubstitute={assignSubstitute}
                 canAuthorize={canAuthorize}
                 isHoliday={isHoliday}
-                normalEnd={normalEnd}
                 onAuthorize={(i) => setOverrideFor(i)}
                 onRevoke={(i) => {
                   const ov = rows[i].leave_override;
@@ -387,7 +384,6 @@ function GroupRows({
   onAssignSubstitute,
   canAuthorize,
   isHoliday,
-  normalEnd,
   onAuthorize,
   onRevoke,
   trucks,
@@ -407,7 +403,6 @@ function GroupRows({
   onAssignSubstitute: (i: number) => void;
   canAuthorize: boolean;
   isHoliday: boolean;
-  normalEnd: string;
   onAuthorize: (i: number) => void;
   onRevoke: (i: number) => void;
   trucks: { id: string; matricule: string; brand: string }[];
@@ -583,13 +578,19 @@ function GroupRows({
             </td>
             <td className="px-2 py-1">
               <Input type="time" value={r.time_in} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
+              {isWorked(r.status) && expectedEnd(r.time_in) && (
+                <div className="mt-0.5 text-[10px] text-muted-foreground not-italic" title={t("Journée standard de 8 h à partir de l'heure d'entrée")}>
+                  {t("fin prévue {time}", { time: expectedEnd(r.time_in)!.time })}
+                  {expectedEnd(r.time_in)!.nextDay ? ` ${t("(lendemain)")}` : ""}
+                </div>
+              )}
             </td>
             <td className="px-2 py-1">
               <Input type="time" value={r.time_out} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
             </td>
             <td className="px-2 py-1">
               {(() => {
-                const auto = autoOvertime(r.time_out, normalEnd, r.status, r.shift);
+                const auto = autoOvertime(r.time_in, r.time_out, r.status);
                 const manual = Number(r.overtime_manual) || 0;
                 return (
                   <div className="space-y-0.5">
@@ -605,7 +606,7 @@ function GroupRows({
                       onChange={(e) => onUpdate(i, { overtime_manual: Number(e.target.value) })}
                       className="w-20"
                     />
-                    {normalEnd && isWorked(r.status) && (auto > 0 || manual > 0) && (
+                    {isWorked(r.status) && (auto > 0 || manual > 0) && (
                       <div className="text-[10px] leading-tight text-muted-foreground not-italic">
                         {t("Auto {auto} + manuel {manual}", { auto: fmtHours(auto), manual: fmtHours(manual) })}
                         <span className="block font-semibold text-foreground">{t("Total {total} h", { total: fmtHours(auto + manual) })}</span>

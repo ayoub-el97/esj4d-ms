@@ -77,7 +77,6 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         canAuthorize={user.permissions.conges.can_edit && user.permissions.pointage.can_edit}
         isHoliday={!!sheet.holidayLabel}
         elsewhere={sheet.elsewhere}
-        normalEnd={/^\d{1,2}:\d{2}$/.test(settings.normal_end_time) ? settings.normal_end_time : ""}
       />
 
       <ModuleButtons

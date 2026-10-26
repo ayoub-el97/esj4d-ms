@@ -1856,4 +1856,13 @@ export const ar: Messages = {
   "Heures manuelles du jour": "الساعات اليدوية لليوم",
   "Auto": "تلقائي",
   "Manuel": "يدوي",
+  "(lendemain)": "(اليوم الموالي)",
+  "Fin prévue": "النهاية المتوقعة",
+  "HS (auto + manuel)": "س.إ (تلقائي + يدوي)",
+  "Heures supplémentaires : journée standard de 8 h à partir de l'heure d'entrée de chaque employé. Au-delà de la fin prévue (entrée + 8 h, même après minuit), le dépassement est arrondi à l'heure supérieure (30 min → 1 h ; 1 h 15 → 2 h). Les heures saisies à la main dans le Pointage sont toujours ajoutées.": "الساعات الإضافية: يوم عمل عادي من 8 ساعات ابتداءً من وقت دخول كل موظف. بعد النهاية المتوقعة (الدخول + 8 س، حتى بعد منتصف الليل)، يُقرّب التجاوز إلى الساعة الأعلى (30 د ← 1 س؛ 1 س 15 ← 2 س). الساعات المدخلة يدويًا في الحضور تُضاف دائمًا.",
+  "Journée standard de 8 h à partir de l'heure d'entrée": "يوم عمل عادي من 8 ساعات ابتداءً من وقت الدخول",
+  "Total = automatiques + manuelles": "المجموع = التلقائية + اليدوية",
+  "Total = heures automatiques (dépassement de l'heure d'entrée + 8 h, arrondi à l'heure supérieure) + heures manuelles accordées dans le Pointage, toujours additionnées.": "المجموع = الساعات التلقائية (التجاوز بعد الدخول + 8 س، مقرّب إلى الساعة الأعلى) + الساعات اليدوية الممنوحة في الحضور، تُجمع دائمًا.",
+  "Total = heures automatiques + heures manuelles, toujours additionnées. Automatiques : dépassement de la fin prévue (heure d'entrée + 8 h, y compris après minuit), arrondi à l'heure supérieure. Manuelles : heures accordées par le responsable dans la colonne « HS » du Pointage, ajoutées en totalité. Même total que la synthèse mensuelle.": "المجموع = الساعات التلقائية + الساعات اليدوية، تُجمع دائمًا. التلقائية: تجاوز النهاية المتوقعة (وقت الدخول + 8 س، بما في ذلك بعد منتصف الليل)، مقرّب إلى الساعة الأعلى. اليدوية: ساعات يمنحها المسؤول في عمود « HS » بالحضور، تُضاف كاملة. نفس مجموع الملخص الشهري.",
+  "fin prévue {time}": "النهاية المتوقعة {time}",
 };

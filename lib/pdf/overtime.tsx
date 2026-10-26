@@ -153,7 +153,7 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
             ))}
           </View>
         )}
-        <Text style={{ fontSize: 7.5, color: "#555", marginTop: 6 }}>{t("Total = heures automatiques (demi-heures entamées après l'heure de fin normale) + heures manuelles accordées dans le Pointage, toujours additionnées.")}</Text>
+        <Text style={{ fontSize: 7.5, color: "#555", marginTop: 6 }}>{t("Total = heures automatiques (dépassement de l'heure d'entrée + 8 h, arrondi à l'heure supérieure) + heures manuelles accordées dans le Pointage, toujours additionnées.")}</Text>
         <View style={s.footer} fixed>
           <Text>{t("{company} — généré le {date} par {user}", { company, date: new Date().toLocaleString(locale === "en" ? "en-GB" : "fr-FR"), user: generatedBy })}</Text>
           <Text render={({ pageNumber, totalPages }) => t("Page {n} / {total}", { n: pageNumber, total: totalPages ?? pageNumber })} />
