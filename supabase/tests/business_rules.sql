@@ -794,4 +794,42 @@ begin
   raise notice 'OK 23 heures sup. : entrée + 8 h, arrondi à l''heure supérieure, après minuit, manuel toujours ajouté';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- 24. Départ anticipé pour maladie : Absent maladie, 0 h standard, heures en HS manuelles
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  e uuid := (select id from public.employees where matricule = 'B002');
+  r public.attendance;
+  s record;
+begin
+  -- 06:00, 4 h de travail puis départ malade
+  insert into public.attendance (activity_date, employee_id, shift, status, sick_departure, time_in, time_out, overtime_manual, observation, position, team_type)
+  values ('2026-11-24', e, 1, 'absent_maladie', true, '06:00', '10:00', 4, 'Fièvre, renvoyé chez lui', 'balayeur', 'nettoiement') returning * into r;
+  assert r.time_in = '06:00' and r.time_out = '10:00' and r.overtime_manual = 4 and r.overtime_auto = 0 and r.overtime_hours = 4 and r.observation = 'Fièvre, renvoyé chez lui',
+    format('départ maladie : entrée %s, départ %s, manuel %s, auto %s', r.time_in, r.time_out, r.overtime_manual, r.overtime_auto);
+  -- 16:00, 2 h
+  insert into public.attendance (activity_date, employee_id, shift, status, sick_departure, time_in, time_out, overtime_manual, position, team_type)
+  values ('2026-11-25', e, 1, 'absent_maladie', true, '16:00', '18:00', 2, 'balayeur', 'nettoiement') returning * into r;
+  assert r.overtime_hours = 2 and r.overtime_auto = 0, '16:00 → 18:00 malade : 2 h manuelles';
+  -- Journée normale finie tôt : 8 h standard, 0 automatique
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, position, team_type)
+  values ('2026-11-26', e, 1, 'present', '06:00', '13:00', 'balayeur', 'nettoiement') returning * into r;
+  assert r.overtime_hours = 0, 'présent 06:00 → 13:00 : aucune heure sup., journée normale';
+  -- Absent maladie sans l'option : heures effacées (règle inchangée)
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, overtime_manual, position, team_type)
+  values ('2026-11-27', e, 1, 'absent_maladie', '06:00', '09:00', 3, 'balayeur', 'nettoiement') returning * into r;
+  assert r.time_in is null and r.overtime_hours = 0 and not r.sick_departure, 'absent maladie sans départ anticipé : aucune heure';
+  -- L'option est retirée si le statut change
+  update public.attendance set status = 'present' where employee_id = e and activity_date = '2026-11-24' returning * into r;
+  assert not r.sick_departure, 'statut modifié : option départ anticipé retirée';
+  update public.attendance set status = 'absent_maladie', sick_departure = true, time_in = '06:00', time_out = '10:00', overtime_manual = 4 where id = r.id;
+
+  -- Synthèse : jours de maladie, pas de jour travaillé, heures comptées une fois (en HS)
+  select * into s from public.attendance_summary('2026-11-24', '2026-11-27') where employee_id = e;
+  assert s.worked_days = 1 and s.sick_days = 3 and s.overtime_total = 6, format('synthèse : travaillés %s (attendu 1), maladie %s (attendu 3), HS %s (attendu 6)', s.worked_days, s.sick_days, s.overtime_total);
+  delete from public.attendance where employee_id = e and activity_date between '2026-11-24' and '2026-11-27';
+  raise notice 'OK 24 départ anticipé pour maladie : Absent maladie, 0 h standard, heures en HS manuelles';
+end $$;
+
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='

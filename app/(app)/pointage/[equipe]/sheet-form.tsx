@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { cleaningGroups, displayNumbers } from "@/lib/sheet-order";
-import { autoOvertime, expectedEnd, fmtHours } from "@/lib/overtime";
+import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, Lock, Plus, Save, Trash2, UserPlus } from "lucide-react";
@@ -62,6 +62,8 @@ const STATUS_COLORS: Record<AttendanceStatus, string> = {
 
 /** Heures et HS saisissables seulement pour un jour travaillé */
 const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
+/** Départ anticipé pour maladie (choisi explicitement) : heures saisies conservées, comptées en HS manuelles */
+const sickDeparture = (r: SheetRow) => r.status === "absent_maladie" && !!r.sick_departure;
 
 export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [] }: Props) {
   const { t } = useT();
@@ -471,6 +473,7 @@ function GroupRows({
                     onUpdate(i, { position: p, ...(p === "chauffeur" ? { chauffeur_id: null } : {}), ...(p !== "chauffeur" && p !== "chauffeur_remplacant" ? { truck_id: null } : {}) });
                   }}
                 >
+                  {!POSITIONS.includes(r.position) && <option value={r.position}>{t("{position} (poste retiré)", { position: t(POSITION_LABELS[r.position] ?? r.position) })}</option>}
                   {POSITIONS.map((p) => (
                     <option key={p} value={p}>
                       {t(POSITION_LABELS[p])}
@@ -547,7 +550,7 @@ function GroupRows({
                     toast.warning(t(LEAVE_WARNING), { duration: 9000 });
                     return;
                   }
-                  onUpdate(i, { status: next });
+                  onUpdate(i, { status: next, ...(next !== "absent_maladie" ? { sick_departure: false } : {}) });
                 }}
                 className={cn("min-w-32", r.leave_lock && !r.leave_override && "border-emerald-400 font-medium")}
               >
@@ -571,6 +574,29 @@ function GroupRows({
                 <button type="button" className="mt-0.5 block text-start text-[11px] text-indigo-700 underline-offset-2 hover:underline" onClick={() => onAssignSubstitute(i)}>
                   {t("Faire remplacer par {name}", { name: substitute.name })}
                 </button>
+              )}
+              {r.status === "absent_maladie" && (
+                <div className="mt-1 space-y-1 rounded-md border border-rose-200 bg-rose-50/70 p-1.5 text-[11px] not-italic dark:border-rose-900 dark:bg-rose-950/30">
+                  <label className="flex items-start gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-3.5"
+                      checked={!!r.sick_departure}
+                      disabled={!canEdit}
+                      onChange={(e) => onUpdate(i, e.target.checked ? { sick_departure: true } : { sick_departure: false, time_in: "", time_out: "", overtime_manual: 0 })}
+                    />
+                    <span>
+                      <span className="font-medium">{t("Départ anticipé pour maladie")}</span>
+                      <span className="block text-muted-foreground">{t("A commencé le travail puis est parti malade : 0 h normales ; saisissez l'entrée, le départ et les heures réellement travaillées (colonne HS).")}</span>
+                    </span>
+                  </label>
+                  {r.sick_departure && (
+                    <label className="block">
+                      <span className="font-medium">{t("Commentaire")}</span>
+                      <Input value={r.observation} disabled={!canEdit} onChange={(e) => onUpdate(i, { observation: e.target.value })} className="mt-0.5 h-7 text-xs" placeholder={t("Motif, détails…")} />
+                    </label>
+                  )}
+                </div>
               )}
               {r.leave_lock && !r.leave_override && (
                 <div className="mt-0.5 space-y-0.5 text-[11px]">
@@ -603,7 +629,7 @@ function GroupRows({
               )}
             </td>
             <td className="px-2 py-1">
-              <Input type="time" value={r.time_in} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
+              <Input type="time" value={r.time_in} disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
               {isWorked(r.status) && expectedEnd(r.time_in) && (
                 <div className="mt-0.5 text-[10px] text-muted-foreground not-italic" title={t("Journée standard de 8 h à partir de l'heure d'entrée")}>
                   {t("fin prévue {time}", { time: expectedEnd(r.time_in)!.time })}
@@ -612,7 +638,8 @@ function GroupRows({
               )}
             </td>
             <td className="px-2 py-1">
-              <Input type="time" value={r.time_out} disabled={!canEdit || !isWorked(r.status)} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
+              <Input type="time" value={r.time_out} disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
+              {sickDeparture(r) && <div className="mt-0.5 text-[10px] text-muted-foreground not-italic">{t("heure de départ")}</div>}
             </td>
             <td className="px-2 py-1">
               {(() => {
@@ -628,10 +655,17 @@ function GroupRows({
                       value={r.overtime_manual}
                       aria-label={t("Heures supplémentaires manuelles")}
                       title={t("Heures supplémentaires manuelles (ajoutées aux heures automatiques)")}
-                      disabled={!canEdit || !isWorked(r.status)}
+                      disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))}
                       onChange={(e) => onUpdate(i, { overtime_manual: Number(e.target.value) })}
                       className="w-20"
                     />
+                    {sickDeparture(r) ? (
+                      <div className="text-[10px] leading-tight text-rose-800 not-italic dark:text-rose-300">
+                        {t("0 h normales · {h} h travaillées (HS manuelles)", { h: fmtHours(manual) })}
+                      </div>
+                    ) : isWorked(r.status) && (
+                      <div className="text-[10px] leading-tight text-muted-foreground not-italic">{t("{h} h normales", { h: standardHours(r.status) })}</div>
+                    )}
                     {isWorked(r.status) && (auto > 0 || manual > 0) && (
                       <div className="text-[10px] leading-tight text-muted-foreground not-italic">
                         {t("Auto {auto} + manuel {manual}", { auto: fmtHours(auto), manual: fmtHours(manual) })}

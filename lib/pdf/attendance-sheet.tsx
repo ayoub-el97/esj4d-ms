@@ -49,16 +49,16 @@ export function AttendanceSheetPdf({
     poste: r.usual_position && r.usual_position !== r.position ? `${t(POSITION_LABELS[r.position])} (${t("hab.")} ${t(POSITION_LABELS[r.usual_position])})` : t(POSITION_LABELS[r.position]),
     nom: r.name + (r.shift > 1 ? ` (${t("service {n}", { n: r.shift })})` : "") + (r.replacing_employee_id ? ` (${t("remplaçant")})` : r.is_extra ? ` (${t("renfort")})` : ""),
     repos: r.rest_day == null ? "" : t(WEEKDAY_SHORT[r.rest_day]),
-    entree: WORKED_STATUSES.includes(r.status) ? r.time_in : "",
-    sortie: WORKED_STATUSES.includes(r.status) ? r.time_out : "",
+    entree: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_in : "",
+    sortie: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_out : "",
     hs: (() => {
-      if (!WORKED_STATUSES.includes(r.status)) return "";
+      if (!WORKED_STATUSES.includes(r.status) && !r.sick_departure) return "";
       const auto = Number(r.overtime_auto) || 0;
       const manual = Number(r.overtime_manual) || 0;
       if (!auto && !manual) return "";
       return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)}+${fmtHours(manual)})` : fmtHours(auto + manual);
     })(),
-    statut: t(ATTENDANCE_STATUS_LABELS[r.status]),
+    statut: t(ATTENDANCE_STATUS_LABELS[r.status]) + (r.sick_departure ? ` (${t("départ anticipé")})` : ""),
     obs: r.observation,
   });
 

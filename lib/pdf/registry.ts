@@ -16,7 +16,7 @@ import { getWorkerReport, getWorkersPeriodReport } from "@/lib/data/worker";
 import { formatDateFr, isISODate, isMonth, formatWorkMonth } from "@/lib/dates";
 import { makeT, type TFunction } from "@/lib/i18n/config";
 import { getLocale, getMessages, pdfLocale } from "@/lib/i18n/server";
-import { TEAM_LABELS, TEAM_SLUGS, type AppModule } from "@/lib/types";
+import { TEAM_LABELS, TEAM_SLUGS, type AppModule, ALL_POSITIONS } from "@/lib/types";
 import { runWithPdfContext, type PdfContextValue } from "./context";
 import { embedPhotos } from "./embed-photos";
 import { AttendanceSheetPdf, MonthlyAttendancePdf } from "./attendance-sheet";
@@ -35,7 +35,7 @@ import { getLiveGrid, getOvertimeGrid, getPeriodSnapshots, getPeriodStartDay } f
 import { OvertimePdf } from "./overtime";
 import { filterGrid } from "@/lib/attendance-grid";
 import { AttendanceGridPdf } from "./attendance-grid";
-import { POSITIONS, POSITION_LABELS, type Position } from "@/lib/types";
+import { POSITION_LABELS, type Position } from "@/lib/types";
 import { formatDateTimeFr, formatMonthFr, todayISO } from "@/lib/dates";
 
 export type BuiltPdf = {
@@ -100,7 +100,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const latest = snapshots[0] ?? null;
       const selected = params.version === "actuel" ? null : params.version ? (snapshots.find((s) => String(s.revision) === params.version) ?? latest) : latest;
       const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
-      const position = POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
+      const position = ALL_POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
       const q = (params.q ?? "").slice(0, 60);
       const grid = filterGrid(selected ? selected.data : live, { team, position, q });
       const monthName = formatMonthFr(month, locale).replace(/^./, (c) => c.toUpperCase());
@@ -119,7 +119,7 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const month = params.mois;
       if (!isMonth(month)) return null;
       const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
-      const position = POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
+      const position = ALL_POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
       const q = (params.q ?? "").slice(0, 60);
       const grid = await getOvertimeGrid(month, { team, position, q });
       const monthName = formatMonthFr(month, locale).replace(/^./, (c) => c.toUpperCase());

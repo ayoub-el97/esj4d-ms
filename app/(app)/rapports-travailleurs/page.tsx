@@ -6,7 +6,7 @@ import { getWorkersPeriodReport } from "@/lib/data/worker";
 import { formatDateFr, isISODate, isMonth, todayISO, workMonthOf, workMonthRange } from "@/lib/dates";
 import { getProjectStart } from "@/lib/data/settings";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { POSITIONS, POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
+import { POSITION_LABELS, TEAM_LABELS, ALL_POSITIONS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
@@ -73,7 +73,7 @@ export default async function RapportsTravailleursPage({ searchParams }: { searc
           <Label htmlFor="poste">{t("Poste")}</Label>
           <NativeSelect id="poste" name="poste" defaultValue={sp.poste ?? ""}>
             <option value="">{t("Tous")}</option>
-            {POSITIONS.map((p) => (
+            {ALL_POSITIONS.map((p) => (
               <option key={p} value={p}>
                 {t(POSITION_LABELS[p])}
               </option>

@@ -6,7 +6,7 @@ import { getAttendanceHistory } from "@/lib/data/attendance";
 import { getEmployees, employeeName } from "@/lib/data/employees";
 import { formatDateFr, formatDateTimeFr } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITIONS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus, type Position, type TeamType } from "@/lib/types";
+import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, type AttendanceStatus, type Position, type TeamType, ALL_POSITIONS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
           <Label htmlFor="position">{t("Poste")}</Label>
           <NativeSelect id="position" name="position" defaultValue={sp.position ?? ""}>
             <option value="">{t("Tous")}</option>
-            {POSITIONS.map((p) => (
+            {ALL_POSITIONS.map((p) => (
               <option key={p} value={p}>
                 {t(POSITION_LABELS[p])}
               </option>
@@ -134,7 +134,10 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
                   )}
                 </TableCell>
                 <TableCell>{t(POSITION_LABELS[r.position as Position])}</TableCell>
-                <TableCell>{t(ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus])}</TableCell>
+                <TableCell>
+                  {t(ATTENDANCE_STATUS_LABELS[r.status as AttendanceStatus])}
+                  {r.sick_departure && <span className="block text-xs text-rose-700 dark:text-rose-400">{t("départ anticipé : heures en HS manuelles")}</span>}
+                </TableCell>
                 <TableCell>{r.time_in?.slice(0, 5) ?? ""}</TableCell>
                 <TableCell className="text-muted-foreground">{(() => {
                   const x = r.time_in && ["present", "repos_travaille"].includes(r.status) ? expectedEnd(r.time_in) : null;

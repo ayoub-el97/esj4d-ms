@@ -6,7 +6,7 @@ import { getSettings, logoUrl } from "@/lib/data/settings";
 import { attendancePeriod, diffGrids, filterGrid, periodMonthOf, shiftMonth, CODE_DEF } from "@/lib/attendance-grid";
 import { formatDateFr, formatDateTimeFr, formatMonthFr, isMonth, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
-import { ATTENDANCE_STATUS_LABELS, POSITIONS, POSITION_LABELS, TEAM_SLUGS, type AttendanceStatus, type Position } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_SLUGS, type AttendanceStatus, type Position, ALL_POSITIONS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { PdfExportButton } from "@/components/pdf-export-button";
@@ -30,7 +30,7 @@ export default async function MonthlyGridPage({ searchParams }: { searchParams: 
   const today = todayISO();
   const month = isMonth(sp.mois) ? sp.mois : periodMonthOf(today, startDay);
   const team = sp.equipe ? TEAM_SLUGS[sp.equipe] : undefined;
-  const position = POSITIONS.includes(sp.poste as Position) ? (sp.poste as Position) : undefined;
+  const position = ALL_POSITIONS.includes(sp.poste as Position) ? (sp.poste as Position) : undefined;
   const q = (sp.q ?? "").slice(0, 60);
 
   const [live, snapshots, finalized, settings] = await Promise.all([getLiveGrid(month, startDay), getPeriodSnapshots(month), getFinalizedPeriods(), getSettings()]);
@@ -87,7 +87,7 @@ export default async function MonthlyGridPage({ searchParams }: { searchParams: 
           {t("Fonction")}
           <NativeSelect name="poste" defaultValue={position ?? ""}>
             <option value="">{t("Toutes les fonctions")}</option>
-            {POSITIONS.map((p) => (
+            {ALL_POSITIONS.map((p) => (
               <option key={p} value={p}>
                 {t(POSITION_LABELS[p])}
               </option>

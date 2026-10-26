@@ -8,7 +8,7 @@ import { MoreHorizontal, Pencil, Search, Trash2, UserCheck, UserX } from "lucide
 import { checkEmployeeDeletion, deactivateEmployee, deleteEmployee, reactivateEmployee, type EmployeeDependency } from "@/lib/actions/employees";
 import type { EmployeeRow } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
-import { POSITIONS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_LABELS } from "@/lib/types";
+import { POSITION_LABELS, TEAM_LABELS, WEEKDAY_LABELS, ALL_POSITIONS, RETIRED_POSITIONS } from "@/lib/types";
 import { formatDateFr, todayISO } from "@/lib/dates";
 import { buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -85,7 +85,7 @@ export function EmployeesTable({
         </NativeSelect>
         <NativeSelect className="w-auto" value={filters.poste ?? ""} onChange={(e) => setFilter("poste", e.target.value)}>
           <option value="">{t("Tous les postes")}</option>
-          {POSITIONS.map((p) => (
+          {ALL_POSITIONS.map((p) => (
             <option key={p} value={p}>
               {t(POSITION_LABELS[p])}
             </option>
@@ -132,7 +132,10 @@ export function EmployeesTable({
                     {e.last_name} {e.first_name}
                   </Link>
                 </TableCell>
-                <TableCell>{t(POSITION_LABELS[e.position])}</TableCell>
+                <TableCell>
+                  {t(POSITION_LABELS[e.position])}
+                  {RETIRED_POSITIONS.includes(e.position) && <span className="block text-xs text-amber-700 dark:text-amber-400">{t("poste retiré : à mettre à jour")}</span>}
+                </TableCell>
                 <TableCell>{t(TEAM_LABELS[e.team_type])}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {e.position === "chauffeur" && (e.truck_label ? t("Camion {matricule}", { matricule: e.truck_label }) : "—")}

@@ -8,7 +8,7 @@ import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { isDayClosed } from "@/lib/data/attendance";
 import type { SheetPayload } from "@/lib/attendance-types";
-import { ATTENDANCE_STATUSES, POSITIONS, type ActionResult, type Position } from "@/lib/types";
+import { ALL_POSITIONS, ATTENDANCE_STATUSES, type ActionResult, type Position } from "@/lib/types";
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 const optionalTime = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().regex(timeRe, "Heure invalide (HH:MM).").nullable());
@@ -22,11 +22,14 @@ const rowSchema = z.object({
   time_out: optionalTime,
   // Saisie manuelle uniquement : la part automatique et le total sont calculés par la base
   overtime_manual: z.coerce.number().min(0).max(24),
+  // Départ anticipé pour maladie : seulement avec le statut « Absent maladie »
+  sick_departure: z.boolean().optional().default(false),
   observation: z.string().max(500).default(""),
   replacing_employee_id: optionalUuid,
   chauffeur_id: optionalUuid,
   truck_id: optionalUuid,
-  position: z.enum(POSITIONS as [Position, ...Position[]]),
+  // Pointages passés : un ancien poste (ex. Agent de sécurité) reste enregistrable tel quel
+  position: z.enum(ALL_POSITIONS as [Position, ...Position[]]),
   team_type: z.enum(["collecte", "nettoiement"]),
 });
 
@@ -140,7 +143,7 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult & {
 
   if (rows.length) {
     const { error } = await supabase.from("attendance").upsert(
-      rows.map((r) => ({ ...r, activity_date, team_type })),
+      rows.map((r) => ({ ...r, sick_departure: r.status === "absent_maladie" && !!r.sick_departure, activity_date, team_type })),
       { onConflict: "activity_date,employee_id,shift" },
     );
     if (error) return { ok: false, error: leaveError(t, error.message) };

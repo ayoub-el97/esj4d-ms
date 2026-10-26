@@ -94,7 +94,9 @@ export type Position =
   | "mecanicien"
   | "gardien"
   | "directeur"
-  | "autre";
+  | "autre"
+  | "secretaire"
+  | "responsable";
 /** Ordre d'affichage des postes */
 export const POSITION_LABELS: Record<Position, string> = {
   balayeur: "Balayeur",
@@ -108,6 +110,8 @@ export const POSITION_LABELS: Record<Position, string> = {
   mecanicien: "Mécanicien",
   gardien: "Gardien",
   directeur: "Directeur",
+  secretaire: "Secrétaire",
+  responsable: "Responsable",
   autre: "Autre fonction",
 };
 /** Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre */
@@ -118,9 +122,16 @@ export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placeme
   { position: "mecanicien", title: "Mécanicien", placement: "after" },
   { position: "gardien", title: "Gardien", placement: "after" },
   { position: "directeur", title: "Direction", placement: "after" },
+  { position: "responsable", title: "Responsable", placement: "after" },
+  { position: "secretaire", title: "Secrétariat", placement: "after" },
   { position: "autre", title: "Autres fonctions", placement: "after" },
 ];
-export const POSITIONS = Object.keys(POSITION_LABELS) as Position[];
+/** Tous les postes, y compris ceux retirés (historique, filtres, pointages passés). */
+export const ALL_POSITIONS = Object.keys(POSITION_LABELS) as Position[];
+/** Postes retirés : plus proposés ni attribuables, conservés pour l'historique. */
+export const RETIRED_POSITIONS: Position[] = ["agent_securite"];
+/** Postes proposés à la sélection (fiches employés, saisie groupée, fonction du jour). */
+export const POSITIONS = ALL_POSITIONS.filter((p) => !RETIRED_POSITIONS.includes(p));
 /** Postes de conduite (titulaire ou remplaçant) : peuvent conduire un camion */
 export const DRIVER_POSITIONS: Position[] = ["chauffeur", "chauffeur_remplacant"];
 /** Remplaçant attendu pour un titulaire */

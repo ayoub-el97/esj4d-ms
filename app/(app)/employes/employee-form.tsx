@@ -69,6 +69,11 @@ export function EmployeeForm({
             <div className="space-y-1">
               <Label htmlFor="position">{t("Poste")}</Label>
               <NativeSelect id="position" name="position" value={position} onChange={(e) => setPosition(e.target.value as Position)}>
+                {!POSITIONS.includes(position) && (
+                  <option value={position}>
+                    {t("{position} (poste retiré — choisissez un autre poste)", { position: t(POSITION_LABELS[position] ?? position) })}
+                  </option>
+                )}
                 {POSITIONS.map((p) => (
                   <option key={p} value={p}>
                     {t(POSITION_LABELS[p])}

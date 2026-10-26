@@ -123,7 +123,10 @@ export default async function WorkerFilePage({ params, searchParams }: { params:
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>{t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus])}</TableCell>
+                      <TableCell>
+                        {t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus])}
+                        {a.sick_departure && <span className="block text-xs text-rose-700 dark:text-rose-400">{t("départ anticipé : heures en HS manuelles")}</span>}
+                      </TableCell>
                       <TableCell>{a.time_in?.slice(0, 5)}</TableCell>
                       <TableCell className="text-muted-foreground">{(() => {
                   const x = a.time_in && ["present", "repos_travaille"].includes(a.status) ? expectedEnd(a.time_in) : null;

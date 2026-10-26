@@ -22,7 +22,7 @@ const employeeSchema = z
     }, z.string().max(40, "Matricule trop long (40 caractères maximum).").nullable()),
     last_name: z.string().trim().min(1, "Nom requis."),
     first_name: z.string().trim().min(1, "Prénom requis."),
-    position: z.enum(POSITIONS as [Position, ...Position[]]),
+    position: z.enum(POSITIONS as [Position, ...Position[]], { message: "Poste retiré ou invalide : choisissez un autre poste (« Agent de sécurité » n'est plus proposé)." }),
     rest_day: restDaySchema,
     truck_id: optionalUuid,
     chauffeur_id: optionalUuid,

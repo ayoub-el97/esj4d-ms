@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Search } from "lucide-react";
 import { setRestDay, setSubstitute } from "@/lib/actions/employees";
 import { useT } from "@/lib/i18n/client";
-import { POSITIONS, POSITION_LABELS, SUBSTITUTE_POSITION, TEAM_LABELS, WEEKDAY_LABELS, type Position, type TeamType } from "@/lib/types";
+import { POSITION_LABELS, SUBSTITUTE_POSITION, TEAM_LABELS, WEEKDAY_LABELS, type Position, type TeamType, ALL_POSITIONS } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -91,7 +91,7 @@ export function RestDaysTable({ rows: initial, substitutes, canEdit }: { rows: R
         </NativeSelect>
         <NativeSelect className="w-auto" value={poste} onChange={(e) => setPoste(e.target.value)} aria-label={t("Poste")}>
           <option value="">{t("Tous les postes")}</option>
-          {POSITIONS.map((p) => (
+          {ALL_POSITIONS.map((p) => (
             <option key={p} value={p}>
               {t(POSITION_LABELS[p])}
             </option>

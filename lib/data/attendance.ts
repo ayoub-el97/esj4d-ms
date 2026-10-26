@@ -51,6 +51,7 @@ export type AttendanceRecord = {
   overtime_hours: number;
   overtime_manual: number;
   overtime_auto: number;
+  sick_departure: boolean;
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;
@@ -113,6 +114,7 @@ export async function buildSheet(date: string, team: TeamType) {
       time_out: (a.time_out ?? "").slice(0, 5),
       overtime_manual: Number(a.overtime_manual),
       overtime_auto: Number(a.overtime_auto),
+      sick_departure: !!a.sick_departure,
       observation: a.observation,
       replacing_employee_id: a.replacing_employee_id,
       chauffeur_id: a.chauffeur_id,

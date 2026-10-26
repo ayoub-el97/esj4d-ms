@@ -12,6 +12,8 @@ export type SheetRow = {
   overtime_manual: number;
   /** Heures sup. automatiques (calculées par la base depuis l'heure de sortie) */
   overtime_auto: number;
+  /** Départ anticipé pour maladie (statut « Absent maladie ») : 0 h standard, heures travaillées en HS manuelles */
+  sick_departure?: boolean;
   observation: string;
   replacing_employee_id: string | null;
   chauffeur_id: string | null;

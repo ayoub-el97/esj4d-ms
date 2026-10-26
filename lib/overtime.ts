@@ -32,5 +32,11 @@ export function autoOvertime(timeIn: string | null | undefined, timeOut: string 
   return over > 0 ? Math.min(24, Math.ceil(over / 60)) : 0;
 }
 
+/** Heures standard du jour : 8 pour un jour travaillé (même en partant avant la fin prévue), 0 sinon
+ *  (notamment « Absent maladie » avec départ anticipé : les heures travaillées sont des heures sup. manuelles). */
+export function standardHours(status: string): number {
+  return WORKED.includes(status) ? STANDARD_HOURS : 0;
+}
+
 /** « 1,5 » / « 2 » (heures) */
 export const fmtHours = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, "").replace(".", ","));

@@ -110,7 +110,7 @@ export function WorkerReportPdf({ company, report, generatedBy }: { company: str
           columns={attCols}
           rows={report.attendance.map((a) => ({
             date: formatDateFr(a.activity_date) + (a.shift > 1 ? ` (s${a.shift})` : ""),
-            st: t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus]),
+            st: t(ATTENDANCE_STATUS_LABELS[a.status as AttendanceStatus]) + (a.sick_departure ? ` (${t("départ anticipé")})` : ""),
             in: a.time_in?.slice(0, 5) ?? "",
             fin: (() => {
               const x = a.time_in && ["present", "repos_travaille"].includes(a.status) ? expectedEnd(a.time_in) : null;

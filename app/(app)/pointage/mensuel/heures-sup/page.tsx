@@ -5,7 +5,7 @@ import { getOvertimeGrid, getPeriodStartDay } from "@/lib/data/attendance-grid";
 import { periodMonthOf, shiftMonth, WEEKDAY_INITIALS, weekdayOf } from "@/lib/attendance-grid";
 import { formatDateFr, formatMonthFr, isMonth, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
-import { POSITIONS, POSITION_LABELS, TEAM_SLUGS, type Position } from "@/lib/types";
+import { POSITION_LABELS, TEAM_SLUGS, type Position, ALL_POSITIONS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
@@ -25,7 +25,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   const startDay = await getPeriodStartDay();
   const month = isMonth(sp.mois) ? sp.mois : periodMonthOf(todayISO(), startDay);
   const team = sp.equipe ? TEAM_SLUGS[sp.equipe] : undefined;
-  const position = POSITIONS.includes(sp.poste as Position) ? (sp.poste as Position) : undefined;
+  const position = ALL_POSITIONS.includes(sp.poste as Position) ? (sp.poste as Position) : undefined;
   const q = (sp.q ?? "").slice(0, 60);
   const grid = await getOvertimeGrid(month, { team, position, q }, startDay);
   const monthName = formatMonthFr(month, locale).replace(/^./, (c) => c.toUpperCase());
@@ -62,7 +62,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
           {t("Fonction")}
           <NativeSelect name="poste" defaultValue={position ?? ""}>
             <option value="">{t("Toutes les fonctions")}</option>
-            {POSITIONS.map((p) => (
+            {ALL_POSITIONS.map((p) => (
               <option key={p} value={p}>
                 {t(POSITION_LABELS[p])}
               </option>
