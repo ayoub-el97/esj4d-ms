@@ -573,51 +573,56 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 21. Achats de matériel : calculs, paiements échelonnés, annulation, journal
+-- 21. Achats (simplifiés, 034) : montant total saisi directement, annulation, journal
 -- ---------------------------------------------------------------------------
 do $$
-declare a uuid; b uuid; r record;
+declare a uuid; b uuid; o uuid;
 begin
-  -- 10 boîtes × 150 DH = 1 500 DH ; payé 1 000 DH le jour même ; reste 500 DH
-  insert into public.material_purchases (purchase_date, supplier_name, material_name, category, quantity, unit, unit_price)
-  values ('2026-10-05', 'Droguerie Atlas', 'Produits de nettoyage', 'produits_nettoyage', 10, 'boite', 150) returning id into a;
-  insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-10-05', 1000);
-  select * into r from public.material_purchases_calc where id = a;
-  assert r.total_amount = 1500 and r.amount_paid = 1000 and r.amount_due = 500 and r.payment_status = 'partiel', 'total 1500, payé 1000, reste 500, partiel';
-  -- Correction de la quantité : total recalculé, pas de doublon
-  update public.material_purchases set quantity = 12 where id = a;
-  assert (select total_amount from public.material_purchases where id = a) = 1800, 'quantité corrigée : 1800';
-  assert (select count(*) from public.material_purchases where supplier_name = 'Droguerie Atlas') = 1, 'pas de doublon';
-  -- Solde payé le mois suivant : la valeur reste en octobre, le paiement compte en novembre
-  insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-11-03', 800);
-  assert (select payment_status from public.material_purchases_calc where id = a) = 'paye', 'soldé';
-  assert (select sum(amount) from public.material_purchase_payments where payment_date between '2026-11-01' and '2026-11-30' and not cancelled) = 800, 'paiements de novembre séparés de la valeur d''octobre';
-  -- Trop-perçu refusé
+  -- Nouvel achat : date, description, catégorie, montant total saisi (pas de quantité ni de prix)
+  insert into public.material_purchases (purchase_date, description, category, total_amount)
+  values ('2026-10-05', '20 balais et 10 paires de gants', 'produits_nettoyage', 742.50) returning id into a;
+  assert (select total_amount from public.material_purchases where id = a) = 742.50, 'montant saisi conservé';
+  assert (select quantity is null and unit_price is null from public.material_purchases where id = a), 'quantité et prix facultatifs';
+  update public.material_purchases set description = '20 balais, 10 paires de gants' where id = a;
+  assert (select total_amount from public.material_purchases where id = a) = 742.50, 'aucun recalcul à la modification';
+  assert (select count(*) from public.material_purchases where description like '20 balais%') = 1, 'pas de doublon';
+  -- Achat saisi avant la simplification (quantité × prix, total enregistré) : montant historique intact
+  insert into public.material_purchases (purchase_date, supplier_name, material_name, category, quantity, unit, unit_price, total_amount)
+  values ('2026-10-06', 'Droguerie Atlas', 'Produits de nettoyage', 'produits_nettoyage', 10, 'boite', 150, 1500) returning id into o;
+  insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (o, '2026-10-06', 1000);
+  update public.material_purchases set purchase_date = '2026-10-07' where id = o;
+  assert (select total_amount from public.material_purchases where id = o) = 1500, 'montant historique conservé';
   begin
-    insert into public.material_purchase_payments (purchase_id, payment_date, amount) values (a, '2026-11-04', 1);
-    raise exception 'ÉCHEC : paiement au-delà du montant accepté';
+    update public.material_purchases set total_amount = 900 where id = o;
+    raise exception 'ÉCHEC : total inférieur aux paiements accepté';
   exception when others then
     if sqlerrm not like '%PAIEMENT_SUPERIEUR%' then raise; end if;
   end;
+  -- Nouvelle catégorie (texte libre)
+  insert into public.material_purchases (purchase_date, description, category, total_amount) values ('2026-10-08', 'Ramettes de papier', 'Fournitures de bureau', 120);
   -- Valeurs invalides refusées
   begin
-    insert into public.material_purchases (purchase_date, supplier_name, material_name, quantity, unit_price) values ('2026-10-06', 'X', 'Y', -2, 10);
-    raise exception 'ÉCHEC : quantité négative acceptée';
+    insert into public.material_purchases (purchase_date, description, category, total_amount) values ('2026-10-06', 'X', 'outillage', -5);
+    raise exception 'ÉCHEC : montant négatif accepté';
+  exception when others then
+    if sqlerrm not like '%MONTANT_INVALIDE%' then raise; end if;
+  end;
+  begin
+    insert into public.material_purchases (purchase_date, description, category, total_amount) values ('2026-10-06', '', 'outillage', 5);
+    raise exception 'ÉCHEC : achat sans description accepté';
   exception when check_violation then null;
   end;
-  -- Ajustement du total : administrateur avec motif
-  insert into public.material_purchases (purchase_date, supplier_name, material_name, category, quantity, unit, unit_price, total_amount, amount_adjusted, adjustment_reason)
-  values ('2026-10-07', 'Quincaillerie Nord', 'Pelles', 'outillage', 3, 'piece', 100, 280, true, 'Remise fournisseur') returning id into b;
-  assert (select total_amount from public.material_purchases where id = b) = 280, 'ajustement documenté conservé';
   -- Annulation (jamais supprimé) : exclue des totaux
+  insert into public.material_purchases (purchase_date, description, category, total_amount) values ('2026-10-09', 'Pelles', 'outillage', 280) returning id into b;
   update public.material_purchases set cancelled = true, cancel_reason = 'Commande en double' where id = b;
   assert (select payment_status from public.material_purchases_calc where id = b) = 'annule', 'achat annulé';
   delete from public.material_purchases where id = b;
   assert exists (select 1 from public.material_purchases where id = b), 'un achat ne doit pas être supprimé';
-  -- Journal : création + modifications (quantité) + paiements
-  assert (select count(*) from public.purchase_history(a)) >= 4, 'historique de l''achat et de ses paiements';
+  assert (select sum(total_amount) from public.material_purchases where purchase_date between '2026-10-01' and '2026-10-31' and not cancelled) = 2362.50, 'total = somme des montants saisis, annulé exclu';
+  -- Journal
+  assert (select count(*) from public.purchase_history(a)) >= 2, 'historique de l''achat';
   assert public.photo_can_view('material_purchase'), 'photos des achats visibles par l''administrateur';
-  raise notice 'OK 21 achats : total = quantité × prix, paiements échelonnés, reste dû, annulation, journal';
+  raise notice 'OK 21 achats : montant saisi directement, catégories libres, montants historiques conservés, annulation, journal';
 end $$;
 
 -- ---------------------------------------------------------------------------

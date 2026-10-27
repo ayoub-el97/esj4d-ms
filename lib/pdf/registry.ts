@@ -28,6 +28,8 @@ import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
 import { FleetPdf, RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
 import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
 import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchases";
+import { categoryLabel } from "@/lib/purchase-types";
+import { resolvePurchasePeriod } from "@/app/(app)/achats/period";
 import { getDowntimeReport, getFleetOverview, getRepair, getRepairExpenseReport, getRepairs } from "@/lib/data/repairs";
 import { applyFleetFilter, FLEET_FILTERS } from "@/lib/fleet-filters";
 import { workMonthRange } from "@/lib/dates";
@@ -210,24 +212,26 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       if (!params.id) return null;
       const purchase = await getPurchase(params.id);
       if (!purchase) return null;
-      return done("achats", `${t("Achat de matériel")} ${purchase.material_name}`, `achat-${purchase.purchase_date}-${purchase.id.slice(0, 8)}.pdf`, createElement(PurchasePdf, { ...common, purchase, payments: purchase.payments }));
+      return done("achats", `${t("Achat")} ${purchase.label}`, `achat-${purchase.purchase_date}-${purchase.id.slice(0, 8)}.pdf`, createElement(PurchasePdf, { ...common, purchase, payments: purchase.payments }));
     }
     case "achats-rapport": {
       if (!isISODate(params.from) || !isISODate(params.to)) return null;
-      const report = await getPurchaseReport(params.from, params.to);
-      const title = params.vue === "mois" ? t("Rapport mensuel des achats de matériel") : params.vue === "annee" ? t("Rapport annuel des achats de matériel") : t("Rapport des achats de matériel");
+      const report = await getPurchaseReport(params.from, params.to, params.category || undefined);
+      const title = params.vue === "mois" ? t("Rapport mensuel des achats") : params.vue === "annee" ? t("Rapport annuel des achats") : t("Rapport des achats");
       const sub =
-        params.vue === "mois" && isMonth(params.mois)
+        (params.vue === "mois" && isMonth(params.mois)
           ? formatWorkMonth(params.mois, projectStart, locale)
           : params.vue === "annee" && params.annee
             ? t("Année {year}", { year: params.annee })
-            : periodLabel(t, { from: params.from, to: params.to });
+            : periodLabel(t, { from: params.from, to: params.to })) + (params.category ? ` — ${categoryLabel(t, params.category)}` : "");
       return done("achats", `${title} ${sub}`, `achats-${params.from}-${params.to}.pdf`, createElement(PurchaseReportPdf, { ...common, title, subtitle: sub, report, withPhotos: params.photos === "1" }));
     }
     case "achats-liste": {
-      const range2 = { from: dateOrUndef(params.from), to: dateOrUndef(params.to) };
-      const purchases = await getPurchases({ q: params.q, category: params.category || undefined, supplier: params.supplier || undefined, status: params.status || undefined, from: range2.from, to: range2.to, min: params.min ? Number(params.min) : undefined, max: params.max ? Number(params.max) : undefined });
-      return done("achats", `${t("Historique des achats")} ${subtitle}`, `achats-liste-${slug}.pdf`, createElement(PurchaseListPdf, { ...common, subtitle, purchases }));
+      // Même période que la page (mois, année ou dates)
+      const range2 = resolvePurchasePeriod({ mois: params.mois, annee: params.annee, from: dateOrUndef(params.from), to: dateOrUndef(params.to) }, projectStart);
+      const purchases = await getPurchases({ q: params.q, category: params.category || undefined, from: range2.from, to: range2.to });
+      const sub2 = [range2.from || range2.to ? periodLabel(t, { from: range2.from, to: range2.to }) : subtitle, params.category ? categoryLabel(t, params.category) : ""].filter(Boolean).join(" — ");
+      return done("achats", `${t("Historique des achats")} ${sub2}`, `achats-liste-${range2.from ?? slug}.pdf`, createElement(PurchaseListPdf, { ...common, subtitle: sub2, purchases }));
     }
     case "camions-mensuel": {
       const month = params.mois;
