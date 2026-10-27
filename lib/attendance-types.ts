@@ -41,7 +41,12 @@ export type SheetRow = {
   leave_lock?: { request_id: string } | null;
   /** Modification autorisée (dérogation motivée) sur une date de congé approuvé */
   leave_override?: { id: string; reason: string; at: string } | null;
+  /** Affectation temporaire du jour dans une autre équipe que l'équipe permanente */
+  assignment?: DayAssignment | null;
 };
+
+/** Affectation temporaire d'un employé à une équipe pour une date (la fiche n'est pas modifiée). */
+export type DayAssignment = { team: TeamType; usual_team: TeamType; position: Position; chauffeur_id: string | null; source: "manuel" | "pointage" };
 
 export type SheetPayload = {
   activity_date: string;
@@ -53,7 +58,7 @@ export type SheetPayload = {
 };
 
 /** Employé déjà pointé ce jour dans une autre équipe (affiché sur la feuille). */
-export type ElsewhereRow = { employee_id: string; name: string; team_type: TeamType; position: Position; shift: number };
+export type ElsewhereRow = { employee_id: string; name: string; team_type: TeamType; position: Position; shift: number; /** affectation temporaire du jour */ assigned?: boolean };
 
 export type EmployeeOption = {
   id: string;

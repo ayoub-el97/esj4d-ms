@@ -5,8 +5,8 @@ import { cleaningGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Lock, Plus, Save, Trash2, UserPlus } from "lucide-react";
-import { authorizeLeaveOverride, revokeLeaveOverride, saveSheet } from "@/lib/actions/attendance";
+import { ArrowLeftRight, Copy, Lock, Plus, Save, Trash2, Undo2, UserPlus } from "lucide-react";
+import { assignEmployeeForDay, authorizeLeaveOverride, cancelDayAssignment, revokeLeaveOverride, saveSheet } from "@/lib/actions/attendance";
 import type { EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
@@ -74,6 +74,9 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState<{ chauffeurId: string | null } | null>(null);
   const [overrideFor, setOverrideFor] = useState<number | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  // Agents de cette équipe affectés ce jour à l'autre équipe (exclus de cette feuille)
+  const [assignedAway, setAssignedAway] = useState<ElsewhereRow[]>(() => elsewhere.filter((x) => x.assigned && x.shift === 1));
 
   const optionsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
   const dow = new Date(`${date}T12:00:00`).getDay();
@@ -83,8 +86,47 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
     setDirty(true);
   };
   const remove = (idx: number) => {
+    const r = rows[idx];
+    // Agent affecté temporairement à cette équipe : l'affectation est annulée, il retrouve sa feuille habituelle
+    if (r.assignment && r.shift === 1) {
+      if (!window.confirm(t("Annuler l'affectation de {name} pour le {date} ? Il retournera sur la feuille {team} (son pointage du jour est conservé).", { name: r.name, date: formatDateFr(date), team: t(TEAM_LABELS[r.assignment.usual_team]) }))) return;
+      start(async () => {
+        const res = await cancelDayAssignment(date, r.employee_id);
+        if (res.ok) {
+          setRows((prev) => prev.filter((x) => x.employee_id !== r.employee_id));
+          toast.success(res.message);
+          router.refresh();
+        } else toast.error(res.error);
+      });
+      return;
+    }
     setRows((prev) => prev.filter((_, i) => i !== idx));
     setDirty(true);
+  };
+  /** Affectation temporaire du jour (ex. agent du Nettoiement à la Collecte), enregistrée immédiatement. */
+  const assignForDay = (employeeId: string, chauffeurId: string | null, dayPosition: Position) =>
+    start(async () => {
+      const res = await assignEmployeeForDay({ date, employee_id: employeeId, team, position: dayPosition, chauffeur_id: chauffeurId });
+      if (!res.ok || !res.data) return void toast.error(res.ok ? t("Données invalides.") : res.error);
+      const added = res.data.rows;
+      setRows((prev) => [...prev.filter((x) => x.employee_id !== employeeId), ...added]);
+      if (added.some((x) => x.id === null)) setDirty(true);
+      setAssigning(false);
+      toast.success(`${res.message} ${added.some((x) => x.id === null) ? t("Complétez son pointage puis enregistrez la feuille.") : t("Son pointage déjà saisi a été déplacé sur cette feuille.")}`, { duration: 7000 });
+      router.refresh();
+    });
+  /** Depuis la feuille habituelle : fait revenir un agent affecté à l'autre équipe. */
+  const bringBack = (employeeId: string, name: string) => {
+    if (!window.confirm(t("Annuler l'affectation de {name} pour le {date} ? Il revient sur cette feuille (son pointage du jour est conservé).", { name, date: formatDateFr(date) }))) return;
+    start(async () => {
+      const res = await cancelDayAssignment(date, employeeId);
+      if (res.ok && res.data) {
+        setAssignedAway((prev) => prev.filter((x) => x.employee_id !== employeeId));
+        if (res.data.team === team) setRows((prev) => [...prev.filter((x) => x.employee_id !== employeeId), ...res.data!.rows].sort((a, b) => a.order_number - b.order_number || a.shift - b.shift));
+        toast.success(res.message);
+        router.refresh();
+      } else if (!res.ok) toast.error(res.error);
+    });
   };
   const addShift = (idx: number) => {
     const base = rows[idx];
@@ -273,6 +315,27 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         </div>
       </div>
 
+      {assignedAway.length > 0 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+          <p className="mb-2 font-medium">
+            <ArrowLeftRight className="me-1 inline size-4" />
+            {t("Affectés temporairement à l'équipe {team} ce jour (exclus de cette feuille) :", { team: t(TEAM_LABELS[team === "collecte" ? "nettoiement" : "collecte"]) })}
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {assignedAway.map((x) => (
+              <li key={x.employee_id} className="flex items-center gap-1 rounded-md border bg-card px-2 py-1 text-xs">
+                {x.name} — {t(POSITION_LABELS[x.position])}
+                {canEdit && (
+                  <Button variant="ghost" size="icon-xs" title={t("Annuler l'affectation (retour sur cette feuille)")} disabled={pending} onClick={() => bringBack(x.employee_id, x.name)}>
+                    <Undo2 />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Tableau */}
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full min-w-[900px] text-sm">
@@ -356,7 +419,12 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
           </span>
         </div>
         {canEdit && (
-          <div className="ms-auto flex gap-2">
+          <div className="ms-auto flex flex-wrap gap-2">
+            {team === "collecte" && (
+              <Button variant="outline" onClick={() => setAssigning(true)} disabled={pending}>
+                <ArrowLeftRight /> {t("Ajouter un agent de Nettoiement")}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setAdding({ chauffeurId: null })}>
               <UserPlus /> {team === "collecte" ? t("Ajouter un remplaçant / renfort") : t("Ajouter un agent")}
             </Button>
@@ -386,6 +454,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         />
       )}
 
+      {assigning && <AssignDialog date={date} options={options} rows={rows} elsewhere={elsewhere} pending={pending} onClose={() => setAssigning(false)} onAssign={assignForDay} />}
       {adding && <AddEmployeeDialog date={date} team={team} options={options} rows={rows} elsewhere={elsewhere} defaultChauffeurId={adding.chauffeurId} onClose={() => setAdding(null)} onAdd={addEmployee} />}
     </div>
   );
@@ -501,7 +570,12 @@ function GroupRows({
               {r.name}
               {r.shift > 1 && <span className="ms-1 rounded bg-indigo-100 px-1 text-[10px] text-indigo-800">{t("service {n}", { n: r.shift })}</span>}
               {replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("remplace {name}", { name: replacing.name })}</div>}
-              {r.is_extra && !replacing && <div className="text-[11px] font-normal text-muted-foreground">{t("ajouté pour la journée")}</div>}
+              {r.assignment && r.shift === 1 && (
+                <div className="mt-0.5 inline-block rounded bg-sky-100 px-1.5 text-[11px] font-medium not-italic text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                  {t("Affecté temporairement — {team} ce jour (habituellement {usual})", { team: t(TEAM_LABELS[r.assignment.team]), usual: t(TEAM_LABELS[r.assignment.usual_team]) })}
+                </div>
+              )}
+              {r.is_extra && !replacing && !r.assignment && <div className="text-[11px] font-normal text-muted-foreground">{t("ajouté pour la journée")}</div>}
               {canEdit && r.team_type === "collecte" && r.shift === 1 && (r.position === "chauffeur" || (r.position === "chauffeur_remplacant" && r.chauffeur_id)) && isWorked(r.status) && (
                 <label className="mt-1 flex items-center gap-1 text-[11px] font-normal not-italic text-muted-foreground">
                   {t("Camion du jour")}
@@ -690,8 +764,8 @@ function GroupRows({
                   </Button>
                 )}
                 {(r.is_extra || r.shift > 1) && !(r.leave_lock && !r.leave_override) && (
-                  <Button variant="ghost" size="icon-xs" title={t("Retirer de la feuille")} onClick={() => onRemove(i)}>
-                    <Trash2 />
+                  <Button variant="ghost" size="icon-xs" title={r.assignment && r.shift === 1 ? t("Annuler l'affectation du jour") : t("Retirer de la feuille")} onClick={() => onRemove(i)}>
+                    {r.assignment && r.shift === 1 ? <Undo2 /> : <Trash2 />}
                   </Button>
                 )}
               </td>
@@ -724,7 +798,7 @@ function AddEmployeeDialog({
 }) {
   const { t } = useT();
   const present = new Set(rows.map((r) => r.employee_id));
-  const candidates = options.filter((o) => !present.has(o.id));
+  const candidates = options.filter((o) => !present.has(o.id) && !(team === "collecte" && o.team_type === "nettoiement"));
   const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
   const [employeeId, setEmployeeId] = useState(candidates[0]?.id ?? "");
   const [replacingId, setReplacingId] = useState("");
@@ -767,7 +841,9 @@ function AddEmployeeDialog({
                 </option>
               ))}
             </NativeSelect>
-            <p className="text-xs text-muted-foreground">{t("Tout employé actif peut être affecté, quelle que soit sa fonction habituelle.")}</p>
+            <p className="text-xs text-muted-foreground">
+              {team === "collecte" ? t("Agents du Nettoiement : utilisez le bouton « Ajouter un agent de Nettoiement » (ils sont alors retirés de la feuille Nettoiement de ce jour).") : t("Tout employé actif peut être affecté, quelle que soit sa fonction habituelle.")}
+            </p>
           </div>
           <div className="space-y-1">
             <Label>{t("Fonction du jour")}</Label>
@@ -851,6 +927,94 @@ function LeaveOverrideDialog({ name, date, onClose, onConfirm, pending }: { name
           </Button>
           <Button onClick={() => onConfirm(reason)} disabled={pending || reason.trim().length < 5}>
             {t("Autoriser la modification")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** « Ajouter un agent de Nettoiement » : affectation temporaire à la Collecte pour la journée. */
+function AssignDialog({
+  date,
+  options,
+  rows,
+  elsewhere,
+  pending,
+  onClose,
+  onAssign,
+}: {
+  date: string;
+  options: EmployeeOption[];
+  rows: SheetRow[];
+  elsewhere: ElsewhereRow[];
+  pending: boolean;
+  onClose: () => void;
+  onAssign: (employeeId: string, chauffeurId: string | null, dayPosition: Position) => void;
+}) {
+  const { t } = useT();
+  const present = new Set(rows.map((r) => r.employee_id));
+  const candidates = options.filter((o) => o.team_type === "nettoiement" && !present.has(o.id));
+  const pointed = new Set(elsewhere.filter((x) => x.team_type === "nettoiement").map((x) => x.employee_id));
+  const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
+  const [employeeId, setEmployeeId] = useState(candidates[0]?.id ?? "");
+  const [chauffeurId, setChauffeurId] = useState("");
+  const [dayPosition, setDayPosition] = useState<Position>("rippeur");
+  const usual = options.find((o) => o.id === employeeId);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("Ajouter un agent de Nettoiement")}</DialogTitle>
+          <DialogDescription>
+            {t("Affectation temporaire à la Collecte pour le {date} uniquement : l'agent est retiré de la feuille Nettoiement de ce jour. Sa fiche (équipe et poste habituels) n'est pas modifiée.", { date: formatDateFr(date) })}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>{t("Agent du Nettoiement")}</Label>
+            <NativeSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+              {candidates.length === 0 && <option value="">{t("Aucun agent du Nettoiement disponible")}</option>}
+              {candidates.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} — {t(POSITION_LABELS[o.position])}
+                  {pointed.has(o.id) ? ` — ${t("déjà pointé au Nettoiement (pointage déplacé)")}` : ""}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="space-y-1">
+            <Label>{t("Fonction du jour")}</Label>
+            <NativeSelect value={dayPosition} onChange={(e) => setDayPosition(e.target.value as Position)}>
+              {POSITIONS.map((p) => (
+                <option key={p} value={p}>
+                  {t(POSITION_LABELS[p])}
+                </option>
+              ))}
+            </NativeSelect>
+            {usual && usual.position !== dayPosition && <p className="text-xs text-amber-700 dark:text-amber-400">{t("Fonction habituelle : {usual} — la fiche de l'employé n'est pas modifiée.", { usual: t(POSITION_LABELS[usual.position]) })}</p>}
+          </div>
+          {dayPosition !== "chauffeur" && (
+            <div className="space-y-1">
+              <Label>{t("Équipe (chauffeur)")}</Label>
+              <NativeSelect value={chauffeurId} onChange={(e) => setChauffeurId(e.target.value)}>
+                <option value="">{t("— Sans équipe —")}</option>
+                {chauffeurs.map((c) => (
+                  <option key={c.employee_id} value={c.employee_id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("Annuler")}
+          </Button>
+          <Button disabled={!employeeId || pending} onClick={() => onAssign(employeeId, dayPosition === "chauffeur" ? null : chauffeurId || null, dayPosition)}>
+            <ArrowLeftRight /> {t("Affecter à la Collecte")}
           </Button>
         </DialogFooter>
       </DialogContent>

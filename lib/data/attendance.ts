@@ -4,7 +4,7 @@ import { workMonthRange } from "@/lib/dates";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
-import type { EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
+import type { DayAssignment, EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
 export type WorkDay = {
@@ -100,6 +100,17 @@ export async function buildSheet(date: string, team: TeamType) {
   const onRecovery = new Set((recoveries ?? []).map((r) => r.employee_id as string));
 
   const byId = new Map(employees.map((e) => [e.id, e]));
+  // Affectations temporaires du jour : l'employé ne figure que dans l'équipe du jour
+  const { data: assignRows } = await supabase.from("daily_team_assignments").select("employee_id, team_type, position, chauffeur_id, source").eq("activity_date", date);
+  const assignments = new Map<string, DayAssignment>();
+  for (const a of assignRows ?? []) {
+    const e = byId.get(a.employee_id as string);
+    assignments.set(a.employee_id as string, { team: a.team_type as TeamType, usual_team: (e?.team_type ?? a.team_type) as TeamType, position: a.position as Position, chauffeur_id: (a.chauffeur_id as string) ?? null, source: a.source as DayAssignment["source"] });
+  }
+  const assignmentOf = (id: string, rowTeam: TeamType) => {
+    const a = assignments.get(id);
+    return a && a.team === rowTeam && a.team !== a.usual_team ? a : null;
+  };
   const dow = getDay(parseISO(date));
   const rows: SheetRow[] = [];
 
@@ -131,19 +142,30 @@ export async function buildSheet(date: string, team: TeamType) {
       entered_at: a.updated_at,
       substitute_id: e?.substitute_id ?? null,
       planned: onLeave.has(a.employee_id) ? "conge" : onRecovery.has(a.employee_id) ? "recuperation" : null,
+      assignment: assignmentOf(a.employee_id, a.team_type),
     });
   }
 
-  // Employés déjà pointés ce jour dans l'autre équipe (affectation du jour) : pas de ligne par défaut ici
+  // Employés déjà pointés ce jour dans l'autre équipe, ou affectés à l'autre équipe : pas de ligne ici
   const { data: other } = await supabase.from("attendance").select("employee_id, team_type, position, shift").eq("activity_date", date).neq("team_type", team);
   const elsewhere: ElsewhereRow[] = (other ?? []).map((o) => {
     const e = byId.get(o.employee_id as string);
-    return { employee_id: o.employee_id as string, name: e ? employeeName(e) : "—", team_type: o.team_type as TeamType, position: o.position as Position, shift: o.shift as number };
+    const a = assignments.get(o.employee_id as string);
+    return { employee_id: o.employee_id as string, name: e ? employeeName(e) : "—", team_type: o.team_type as TeamType, position: o.position as Position, shift: o.shift as number, assigned: !!a && a.team === o.team_type };
   });
+  for (const [id, a] of assignments) {
+    if (a.team === team || elsewhere.some((x) => x.employee_id === id)) continue;
+    const e = byId.get(id);
+    elsewhere.push({ employee_id: id, name: e ? employeeName(e) : "—", team_type: a.team, position: a.position, shift: 1, assigned: true });
+  }
   const alreadyIn = new Set([...rows.map((r) => r.employee_id), ...elsewhere.map((x) => x.employee_id)]);
   for (const e of employees) {
     // Actif, ou parti après cette date (le pointage rétroactif reste possible jusqu'au dernier jour)
-    if (e.team_type !== team || !availableOn(e, date) || alreadyIn.has(e.id)) continue;
+    // Équipe du jour : affectation temporaire, sinon équipe permanente
+    const dayTeam = assignments.get(e.id)?.team ?? e.team_type;
+    if (dayTeam !== team || !availableOn(e, date) || alreadyIn.has(e.id)) continue;
+    const asg = assignmentOf(e.id, team);
+    const dayPosition = asg?.position ?? e.position;
     const defaultStatus: AttendanceStatus = holiday
       ? "ferie"
       : onLeave.has(e.id)
@@ -164,16 +186,17 @@ export async function buildSheet(date: string, team: TeamType) {
       overtime_auto: 0,
       observation: "",
       replacing_employee_id: null,
-      chauffeur_id: e.position === "rippeur" ? e.chauffeur_id : null,
-      truck_id: e.position === "chauffeur" ? e.truck_id : null,
-      position: e.position,
-      team_type: e.team_type,
+      chauffeur_id: asg ? asg.chauffeur_id : e.position === "rippeur" ? e.chauffeur_id : null,
+      truck_id: !asg && e.position === "chauffeur" ? e.truck_id : null,
+      position: dayPosition,
+      team_type: team,
       usual_position: e.position,
       order_number: e.order_number,
       name: employeeName(e),
       matricule: e.matricule,
       rest_day: e.rest_day,
-      is_extra: false,
+      is_extra: !!asg,
+      assignment: asg,
       entered_at: null,
       substitute_id: e.substitute_id,
       planned: onLeave.has(e.id) ? "conge" : onRecovery.has(e.id) ? "recuperation" : null,

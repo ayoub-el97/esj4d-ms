@@ -46,6 +46,11 @@ begin
   -- Chefs d'équipe conservés : seul le lien vers un employé est retiré
   update public.team_leads set employee_id = null where employee_id is not null;
 
+  -- Affectations temporaires du jour (migration 035, si elle a été exécutée)
+  if to_regclass('public.daily_team_assignments') is not null then
+    execute 'truncate table public.daily_team_assignments restart identity';
+  end if;
+
   -- Données d'exploitation : vidées en une instruction, sans CASCADE (si une table conservée
   -- dépendait d'une de ces tables, Postgres refuserait et rien ne serait modifié).
   truncate table

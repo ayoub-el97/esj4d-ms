@@ -6,9 +6,10 @@ import { assertModule, friendlyError, hasPermission } from "@/lib/auth";
 import { syncCleaningReport, syncCollectionReports } from "@/lib/report-sync";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
-import { isDayClosed } from "@/lib/data/attendance";
-import type { SheetPayload } from "@/lib/attendance-types";
-import { ALL_POSITIONS, ATTENDANCE_STATUSES, type ActionResult, type Position } from "@/lib/types";
+import { buildSheet, isDayClosed } from "@/lib/data/attendance";
+import { formatDateFr } from "@/lib/dates";
+import type { SheetPayload, SheetRow } from "@/lib/attendance-types";
+import { ALL_POSITIONS, ATTENDANCE_STATUSES, TEAM_LABELS, type ActionResult, type Position, type TeamType } from "@/lib/types";
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 const optionalTime = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().regex(timeRe, "Heure invalide (HH:MM).").nullable());
@@ -43,6 +44,10 @@ const payloadSchema = z.object({
 
 /** Message du congé approuvé, avec le nom de l'employé et la date (erreur CONGE_APPROUVE|nom|date de la base). */
 function leaveError(t: Awaited<ReturnType<typeof getT>>, message: string): string {
+  const a = message.match(/AFFECTATION_DU_JOUR\|([^|]*)\|([0-9/]+)\|(\w+)/);
+  if (a) return t("{name} est affecté temporairement à l'équipe {team} le {date} : il ne peut pas figurer sur cette feuille. Rechargez la page, ou annulez l'affectation.", { name: a[1], date: a[2], team: t(a[3] === "collecte" ? "Collecte" : "Nettoiement") });
+  const d = message.match(/POINTAGE_DEUX_EQUIPES\|([^|]*)\|([0-9/]+)/);
+  if (d) return t("{name} est déjà pointé dans l'autre équipe le {date} : un employé ne peut figurer que sur une seule feuille par jour.", { name: d[1], date: d[2] });
   const m = message.match(/CONGE_APPROUVE\|([^|]*)\|([0-9/]+)/);
   if (m) return t("Attention : {name} bénéficie d'un congé approuvé pour le {date}. Le pointage est automatiquement défini sur « Congé ». Toute modification nécessite une autorisation.", { name: m[1], date: m[2] });
   return t(friendlyError(message));
@@ -109,6 +114,14 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult & {
 
   const supabase = await createClient();
 
+  // Affectation temporaire du jour vers l'autre équipe : l'employé ne peut pas figurer ici
+  const { data: assigned } = await supabase.from("daily_team_assignments").select("employee_id, team_type").eq("activity_date", activity_date).neq("team_type", team_type).in("employee_id", rows.length ? rows.map((r) => r.employee_id) : ["00000000-0000-0000-0000-000000000000"]);
+  if (assigned?.length) {
+    const { data: emps } = await supabase.from("employees").select("id, last_name, first_name").in("id", assigned.map((a) => a.employee_id));
+    const names = (emps ?? []).map((e) => `${e.last_name} ${e.first_name}`).join(", ");
+    return { ok: false, error: t("Affectation temporaire du jour : {names} travaille(nt) ce jour dans l'autre équipe. Rechargez la page : ces agents sont retirés automatiquement de cette feuille.", { names }) };
+  }
+
   // Conflits d'affectation : employé déjà pointé dans l'autre équipe (même date, même service),
   // ou même camion pour deux chauffeurs. Enregistrement seulement après confirmation explicite.
   const { data: others } = await supabase.from("attendance").select("employee_id, shift, team_type").eq("activity_date", activity_date).neq("team_type", team_type);
@@ -151,6 +164,11 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult & {
 
   const { error: metaError } = await supabase.from("attendance_sheet_meta").upsert({ activity_date, team_type, team_lead }, { onConflict: "activity_date,team_type" });
   if (metaError) return { ok: false, error: t(friendlyError(metaError.message)) };
+
+  // Affectations du jour vers cette équipe : fonction et équipe de camion suivent la feuille enregistrée
+  for (const r of rows.filter((x) => x.shift === 1)) {
+    await supabase.from("daily_team_assignments").update({ position: r.position, chauffeur_id: team_type === "collecte" ? r.chauffeur_id : null }).eq("activity_date", activity_date).eq("employee_id", r.employee_id).eq("team_type", team_type);
+  }
 
   revalidatePath("/pointage");
 
@@ -207,4 +225,54 @@ export async function reopenDay(date: string, reason: string): Promise<ActionRes
   revalidatePath("/cloture");
   revalidatePath("/pointage");
   return { ok: true, message: t("Journée rouverte. La justification a été enregistrée dans le journal d'audit.") };
+}
+
+/**
+ * Affecte temporairement un employé à une équipe pour une date (ex. un balayeur à la Collecte).
+ * La fiche de l'employé n'est pas modifiée. Le pointage déjà saisi pour cette date dans l'autre
+ * équipe est déplacé (statut, heures, HS, observation conservés). Renvoie ses lignes de feuille.
+ */
+export async function assignEmployeeForDay(input: { date: string; employee_id: string; team: TeamType; position: Position; chauffeur_id: string | null }): Promise<ActionResult<{ rows: SheetRow[] }>> {
+  const t = await getT();
+  const auth = await assertModule("pointage", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const parsed = z.object({ date: z.string().date(), employee_id: z.string().uuid(), team: z.enum(["collecte", "nettoiement"]), position: z.string().min(1), chauffeur_id: z.string().uuid().nullable() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: t("Données invalides.") };
+  const d = parsed.data;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_day_assignment", { p_date: d.date, p_employee: d.employee_id, p_team: d.team, p_position: d.position, p_chauffeur: d.chauffeur_id, p_note: "" });
+  if (error) return { ok: false, error: leaveError(t, error.message) };
+  await afterAssignmentChange(auth.user, d.date);
+  const sheet = await buildSheet(d.date, d.team);
+  return { ok: true, message: t("Agent affecté à l'équipe {team} pour le {date} uniquement. Sa fiche n'est pas modifiée.", { team: t(TEAM_LABELS[d.team]), date: formatDateFr(d.date) }), data: { rows: sheet.rows.filter((r) => r.employee_id === d.employee_id) } };
+}
+
+/** Annule l'affectation du jour : le pointage de cette date revient dans l'équipe habituelle. */
+export async function cancelDayAssignment(date: string, employeeId: string): Promise<ActionResult<{ rows: SheetRow[]; team: TeamType }>> {
+  const t = await getT();
+  const auth = await assertModule("pointage", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().date().safeParse(date).success || !z.string().uuid().safeParse(employeeId).success) return { ok: false, error: t("Données invalides.") };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_day_assignment", { p_date: date, p_employee: employeeId });
+  if (error) return { ok: false, error: leaveError(t, error.message) };
+  await afterAssignmentChange(auth.user, date);
+  const { data: e } = await supabase.from("employees").select("team_type").eq("id", employeeId).single();
+  const team = (e?.team_type ?? "nettoiement") as TeamType;
+  const sheet = await buildSheet(date, team);
+  return { ok: true, message: t("Affectation annulée : l'agent revient dans l'équipe {team} pour le {date}.", { team: t(TEAM_LABELS[team]), date: formatDateFr(date) }), data: { rows: sheet.rows.filter((r) => r.employee_id === employeeId), team } };
+}
+
+/** Pointage déplacé d'une équipe à l'autre : les deux rapports journaliers du jour sont recalculés. */
+async function afterAssignmentChange(user: Parameters<typeof hasPermission>[0], date: string) {
+  revalidatePath("/pointage", "layout");
+  if (!hasPermission(user, "rapport_journalier", "edit")) return;
+  const supabase = await createClient();
+  try {
+    await syncCleaningReport(supabase, date);
+    await syncCollectionReports(supabase, date);
+    revalidatePath("/rapport-journalier", "layout");
+  } catch {
+    // le rapport sera recalculé au prochain enregistrement de la feuille
+  }
 }

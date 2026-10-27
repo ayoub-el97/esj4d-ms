@@ -48,10 +48,10 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
           <AlertDescription>{t("Journée clôturée : la feuille est en consultation seule. Un administrateur peut la rouvrir depuis le module Clôturer la journée.")}</AlertDescription>
         </Alert>
       )}
-      {sheet.elsewhere.length > 0 && (
+      {sheet.elsewhere.some((x) => !x.assigned && x.shift === 1) && (
         <p className="mb-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           {t("Pointés ce jour dans l'autre équipe (affectation du jour, non repris ici) : {list}", {
-            list: sheet.elsewhere.filter((x) => x.shift === 1).map((x) => `${x.name} (${t(POSITION_LABELS[x.position])})`).join(", "),
+            list: sheet.elsewhere.filter((x) => !x.assigned && x.shift === 1).map((x) => `${x.name} (${t(POSITION_LABELS[x.position])})`).join(", "),
           })}
         </p>
       )}
