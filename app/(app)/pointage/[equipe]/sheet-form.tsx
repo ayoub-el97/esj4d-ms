@@ -656,6 +656,11 @@ function GroupRows({
                   {t("Faire remplacer par {name}", { name: substitute.name })}
                 </button>
               )}
+              {r.status === "absent_maladie" && r.id && (
+                <a href={`/pointage/absences/${r.employee_id}`} className="mt-0.5 block text-[11px] text-indigo-700 underline-offset-2 hover:underline">
+                  {t("Certificat médical (maintenant ou plus tard)")}
+                </a>
+              )}
               {r.status === "absent_maladie" && (
                 <div className="mt-1 space-y-1 rounded-md border border-rose-200 bg-rose-50/70 p-1.5 text-[11px] not-italic dark:border-rose-900 dark:bg-rose-950/30">
                   <label className="flex items-start gap-1.5">

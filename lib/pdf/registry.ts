@@ -1,4 +1,6 @@
 import "server-only";
+import { EMPLOYEE_COLUMNS, type Employee } from "@/lib/data/employees";
+import { createClient } from "@/lib/supabase/server";
 import { createElement, type ReactElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getOptionalUser } from "@/lib/auth";
@@ -27,6 +29,7 @@ import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
 import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
 import { FleetPdf, RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
 import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
+import { EngagementAbsencesPdf } from "./absences";
 import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchases";
 import { categoryLabel } from "@/lib/purchase-types";
 import { resolvePurchasePeriod } from "@/app/(app)/achats/period";
@@ -86,6 +89,18 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
         `pointage-${team}-${date}.pdf`,
         createElement(AttendanceSheetPdf, { ...common, agency: settings.agency_name, teamLead: sheet.teamLead, date, team, rows: sheet.rows, trucks: sheet.trucks }),
       );
+    }
+    case "engagement-absences": {
+      if (!params.employee) return null;
+      const supabase = await createClient();
+      const [{ data: emp }, { data: days }] = await Promise.all([
+        supabase.from("employees").select(EMPLOYEE_COLUMNS).eq("id", params.employee).maybeSingle(),
+        supabase.rpc("absence_days", { p_from: null, p_to: null, p_employee: params.employee }),
+      ]);
+      if (!emp) return null;
+      const employee = { ...(emp as unknown as Employee), matricule: (emp as unknown as Employee).matricule ?? "" };
+      const unjustifiedDates = ((days ?? []) as { activity_date: string; classification: string }[]).filter((d) => d.classification === "non_justifiee").map((d) => d.activity_date).sort();
+      return done("pointage", `${t("Engagement écrit relatif aux absences")} — ${employee.last_name} ${employee.first_name}`, `engagement-absences-${employee.last_name}.pdf`, createElement(EngagementAbsencesPdf, { ...common, employee, unjustifiedDates }));
     }
     case "pointage-mensuel": {
       const month = params.mois;

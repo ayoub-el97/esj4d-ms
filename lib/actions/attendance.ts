@@ -172,6 +172,8 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult & {
 
   revalidatePath("/pointage");
   revalidatePath("/rapport-journalier", "layout");
+  // Rapport des absents : rappels créés / retirés selon la politique d'absences (sans doublon)
+  await supabase.rpc("sync_absence_alerts");
 
   // Rapport journalier rempli automatiquement depuis le pointage (si l'utilisateur peut le modifier)
   let reportNote = "";
