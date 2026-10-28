@@ -5,6 +5,7 @@ import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
 import type { DayAssignment, EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
+import { DEFAULT_TIME_IN, DEFAULT_TIME_OUT } from "@/lib/default-times";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
 export type WorkDay = {
@@ -225,6 +226,15 @@ export async function buildSheet(date: string, team: TeamType) {
     r.leave_override = req ? (overrideByEmployee.get(r.employee_id) ?? null) : null;
     if (req && !r.leave_override) {
       r.status = "conge";
+    }
+  }
+
+  // Lignes non encore enregistrées d'un jour travaillé : 06:00 – 14:00 proposés (modifiables).
+  // Les heures déjà enregistrées ne sont jamais remplacées.
+  for (const r of rows) {
+    if (r.id === null && r.shift === 1 && (r.status === "present" || r.status === "repos_travaille") && !r.time_in && !r.time_out) {
+      r.time_in = DEFAULT_TIME_IN;
+      r.time_out = DEFAULT_TIME_OUT;
     }
   }
 

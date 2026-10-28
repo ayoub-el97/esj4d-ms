@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
-import { getCollectionReport } from "@/lib/data/reports";
+import { getCollecteCrewOptions, getCollectionReport } from "@/lib/data/reports";
 import { formatDateLongFr } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
@@ -21,11 +21,12 @@ export default async function CollectionReportPage({ params }: { params: Promise
   const { id } = await params;
   const report = await getCollectionReport(id);
   if (!report) notFound();
-  const [workDay, trucks, collecte, audit] = await Promise.all([
+  const [workDay, trucks, collecte, audit, crewOptions] = await Promise.all([
     getWorkDay(report.activity_date),
     getTrucks(true),
     getEmployees({ onlyActive: true }),
     getRecordAuditInfo("collection_reports", [report.id]),
+    getCollecteCrewOptions(report.activity_date),
   ]);
   const info = audit.get(report.id);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
@@ -45,7 +46,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
         canEdit={canEdit}
         trucks={trucks}
         drivers={collecte.filter((e) => DRIVER_POSITIONS.includes(e.position))}
-        crewOptions={collecte.filter((e) => ["rippeur", "rippeur_remplacant"].includes(e.position))}
+        crewOptions={crewOptions}
       />
       {info && <AuditLine info={info} t={t} />}
 

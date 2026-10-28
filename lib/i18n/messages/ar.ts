@@ -2069,4 +2069,7 @@ export const ar: Messages = {
   "déjà pointé au Nettoiement (pointage déplacé)": "مسجل مسبقًا في التنظيف (يُنقل التسجيل)",
   "{name} est affecté temporairement à l'équipe {team} le {date} : il ne peut pas figurer sur cette feuille. Rechargez la page, ou annulez l'affectation.": "{name} معيّن مؤقتًا في فريق {team} بتاريخ {date}: لا يمكن أن يظهر في هذه الورقة. أعد تحميل الصفحة أو ألغِ التعيين.",
   "{name} est déjà pointé dans l'autre équipe le {date} : un employé ne peut figurer que sur une seule feuille par jour.": "{name} مسجل مسبقًا في الفريق الآخر بتاريخ {date}: لا يمكن أن يظهر العامل إلا في ورقة واحدة في اليوم.",
+  "Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.": "هذا العامل غير مسجل حاضرًا في التنظيف هذا اليوم: صحّح تسجيل الحضور أولًا.",
+  "Heures supplémentaires : automatiques (au-delà de 8 h après l'heure d'entrée réelle) + manuelles (accordées par le responsable)": "الساعات الإضافية: تلقائية (بعد 8 ساعات من ساعة الدخول الفعلية) + يدوية (يمنحها المسؤول)",
+  "Les Gardiens ne figurent pas dans les rapports de collecte.": "الحراس لا يظهرون في تقارير الجمع.",
 };

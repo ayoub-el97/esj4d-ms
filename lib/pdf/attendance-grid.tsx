@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { FONT, FONT_BOLD } from "./fonts";
 import { CODE_DEF, GRID_CODES, WEEKDAY_INITIALS, weekdayOf, type GridCode, type GridData } from "@/lib/attendance-grid";
 import { formatDateFr } from "@/lib/dates";
 import { POSITION_LABELS } from "@/lib/types";
@@ -11,17 +12,17 @@ const ID_W = { nb: 20, nom: 74, prenom: 64, fonction: 62 };
 const BORDER = "#9ca3af";
 
 const s = StyleSheet.create({
-  page: { padding: PAD, paddingBottom: 28, fontSize: 7, fontFamily: "Helvetica", color: "#111" },
+  page: { padding: PAD, paddingBottom: 28, fontSize: 7, fontFamily: FONT, color: "#111" },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   logo: { width: 52, height: 52, objectFit: "contain" },
   logoFallback: { width: 52, height: 52, backgroundColor: "#4f46e5", color: "#fff", fontSize: 24, textAlign: "center", paddingTop: 13, borderRadius: 6 },
   metaLabel: { width: 82, color: "#555", fontSize: 8 },
-  metaValue: { fontSize: 8, fontFamily: "Helvetica-Bold" },
-  title: { fontSize: 15, fontFamily: "Helvetica-Bold", textAlign: "center" },
+  metaValue: { fontSize: 8, fontFamily: FONT_BOLD },
+  title: { fontSize: 15, fontFamily: FONT_BOLD, textAlign: "center" },
   range: { fontSize: 11, textAlign: "center", marginTop: 3 },
   row: { flexDirection: "row" },
   cell: { borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: BORDER, justifyContent: "center", height: 12 },
-  head: { backgroundColor: "#e5e7eb", fontFamily: "Helvetica-Bold" },
+  head: { backgroundColor: "#e5e7eb", fontFamily: FONT_BOLD },
   txt: { fontSize: 6.5, textAlign: "center" },
   txtLeft: { fontSize: 6.5, paddingLeft: 2 },
   footer: { position: "absolute", bottom: 10, left: PAD, right: PAD, fontSize: 7, color: "#777", flexDirection: "row", justifyContent: "space-between" },
@@ -103,7 +104,7 @@ export function AttendanceGridPdf({
             {filtersLabel ? <Text style={{ fontSize: 7.5, color: "#555", textAlign: "center" }}>{filtersLabel}</Text> : null}
           </View>
           <View style={{ width: 320, alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold" }}>{company}</Text>
+            <Text style={{ fontSize: 10, fontFamily: FONT_BOLD }}>{company}</Text>
             {(companyDetails?.length ? companyDetails : [agency]).filter(Boolean).map((l, i) => (
               <Text key={i} style={{ fontSize: 8, color: "#555" }}>
                 {l}
@@ -150,13 +151,13 @@ export function AttendanceGridPdf({
               if (c.conflict || c.unknown)
                 return (
                   <View key={d} style={[s.cell, { width: dayW, borderWidth: 1, borderColor: "#dc2626" }]}>
-                    <Text style={[s.txt, { color: "#b91c1c", fontFamily: "Helvetica-Bold" }]}>{c.conflict ? "!" : "?"}</Text>
+                    <Text style={[s.txt, { color: "#b91c1c", fontFamily: FONT_BOLD }]}>{c.conflict ? "!" : "?"}</Text>
                   </View>
                 );
               const def = CODE_DEF[c.code!];
               return (
                 <View key={d} style={[s.cell, { width: dayW, backgroundColor: def.bg }]}>
-                  <Text style={[s.txt, { color: def.fg, fontFamily: "Helvetica-Bold" }]}>
+                  <Text style={[s.txt, { color: def.fg, fontFamily: FONT_BOLD }]}>
                     {def.code}
                     {c.double ? `×${c.statuses.length}` : ""}
                   </Text>
@@ -172,8 +173,8 @@ export function AttendanceGridPdf({
             {codes.map((c) => (
               <View key={c} style={s.row}>
                 <View style={[s.cell, { width: idW, borderLeftWidth: 0.5, borderRightWidth: 1, backgroundColor: "#e5e7eb", flexDirection: "row", alignItems: "center", justifyContent: "flex-start" }]}>
-                  <Text style={[s.txt, { width: 22, marginLeft: 2, backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" }]}>{c}</Text>
-                  <Text style={[s.txtLeft, { fontFamily: "Helvetica-Bold" }]}>
+                  <Text style={[s.txt, { width: 22, marginLeft: 2, backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg, fontFamily: FONT_BOLD }]}>{c}</Text>
+                  <Text style={[s.txtLeft, { fontFamily: FONT_BOLD }]}>
                     {t(CODE_DEF[c].label)} ({t("période : {count}", { count: grid.totals[c] ?? 0 })})
                   </Text>
                 </View>
@@ -181,7 +182,7 @@ export function AttendanceGridPdf({
                   const n = grid.dayTotals[d]?.[c] ?? 0;
                   return (
                     <View key={d} style={[s.cell, { width: dayW, backgroundColor: n ? CODE_DEF[c].bg : "#f3f4f6" }]}>
-                      <Text style={[s.txt, n ? { color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" } : { color: "#6b7280" }]}>{String(n)}</Text>
+                      <Text style={[s.txt, n ? { color: CODE_DEF[c].fg, fontFamily: FONT_BOLD } : { color: "#6b7280" }]}>{String(n)}</Text>
                     </View>
                   );
                 })}
@@ -192,11 +193,11 @@ export function AttendanceGridPdf({
 
         {/* Légende */}
         <View wrap={false} style={{ marginTop: 8 }}>
-          <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", marginBottom: 3 }}>{t("Légende")}</Text>
+          <Text style={{ fontSize: 8, fontFamily: FONT_BOLD, marginBottom: 3 }}>{t("Légende")}</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
             {codes.map((c) => (
               <View key={c} style={{ flexDirection: "row", alignItems: "center", marginRight: 12, marginBottom: 3 }}>
-                <Text style={[s.txt, { width: 24, paddingVertical: 1.5, backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg, fontFamily: "Helvetica-Bold" }]}>{c}</Text>
+                <Text style={[s.txt, { width: 24, paddingVertical: 1.5, backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg, fontFamily: FONT_BOLD }]}>{c}</Text>
                 <Text style={{ fontSize: 7.5, marginLeft: 3 }}>
                   {t(CODE_DEF[c].label)}
                   {CODE_DEF[c].extra ? ` (${t("hors liste")})` : ""}

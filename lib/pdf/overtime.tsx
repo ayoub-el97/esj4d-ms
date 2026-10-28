@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { FONT, FONT_BOLD } from "./fonts";
 import { WEEKDAY_INITIALS, weekdayOf } from "@/lib/attendance-grid";
 import type { OvertimeGrid } from "@/lib/data/attendance-grid";
 import { formatDateFr } from "@/lib/dates";
@@ -12,10 +13,10 @@ const ID = { nb: 20, nom: 74, prenom: 64, fonction: 62 };
 const TOTAL_W = 30;
 const B = "#9ca3af";
 const s = StyleSheet.create({
-  page: { padding: PAD, paddingBottom: 28, fontSize: 7, fontFamily: "Helvetica", color: "#111" },
+  page: { padding: PAD, paddingBottom: 28, fontSize: 7, fontFamily: FONT, color: "#111" },
   row: { flexDirection: "row" },
   cell: { borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: B, justifyContent: "center", height: 12 },
-  head: { backgroundColor: "#e5e7eb", fontFamily: "Helvetica-Bold" },
+  head: { backgroundColor: "#e5e7eb", fontFamily: FONT_BOLD },
   txt: { fontSize: 6.5, textAlign: "center" },
   left: { fontSize: 6.5, paddingLeft: 2 },
   footer: { position: "absolute", bottom: 10, left: PAD, right: PAD, fontSize: 7, color: "#777", flexDirection: "row", justifyContent: "space-between" },
@@ -58,20 +59,20 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
               ].map(([l, v]) => (
                 <View key={l} style={s.row}>
                   <Text style={{ width: 82, color: "#555", fontSize: 8 }}>{l}</Text>
-                  <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>{v}</Text>
+                  <Text style={{ fontSize: 8, fontFamily: FONT_BOLD }}>{v}</Text>
                 </View>
               ))}
             </View>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontFamily: "Helvetica-Bold", textAlign: "center" }}>{title}</Text>
+            <Text style={{ fontSize: 15, fontFamily: FONT_BOLD, textAlign: "center" }}>{title}</Text>
             <Text style={{ fontSize: 11, textAlign: "center", marginTop: 3 }}>
               {t("Du")} {formatDateFr(grid.from)}   {t("Au")} {formatDateFr(grid.to)}
             </Text>
             {filtersLabel ? <Text style={{ fontSize: 7.5, color: "#555", textAlign: "center" }}>{filtersLabel}</Text> : null}
           </View>
           <View style={{ width: 320, alignItems: "flex-end" }}>
-            <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold" }}>{company}</Text>
+            <Text style={{ fontSize: 10, fontFamily: FONT_BOLD }}>{company}</Text>
             {(companyDetails ?? []).map((l, i) => (
               <Text key={i} style={{ fontSize: 8, color: "#555" }}>
                 {l}
@@ -116,12 +117,12 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
             {ids(String(r.order_number), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, { width: dayW }, r.hours[d] ? { backgroundColor: "#e0e7ff" } : {}]}>
-                <Text style={[s.txt, r.hours[d] ? { fontFamily: "Helvetica-Bold" } : {}]}>{r.hours[d] ? fmt(r.hours[d].total) : ""}</Text>
+                <Text style={[s.txt, r.hours[d] ? { fontFamily: FONT_BOLD } : {}]}>{r.hours[d] ? fmt(r.hours[d].total) : ""}</Text>
               </View>
             ))}
             {(["auto", "manual", "total"] as const).map((k) => (
               <View key={k} style={[s.cell, { width: TOTAL_W, backgroundColor: "#f3f4f6" }]}>
-                <Text style={[s.txt, k === "total" ? { fontFamily: "Helvetica-Bold" } : {}]}>{r[k] ? fmt(r[k]) : "—"}</Text>
+                <Text style={[s.txt, k === "total" ? { fontFamily: FONT_BOLD } : {}]}>{r[k] ? fmt(r[k]) : "—"}</Text>
               </View>
             ))}
           </View>
@@ -141,7 +142,7 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
                 </View>
                 {grid.dates.map((d) => (
                   <View key={d} style={[s.cell, { width: dayW, backgroundColor: "#f3f4f6" }]}>
-                    <Text style={[s.txt, k === "total" ? { fontFamily: "Helvetica-Bold" } : {}]}>{fmt(grid.dayTotals[d]?.[k] ?? 0)}</Text>
+                    <Text style={[s.txt, k === "total" ? { fontFamily: FONT_BOLD } : {}]}>{fmt(grid.dayTotals[d]?.[k] ?? 0)}</Text>
                   </View>
                 ))}
                 {(["auto", "manual", "total"] as const).map((c) => (

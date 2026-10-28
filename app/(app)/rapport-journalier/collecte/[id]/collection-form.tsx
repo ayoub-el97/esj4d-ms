@@ -21,13 +21,13 @@ import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 import { PhotoUploader } from "@/components/photo-uploader";
 
-export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }: { report: CollectionReportFull; canEdit: boolean; trucks: Truck[]; drivers: Employee[]; crewOptions: Employee[] }) {
+export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }: { report: CollectionReportFull; canEdit: boolean; trucks: Truck[]; drivers: Employee[]; crewOptions: (Employee & { day_position?: Position | null })[] }) {
   const { t } = useT();
   const router = useRouter();
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
   const [crew, setCrew] = useState<Set<string>>(() => new Set(report.rippers.map((r) => r.id)));
-  // Liste proposée : équipe actuelle + tous les employés actifs (quelle que soit leur fonction habituelle)
+  // Liste proposée : équipe actuelle + employés pointés à la Collecte ce jour (quelle que soit leur fonction habituelle)
   const crewList: (Employee & { day_position?: Position | null })[] = [...report.rippers, ...crewOptions.filter((e) => !report.rippers.some((r) => r.id === e.id))];
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getReportEligibility } from "@/lib/data/reports";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
@@ -64,6 +65,9 @@ export async function addCleaningAgent(reportId: string, date: string, employeeI
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   if (!uuid.safeParse(reportId).success || !uuid.safeParse(employeeId).success) return { ok: false, error: t("Identifiant invalide.") };
   const supabase = await createClient();
+  // Seuls les agents présents au Nettoiement ce jour d'après le pointage (Gardiens exclus)
+  const { nettoiement } = await getReportEligibility(date);
+  if (!nettoiement.has(employeeId)) return { ok: false, error: t("Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.") };
   // Agent précédemment retiré à la main : on le réintègre
   const { data: hidden } = await supabase.from("cleaning_report_agents").select("id").eq("report_id", reportId).eq("employee_id", employeeId).eq("excluded", true).maybeSingle();
   if (hidden) {
@@ -209,6 +213,11 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
   const supabase = await createClient();
   const { data: existing } = await supabase.from("collection_reports").select("activity_date, truck_id, chauffeur_id, manual_team").eq("id", d.id).maybeSingle();
   if (!existing) return { ok: false, error: t("Rapport introuvable.") };
+  // Gardiens : jamais dans l'équipe d'un rapport de collecte
+  if (d.rippers.length) {
+    const { data: g } = await supabase.from("employees").select("id").in("id", d.rippers).eq("position", "gardien");
+    if (g?.length) return { ok: false, error: t("Les Gardiens ne figurent pas dans les rapports de collecte.") };
+  }
   const { data: oldCrew } = await supabase.from("collection_report_rippers").select("employee_id").eq("report_id", d.id);
   const sameCrew = new Set((oldCrew ?? []).map((x) => x.employee_id)).size === new Set(d.rippers).size && d.rippers.every((id) => (oldCrew ?? []).some((x) => x.employee_id === id));
   const teamChanged = existing.truck_id !== d.truck_id || (existing.chauffeur_id ?? null) !== d.chauffeur_id || !sameCrew;

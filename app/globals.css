@@ -91,6 +91,15 @@
   }
 }
 
+/* Interface en français : le texte arabe saisi par les utilisateurs s'affiche avec une police arabe
+   et dans son sens de lecture (paragraphe arabe aligné à droite, français à gauche). */
+html[dir="ltr"] body {
+  font-family: var(--font-sans), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
+}
+html[dir="ltr"] :is(td, p, li, dd, blockquote) {
+  unicode-bidi: plaintext;
+}
+
 /* Arabe : police adaptée */
 html[dir="rtl"] body {
   font-family: var(--font-arabic), var(--font-sans), ui-sans-serif, system-ui, sans-serif;

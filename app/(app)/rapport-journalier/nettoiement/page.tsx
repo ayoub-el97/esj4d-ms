@@ -2,7 +2,9 @@ import { Suspense } from "react";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
 import { getEmployees, employeeName } from "@/lib/data/employees";
-import { getCleaningReport } from "@/lib/data/reports";
+import { getCleaningReport, getReportEligibility } from "@/lib/data/reports";
+import { syncCleaningReport } from "@/lib/report-sync";
+import { createClient } from "@/lib/supabase/server";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { TEAM_LABELS } from "@/lib/types";
@@ -19,8 +21,17 @@ export default async function NettoiementPage({ searchParams }: { searchParams: 
   const [user, { t, locale }] = await Promise.all([requireModule("rapport_journalier"), getI18n()]);
   const sp = await searchParams;
   const date = isISODate(sp.date) ? sp.date : todayISO();
-  const [workDay, { report, agents }, employees] = await Promise.all([getWorkDay(date), getCleaningReport(date), getEmployees({ onlyActive: true })]);
+  const workDay = await getWorkDay(date);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
+  // Journée ouverte : le rapport est remis à jour d'après le pointage (lieux, commentaires et photos conservés)
+  if (canEdit) {
+    try {
+      await syncCleaningReport(await createClient(), date);
+    } catch {
+      // affichage du rapport tel qu'enregistré
+    }
+  }
+  const [{ report, agents }, employees, eligible] = await Promise.all([getCleaningReport(date), getEmployees({ onlyActive: true }), getReportEligibility(date)]);
 
   return (
     <div>
@@ -37,7 +48,7 @@ export default async function NettoiementPage({ searchParams }: { searchParams: 
         report={report}
         agents={agents}
         canEdit={canEdit}
-        employeeOptions={employees.map((e) => ({ id: e.id, label: `${employeeName(e)} (${t(TEAM_LABELS[e.team_type])})` }))}
+        employeeOptions={employees.filter((e) => eligible.nettoiement.has(e.id)).map((e) => ({ id: e.id, label: `${employeeName(e)} (${t(TEAM_LABELS[e.team_type])})` }))}
       />
 
       <ModuleButtons pdfSlot={report ? <PdfExportButton kind="rapport-nettoiement" params={{ date }} /> : undefined} historyHref="/rapport-journalier/nettoiement/historique" />

@@ -2069,4 +2069,7 @@ export const en: Messages = {
   "déjà pointé au Nettoiement (pointage déplacé)": "already recorded in Cleaning (attendance moved)",
   "{name} est affecté temporairement à l'équipe {team} le {date} : il ne peut pas figurer sur cette feuille. Rechargez la page, ou annulez l'affectation.": "{name} is temporarily assigned to the {team} team on {date}: they cannot appear on this sheet. Reload the page, or cancel the assignment.",
   "{name} est déjà pointé dans l'autre équipe le {date} : un employé ne peut figurer que sur une seule feuille par jour.": "{name} is already recorded in the other team on {date}: an employee can appear on only one sheet per day.",
+  "Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.": "This employee is not recorded as present in Cleaning that day: correct the attendance first.",
+  "Heures supplémentaires : automatiques (au-delà de 8 h après l'heure d'entrée réelle) + manuelles (accordées par le responsable)": "Overtime: automatic (beyond 8 h after the actual start time) + manual (granted by the manager)",
+  "Les Gardiens ne figurent pas dans les rapports de collecte.": "Guards are not included in collection reports.",
 };

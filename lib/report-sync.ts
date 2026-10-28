@@ -17,6 +17,8 @@ import type { createClient } from "@/lib/supabase/server";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 const WORKED = ["present", "repos_travaille"];
+/** Gardiens : suivis au pointage, jamais repris dans les rapports journaliers (fonction habituelle ou du jour). */
+const isGardien = (...positions: (string | null | undefined)[]) => positions.includes("gardien");
 
 export type SyncResult = { cleaningAgents: number; collectionTeams: number; warnings: { key: string; vars?: Record<string, string | number> }[] };
 
@@ -31,12 +33,15 @@ async function photoCounts(supabase: Supabase, entityType: string, ids: string[]
 export async function syncCleaningReport(supabase: Supabase, date: string): Promise<number> {
   const { data: att, error } = await supabase
     .from("attendance")
-    .select("employee_id")
+    .select("employee_id, position")
     .eq("activity_date", date)
     .eq("team_type", "nettoiement")
     .in("status", WORKED);
   if (error) throw new Error(error.message);
-  const worked = Array.from(new Set((att ?? []).map((a) => a.employee_id as string)));
+  const ids = Array.from(new Set((att ?? []).map((a) => a.employee_id as string)));
+  const { data: perm } = ids.length ? await supabase.from("employees").select("id, position").in("id", ids) : { data: [] };
+  const permPos = new Map((perm ?? []).map((e) => [e.id as string, e.position as string]));
+  const worked = ids.filter((id) => !(att ?? []).some((a) => a.employee_id === id && isGardien(a.position as string, permPos.get(id))));
 
   let { data: report } = await supabase.from("cleaning_reports").select("id").eq("activity_date", date).maybeSingle();
   if (!report) {
@@ -110,7 +115,7 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
       warnings.push({ key: "Le camion {plate} est indiqué pour deux équipes : vérifiez le pointage.", vars: { plate: plates.get(truckId) ?? "?" } });
       continue;
     }
-    const crew = Array.from(new Set(worked.filter((r) => r.position !== "chauffeur" && r.position !== "chauffeur_remplacant").map((r) => r.employee_id)));
+    const crew = Array.from(new Set(worked.filter((r) => r.position !== "chauffeur" && r.position !== "chauffeur_remplacant" && !isGardien(r.position, empById.get(r.employee_id)?.position as string)).map((r) => r.employee_id)));
     teams.set(truckId, { truckId, chauffeurId: driver.employee_id, crew });
   }
 
@@ -154,4 +159,33 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
   }
 
   return { teams: teams.size, warnings };
+}
+
+/**
+ * Employés repris dans les rapports journaliers d'une date, d'après le pointage :
+ * jour travaillé (Présent, Jour de repos travaillé) dans l'équipe du jour, Gardiens exclus
+ * (fonction habituelle ou du jour). collecte : employé → fonction du jour (1re ligne).
+ */
+export async function reportEligibility(supabase: Supabase, date: string): Promise<{ nettoiement: Set<string>; collecte: Map<string, string> }> {
+  const { data: att, error } = await supabase.from("attendance").select("employee_id, team_type, position, status, shift").eq("activity_date", date).in("status", WORKED).order("shift");
+  if (error) throw new Error(error.message);
+  const ids = Array.from(new Set((att ?? []).map((a) => a.employee_id as string)));
+  const { data: perm } = ids.length ? await supabase.from("employees").select("id, position").in("id", ids) : { data: [] };
+  const permPos = new Map((perm ?? []).map((e) => [e.id as string, e.position as string]));
+  const gardiens = new Set((att ?? []).filter((a) => isGardien(a.position as string, permPos.get(a.employee_id as string))).map((a) => a.employee_id as string));
+  const nettoiement = new Set<string>();
+  const collecte = new Map<string, string>();
+  for (const a of att ?? []) {
+    const id = a.employee_id as string;
+    if (gardiens.has(id)) continue;
+    if (a.team_type === "nettoiement") nettoiement.add(id);
+    else if (!collecte.has(id)) collecte.set(id, a.position as string);
+  }
+  return { nettoiement, collecte };
+}
+
+/** Équipiers proposés dans un rapport de collecte : pointés à la Collecte ce jour, hors chauffeurs et Gardiens. */
+export async function collecteCrewCandidates(supabase: Supabase, date: string): Promise<{ employee_id: string; day_position: string }[]> {
+  const { collecte } = await reportEligibility(supabase, date);
+  return [...collecte.entries()].filter(([, pos]) => pos !== "chauffeur" && pos !== "chauffeur_remplacant").map(([employee_id, day_position]) => ({ employee_id, day_position }));
 }

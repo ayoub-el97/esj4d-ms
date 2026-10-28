@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { cleaningGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
+import { DEFAULT_TIME_IN, DEFAULT_TIME_OUT, suggestedTimeOut } from "@/lib/default-times";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeftRight, Copy, Lock, Plus, Save, Trash2, Undo2, UserPlus } from "lucide-react";
@@ -150,8 +151,9 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         employee_id: o.id,
         shift: 1,
         status: o.rest_day === dow ? "repos_travaille" : "present",
-        time_in: "",
-        time_out: "",
+        // Heures proposées par défaut (modifiables)
+        time_in: DEFAULT_TIME_IN,
+        time_out: DEFAULT_TIME_OUT,
         overtime_manual: 0,
         overtime_auto: 0,
         observation: "",
@@ -348,7 +350,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
               <th className="px-2 py-2 text-start">{t("Statut / motif")}</th>
               <th className="px-2 py-2 text-start">{t("H. entrée")}</th>
               <th className="px-2 py-2 text-start">{t("H. sortie")}</th>
-              <th className="px-2 py-2 text-start" title={t("Heures supplémentaires : automatiques (après l'heure de fin normale) + manuelles (accordées par le responsable)")}>
+              <th className="px-2 py-2 text-start" title={t("Heures supplémentaires : automatiques (au-delà de 8 h après l'heure d'entrée réelle) + manuelles (accordées par le responsable)")}>
                 {t("HS")}
                 <span className="block text-[10px] font-normal text-muted-foreground">{t("auto + manuel")}</span>
               </th>
@@ -624,7 +626,12 @@ function GroupRows({
                     toast.warning(t(LEAVE_WARNING), { duration: 9000 });
                     return;
                   }
-                  onUpdate(i, { status: next, ...(next !== "absent_maladie" ? { sick_departure: false } : {}) });
+                  onUpdate(i, {
+                    status: next,
+                    ...(next !== "absent_maladie" ? { sick_departure: false } : {}),
+                    // Jour travaillé sans heures saisies : 06:00 – 14:00 proposés (modifiables)
+                    ...(isWorked(next) && r.shift === 1 && !r.time_in && !r.time_out ? { time_in: DEFAULT_TIME_IN, time_out: DEFAULT_TIME_OUT } : {}),
+                  });
                 }}
                 className={cn("min-w-32", r.leave_lock && !r.leave_override && "border-emerald-400 font-medium")}
               >
@@ -703,7 +710,7 @@ function GroupRows({
               )}
             </td>
             <td className="px-2 py-1">
-              <Input type="time" value={r.time_in} disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))} onChange={(e) => onUpdate(i, { time_in: e.target.value })} className="w-28" />
+              <Input type="time" value={r.time_in} disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))} onChange={(e) => onUpdate(i, { time_in: e.target.value, ...(isWorked(r.status) && e.target.value ? { time_out: suggestedTimeOut(r.time_in, r.time_out, e.target.value) } : {}) })} className="w-28" />
               {isWorked(r.status) && expectedEnd(r.time_in) && (
                 <div className="mt-0.5 text-[10px] text-muted-foreground not-italic" title={t("Journée standard de 8 h à partir de l'heure d'entrée")}>
                   {t("fin prévue {time}", { time: expectedEnd(r.time_in)!.time })}

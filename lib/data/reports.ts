@@ -7,6 +7,7 @@ import { employeeName, getEmployees, getTrucks, type Employee, type Truck } from
 import { getPhotosFor } from "@/lib/data/photos";
 import type { PhotoItem } from "@/lib/photo-types";
 import { collectionMissing, collectionStatus, type CollectionStatus } from "@/lib/collection-status";
+import { collecteCrewCandidates, reportEligibility } from "@/lib/report-sync";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,17 +91,35 @@ export type CleaningSummaryRow = {
 // ---------------------------------------------------------------------------
 // Nettoiement
 // ---------------------------------------------------------------------------
+const isGardien = (...positions: (string | null | undefined)[]) => positions.includes("gardien");
+
+/**
+ * Employés repris dans les rapports journaliers d'une date, d'après le pointage :
+ * jour travaillé (Présent, Jour de repos travaillé) dans l'équipe du jour, Gardiens exclus.
+ * collecte : employé → fonction du jour.
+ */
+export async function getReportEligibility(date: string): Promise<{ nettoiement: Set<string>; collecte: Map<string, Position> }> {
+  const r = await reportEligibility(await createClient(), date);
+  return { nettoiement: r.nettoiement, collecte: r.collecte as Map<string, Position> };
+}
+
 export async function getCleaningReport(date: string): Promise<{ report: CleaningReport | null; agents: CleaningAgent[] }> {
   const supabase = await createClient();
   const { data: report } = await supabase.from("cleaning_reports").select("*").eq("activity_date", date).maybeSingle<CleaningReport>();
   if (!report) return { report: null, agents: [] };
 
-  const [{ data: agents }, employees] = await Promise.all([
+  const [{ data: agents }, employees, { data: day }, eligible] = await Promise.all([
     supabase.from("cleaning_report_agents").select("*").eq("report_id", report.id).eq("excluded", false).order("sort_order").order("created_at"),
     getEmployees(),
+    supabase.from("work_days").select("status").eq("activity_date", date).maybeSingle(),
+    getReportEligibility(date),
   ]);
   const byId = new Map(employees.map((e) => [e.id, e]));
-  const list = agents ?? [];
+  // Journée ouverte : le rapport suit le pointage (présents au Nettoiement ce jour, Gardiens exclus).
+  // Les lignes d'un agent qui n'est plus présent restent en base (lieu, commentaire, photos) et
+  // réapparaissent si le pointage est corrigé. Journée clôturée : rapport conservé tel quel.
+  const closed = day?.status === "closed";
+  const list = (agents ?? []).filter((a) => (closed ? !isGardien(byId.get(a.employee_id)?.position) : eligible.nettoiement.has(a.employee_id)));
   const photos = await getPhotosFor("cleaning_report_agent", list.map((a) => a.id));
 
   return {
@@ -200,7 +219,8 @@ export async function getCollectionReports(filters: { date?: string; from?: stri
           const e = empById.get(x.employee_id);
           return e ? { ...e, day_position: dayPos.get(`${r.activity_date}|${e.id}`) ?? null } : null;
         })
-        .filter((e): e is Employee & { day_position: Position | null } => !!e),
+        // Gardiens : jamais repris dans le rapport de collecte
+        .filter((e): e is Employee & { day_position: Position | null } => !!e && !isGardien(e.position, e.day_position)),
       truckReport: (truckReports ?? []).find((t) => t.activity_date === r.activity_date && t.truck_id === r.truck_id && t.shift === "matin" && t.line_no === 1) ?? null,
       photosAvant: ph.filter((p) => p.phase === "avant"),
       photosApres: ph.filter((p) => p.phase === "apres"),
@@ -309,4 +329,21 @@ export async function getCleaningSummary(date: string): Promise<CleaningSummaryR
   const supabase = await createClient();
   const { data } = await supabase.from("cleaning_daily_summary").select("*").eq("activity_date", date).order("sort_order").order("created_at").returns<CleaningSummaryRow[]>();
   return data ?? [];
+}
+
+/**
+ * Équipiers proposés dans un rapport de collecte : employés pointés à la Collecte ce jour
+ * (jour travaillé), quelle que soit leur fonction habituelle (ex. balayeur affecté à la Collecte),
+ * chauffeurs et Gardiens exclus. day_position = fonction du jour au pointage.
+ */
+export async function getCollecteCrewOptions(date: string): Promise<(Employee & { day_position: Position | null })[]> {
+  const [candidates, employees] = await Promise.all([collecteCrewCandidates(await createClient(), date), getEmployees()]);
+  const byId = new Map(employees.map((e) => [e.id, e]));
+  return candidates
+    .map((c) => {
+      const e = byId.get(c.employee_id);
+      return e ? { ...e, day_position: c.day_position as Position } : null;
+    })
+    .filter((e): e is Employee & { day_position: Position } => !!e)
+    .sort((a, b) => a.order_number - b.order_number);
 }

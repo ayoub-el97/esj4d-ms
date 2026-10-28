@@ -1,25 +1,26 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { FONT, FONT_BOLD, isRtlText } from "./fonts";
 import type { ReactNode } from "react";
 import { usePdf } from "./context";
 import type { PhotoItem } from "@/lib/photo-types";
 
 export const styles = StyleSheet.create({
-  page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111" },
+  page: { padding: 28, fontSize: 9, fontFamily: FONT, color: "#111" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   logo: { width: 40, height: 40, backgroundColor: "#4f46e5", color: "#fff", fontSize: 18, textAlign: "center", paddingTop: 11, borderRadius: 6 },
   logoImage: { width: 44, height: 44, objectFit: "contain" },
-  title: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "center" },
+  title: { fontSize: 14, fontFamily: FONT_BOLD, textAlign: "center" },
   subtitle: { fontSize: 9, color: "#555", textAlign: "center", marginTop: 2 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8, fontSize: 9 },
   metaBox: { borderWidth: 1, borderColor: "#999", padding: 4, minWidth: 120 },
   table: { borderWidth: 1, borderColor: "#999", borderBottomWidth: 0 },
   tr: { flexDirection: "row", borderBottomWidth: 1, borderColor: "#999", minHeight: 16 },
-  th: { backgroundColor: "#e5e7eb", fontFamily: "Helvetica-Bold" },
+  th: { backgroundColor: "#e5e7eb", fontFamily: FONT_BOLD },
   td: { padding: 3, borderRightWidth: 1, borderColor: "#999", justifyContent: "center" },
   tdLast: { borderRightWidth: 0 },
-  groupRow: { backgroundColor: "#eef2ff", fontFamily: "Helvetica-Bold" },
+  groupRow: { backgroundColor: "#eef2ff", fontFamily: FONT_BOLD },
   footer: { position: "absolute", bottom: 14, left: 28, right: 28, fontSize: 7, color: "#777", flexDirection: "row", justifyContent: "space-between" },
-  section: { marginTop: 10, marginBottom: 4, fontSize: 11, fontFamily: "Helvetica-Bold" },
+  section: { marginTop: 10, marginBottom: 4, fontSize: 11, fontFamily: FONT_BOLD },
   small: { fontSize: 8, color: "#555" },
 });
 
@@ -48,7 +49,7 @@ export function PdfTable({ columns, rows }: { columns: Column[]; rows: (Record<s
           <View key={idx} style={styles.tr} wrap={false}>
             {columns.map((c, i) => (
               <View key={c.key} style={[styles.td, { width: `${c.width}%` }, i === columns.length - 1 ? styles.tdLast : {}]}>
-                <Text style={{ textAlign: c.align ?? "left" }}>{r[c.key] ?? ""}</Text>
+                <Text style={{ textAlign: c.align ?? (isRtlText(r[c.key]) ? "right" : "left") }}>{r[c.key] ?? ""}</Text>
               </View>
             ))}
           </View>
@@ -76,7 +77,7 @@ export function PdfHeader({ company, title, subtitle }: { company: string; title
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
       <View style={{ width: 130, alignItems: "flex-end" }}>
-        <Text style={[styles.small, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{company}</Text>
+        <Text style={[styles.small, { textAlign: "right", fontFamily: FONT_BOLD }]}>{company}</Text>
         {(companyDetails ?? []).map((l, i) => (
           <Text key={i} style={[styles.small, { textAlign: "right", fontSize: 7 }]}>
             {l}
