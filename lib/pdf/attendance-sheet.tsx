@@ -7,16 +7,17 @@ import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
+// Pas de colonne « Statut / motif » : un jour non travaillé est écrit dans les colonnes d'heures
+// (Repos, Congé payé, Absent…). HS = total (automatiques + manuelles).
 const COLUMNS: Column[] = [
   { key: "nb", label: "N°", width: 5, align: "center" },
-  { key: "poste", label: "Poste", width: 10 },
-  { key: "nom", label: "Nom et prénom", width: 24 },
+  { key: "poste", label: "Poste", width: 12 },
+  { key: "nom", label: "Nom et prénom", width: 27 },
   { key: "repos", label: "Repos", width: 7, align: "center" },
-  { key: "entree", label: "H. entrée", width: 9, align: "center" },
-  { key: "sortie", label: "H. sortie", width: 9, align: "center" },
-  { key: "hs", label: "HS (auto+man.)", width: 6, align: "center" },
-  { key: "statut", label: "Statut / motif", width: 12 },
-  { key: "obs", label: "Observation", width: 18 },
+  { key: "entree", label: "Heure d'entrée", width: 10, align: "center" },
+  { key: "sortie", label: "Heure de sortie", width: 10, align: "center" },
+  { key: "hs", label: "HS", width: 6, align: "center" },
+  { key: "obs", label: "Observation", width: 23 },
 ];
 
 export function AttendanceSheetPdf({
@@ -49,17 +50,22 @@ export function AttendanceSheetPdf({
     poste: r.usual_position && r.usual_position !== r.position ? `${t(POSITION_LABELS[r.position])} (${t("hab.")} ${t(POSITION_LABELS[r.usual_position])})` : t(POSITION_LABELS[r.position]),
     nom: r.name + (r.shift > 1 ? ` (${t("service {n}", { n: r.shift })})` : "") + (r.replacing_employee_id ? ` (${t("remplaçant")})` : r.is_extra ? ` (${t("renfort")})` : ""),
     repos: r.rest_day == null ? "" : t(WEEKDAY_SHORT[r.rest_day]),
-    entree: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_in : "",
-    sortie: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_out : "",
+    // Jour travaillé : heures saisies ; sinon le statut (« Repos », « Congé payé »…) dans les deux colonnes
+    entree: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_in : t(ATTENDANCE_STATUS_LABELS[r.status]),
+    sortie: WORKED_STATUSES.includes(r.status) || r.sick_departure ? r.time_out : t(ATTENDANCE_STATUS_LABELS[r.status]),
     hs: (() => {
       if (!WORKED_STATUSES.includes(r.status) && !r.sick_departure) return "";
-      const auto = Number(r.overtime_auto) || 0;
-      const manual = Number(r.overtime_manual) || 0;
-      if (!auto && !manual) return "";
-      return auto && manual ? `${fmtHours(auto + manual)} (${fmtHours(auto)}+${fmtHours(manual)})` : fmtHours(auto + manual);
+      const total = (Number(r.overtime_auto) || 0) + (Number(r.overtime_manual) || 0);
+      return total ? fmtHours(total) : "";
     })(),
-    statut: t(ATTENDANCE_STATUS_LABELS[r.status]) + (r.sick_departure ? ` (${t("départ anticipé")})` : ""),
-    obs: r.observation,
+    // Informations de l'ancienne colonne « Statut / motif » qui ne se lisent pas dans les heures
+    obs: [
+      r.status === "repos_travaille" ? t(ATTENDANCE_STATUS_LABELS.repos_travaille) : "",
+      r.sick_departure ? `${t(ATTENDANCE_STATUS_LABELS.absent_maladie)} (${t("départ anticipé")})` : "",
+      r.observation,
+    ]
+      .filter(Boolean)
+      .join(" — "),
   });
 
   const supervisors = rows.filter((r) => r.position === "superviseur");

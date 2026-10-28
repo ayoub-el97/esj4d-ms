@@ -2075,4 +2075,6 @@ export const en: Messages = {
   "Collecte ce jour": "Collection today",
   "Feuille du jour pas encore enregistrée : liste prévue d'après les équipes habituelles.": "Today's sheet not saved yet: list based on the usual teams.",
   "Liste : {count} employé(s) de la feuille de présence Collecte du {date} (chauffeurs et Gardiens exclus).": "List: {count} employee(s) from the Collection attendance sheet of {date} (drivers and guards excluded).",
+  "Heure d'entrée": "Start time",
+  "Heure de sortie": "End time",
 };

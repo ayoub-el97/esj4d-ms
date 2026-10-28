@@ -2075,4 +2075,6 @@ export const ar: Messages = {
   "Collecte ce jour": "الجمع هذا اليوم",
   "Feuille du jour pas encore enregistrée : liste prévue d'après les équipes habituelles.": "ورقة اليوم لم تُحفظ بعد: القائمة حسب الفرق المعتادة.",
   "Liste : {count} employé(s) de la feuille de présence Collecte du {date} (chauffeurs et Gardiens exclus).": "القائمة: {count} عامل من ورقة حضور الجمع بتاريخ {date} (باستثناء السائقين والحراس).",
+  "Heure d'entrée": "ساعة الدخول",
+  "Heure de sortie": "ساعة الخروج",
 };
