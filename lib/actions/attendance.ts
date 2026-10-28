@@ -171,6 +171,7 @@ export async function saveSheet(payload: SheetPayload): Promise<ActionResult & {
   }
 
   revalidatePath("/pointage");
+  revalidatePath("/rapport-journalier", "layout");
 
   // Rapport journalier rempli automatiquement depuis le pointage (si l'utilisateur peut le modifier)
   let reportNote = "";
@@ -266,6 +267,7 @@ export async function cancelDayAssignment(date: string, employeeId: string): Pro
 /** Pointage déplacé d'une équipe à l'autre : les deux rapports journaliers du jour sont recalculés. */
 async function afterAssignmentChange(user: Parameters<typeof hasPermission>[0], date: string) {
   revalidatePath("/pointage", "layout");
+  revalidatePath("/rapport-journalier", "layout");
   if (!hasPermission(user, "rapport_journalier", "edit")) return;
   const supabase = await createClient();
   try {

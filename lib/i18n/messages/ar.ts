@@ -2072,4 +2072,7 @@ export const ar: Messages = {
   "Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.": "هذا العامل غير مسجل حاضرًا في التنظيف هذا اليوم: صحّح تسجيل الحضور أولًا.",
   "Heures supplémentaires : automatiques (au-delà de 8 h après l'heure d'entrée réelle) + manuelles (accordées par le responsable)": "الساعات الإضافية: تلقائية (بعد 8 ساعات من ساعة الدخول الفعلية) + يدوية (يمنحها المسؤول)",
   "Les Gardiens ne figurent pas dans les rapports de collecte.": "الحراس لا يظهرون في تقارير الجمع.",
+  "Collecte ce jour": "الجمع هذا اليوم",
+  "Feuille du jour pas encore enregistrée : liste prévue d'après les équipes habituelles.": "ورقة اليوم لم تُحفظ بعد: القائمة حسب الفرق المعتادة.",
+  "Liste : {count} employé(s) de la feuille de présence Collecte du {date} (chauffeurs et Gardiens exclus).": "القائمة: {count} عامل من ورقة حضور الجمع بتاريخ {date} (باستثناء السائقين والحراس).",
 };

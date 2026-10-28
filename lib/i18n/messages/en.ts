@@ -2072,4 +2072,7 @@ export const en: Messages = {
   "Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.": "This employee is not recorded as present in Cleaning that day: correct the attendance first.",
   "Heures supplémentaires : automatiques (au-delà de 8 h après l'heure d'entrée réelle) + manuelles (accordées par le responsable)": "Overtime: automatic (beyond 8 h after the actual start time) + manual (granted by the manager)",
   "Les Gardiens ne figurent pas dans les rapports de collecte.": "Guards are not included in collection reports.",
+  "Collecte ce jour": "Collection today",
+  "Feuille du jour pas encore enregistrée : liste prévue d'après les équipes habituelles.": "Today's sheet not saved yet: list based on the usual teams.",
+  "Liste : {count} employé(s) de la feuille de présence Collecte du {date} (chauffeurs et Gardiens exclus).": "List: {count} employee(s) from the Collection attendance sheet of {date} (drivers and guards excluded).",
 };

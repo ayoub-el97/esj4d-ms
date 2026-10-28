@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
-import { getCollecteCrewOptions, getCollectionReport } from "@/lib/data/reports";
+import { getCollectionReport } from "@/lib/data/reports";
+import { buildSheet } from "@/lib/data/attendance";
+import { crewOptionsFromSheet } from "@/lib/crew-options";
 import { formatDateLongFr } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
@@ -21,13 +23,22 @@ export default async function CollectionReportPage({ params }: { params: Promise
   const { id } = await params;
   const report = await getCollectionReport(id);
   if (!report) notFound();
-  const [workDay, trucks, collecte, audit, crewOptions] = await Promise.all([
+  const [workDay, trucks, collecte, audit, sheet, allEmployees] = await Promise.all([
     getWorkDay(report.activity_date),
     getTrucks(true),
     getEmployees({ onlyActive: true }),
     getRecordAuditInfo("collection_reports", [report.id]),
-    getCollecteCrewOptions(report.activity_date),
+    // Feuille de présence Collecte de la date du rapport (même liste que le pointage)
+    buildSheet(report.activity_date, "collecte").catch(() => null),
+    getEmployees(),
   ]);
+  const empById = new Map(allEmployees.map((e) => [e.id, e]));
+  const crewOptions = crewOptionsFromSheet(sheet?.rows ?? [])
+    .map((o) => {
+      const e = empById.get(o.employee_id);
+      return e ? { ...e, day_position: o.day_position as (typeof e)["position"], day_status: o.status, day_worked: o.worked } : null;
+    })
+    .filter((e): e is NonNullable<typeof e> => !!e);
   const info = audit.get(report.id);
   const canEdit = user.permissions.rapport_journalier.can_edit && workDay?.status !== "closed";
 
@@ -47,6 +58,7 @@ export default async function CollectionReportPage({ params }: { params: Promise
         trucks={trucks}
         drivers={collecte.filter((e) => DRIVER_POSITIONS.includes(e.position))}
         crewOptions={crewOptions}
+        crewSource={{ count: crewOptions.length, saved: !!sheet?.hasSaved }}
       />
       {info && <AuditLine info={info} t={t} />}
 

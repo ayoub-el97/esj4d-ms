@@ -7,7 +7,7 @@ import { employeeName, getEmployees, getTrucks, type Employee, type Truck } from
 import { getPhotosFor } from "@/lib/data/photos";
 import type { PhotoItem } from "@/lib/photo-types";
 import { collectionMissing, collectionStatus, type CollectionStatus } from "@/lib/collection-status";
-import { collecteCrewCandidates, reportEligibility } from "@/lib/report-sync";
+import { reportEligibility } from "@/lib/report-sync";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -329,21 +329,4 @@ export async function getCleaningSummary(date: string): Promise<CleaningSummaryR
   const supabase = await createClient();
   const { data } = await supabase.from("cleaning_daily_summary").select("*").eq("activity_date", date).order("sort_order").order("created_at").returns<CleaningSummaryRow[]>();
   return data ?? [];
-}
-
-/**
- * Équipiers proposés dans un rapport de collecte : employés pointés à la Collecte ce jour
- * (jour travaillé), quelle que soit leur fonction habituelle (ex. balayeur affecté à la Collecte),
- * chauffeurs et Gardiens exclus. day_position = fonction du jour au pointage.
- */
-export async function getCollecteCrewOptions(date: string): Promise<(Employee & { day_position: Position | null })[]> {
-  const [candidates, employees] = await Promise.all([collecteCrewCandidates(await createClient(), date), getEmployees()]);
-  const byId = new Map(employees.map((e) => [e.id, e]));
-  return candidates
-    .map((c) => {
-      const e = byId.get(c.employee_id);
-      return e ? { ...e, day_position: c.day_position as Position } : null;
-    })
-    .filter((e): e is Employee & { day_position: Position } => !!e)
-    .sort((a, b) => a.order_number - b.order_number);
 }

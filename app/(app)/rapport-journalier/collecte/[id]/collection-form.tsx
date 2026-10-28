@@ -11,7 +11,7 @@ import { COLLECTION_STATUS_LABELS, COLLECTION_STATUS_STYLES } from "@/lib/collec
 import type { Employee, Truck } from "@/lib/data/employees";
 import type { CollectionReportFull } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
-import { POSITION_LABELS, type Position } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, type AttendanceStatus, type Position } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,14 +21,33 @@ import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
 import { PhotoUploader } from "@/components/photo-uploader";
 
-export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }: { report: CollectionReportFull; canEdit: boolean; trucks: Truck[]; drivers: Employee[]; crewOptions: (Employee & { day_position?: Position | null })[] }) {
+type CrewEmployee = Employee & { day_position?: Position | null; day_status?: string; day_worked?: boolean };
+
+export function CollectionForm({
+  report,
+  canEdit,
+  trucks,
+  drivers,
+  crewOptions,
+  crewSource,
+}: {
+  report: CollectionReportFull;
+  canEdit: boolean;
+  trucks: Truck[];
+  drivers: Employee[];
+  crewOptions: CrewEmployee[];
+  /** Nombre d'employés de la feuille Collecte du jour ; feuille déjà enregistrée ou non */
+  crewSource?: { count: number; saved: boolean };
+}) {
   const { t } = useT();
   const router = useRouter();
   const [state, action] = useActionState(saveCollectionReport, null);
   const [pending, start] = useTransition();
   const [crew, setCrew] = useState<Set<string>>(() => new Set(report.rippers.map((r) => r.id)));
   // Liste proposée : équipe actuelle + employés pointés à la Collecte ce jour (quelle que soit leur fonction habituelle)
-  const crewList: (Employee & { day_position?: Position | null })[] = [...report.rippers, ...crewOptions.filter((e) => !report.rippers.some((r) => r.id === e.id))];
+  // Une entrée par employé (identifiant), sans limite de nombre
+  const optionById = new Map(crewOptions.map((e) => [e.id, e]));
+  const crewList: CrewEmployee[] = [...report.rippers.map((r) => optionById.get(r.id) ?? r), ...crewOptions.filter((e) => !report.rippers.some((r) => r.id === e.id))];
 
   useEffect(() => {
     if (state?.ok) {
@@ -90,7 +109,13 @@ export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }
                 {Array.from(crew).map((id) => (
                   <input key={id} type="hidden" name="rippers" value={id} />
                 ))}
-                <div className="grid max-h-56 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2">
+                {crewSource && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("Liste : {count} employé(s) de la feuille de présence Collecte du {date} (chauffeurs et Gardiens exclus).", { count: crewSource.count, date: report.activity_date.split("-").reverse().join("/") })}
+                    {!crewSource.saved && ` ${t("Feuille du jour pas encore enregistrée : liste prévue d'après les équipes habituelles.")}`}
+                  </p>
+                )}
+                <div className="grid max-h-80 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2">
                   {crewList.map((e) => (
                     <label key={e.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted">
                       <input
@@ -111,6 +136,8 @@ export function CollectionForm({ report, canEdit, trucks, drivers, crewOptions }
                         <span className="text-xs text-muted-foreground">
                           ({e.day_position && e.day_position !== e.position ? dayFunctionLabel(t, e.day_position, e.position) : t(POSITION_LABELS[e.position])})
                         </span>
+                        {e.team_type === "nettoiement" && <span className="ms-1 rounded bg-sky-100 px-1 text-[10px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">{t("Collecte ce jour")}</span>}
+                        {e.day_status && e.day_worked === false && <span className="ms-1 text-[10px] text-orange-700">{t(ATTENDANCE_STATUS_LABELS[e.day_status as AttendanceStatus] ?? e.day_status)}</span>}
                       </span>
                     </label>
                   ))}
