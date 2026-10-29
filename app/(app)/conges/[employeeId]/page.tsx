@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LEAVE_START_METHOD_LABELS, balanceFormula } from "@/lib/leave-method";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { employeeName, getEmployee } from "@/lib/data/employees";
@@ -64,14 +65,14 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
 
       <h2 className="mb-2 text-lg font-semibold">{t("Congés")}</h2>
       <p className="mb-2 text-sm text-muted-foreground">
-        {t("Solde restant = solde initial + congés acquis depuis le début du suivi − congés approuvés pris depuis le début du suivi + corrections.")}{" "}
-        {lb?.tracking_start ? t("Début du suivi : {date}.", { date: formatDateFr(lb.tracking_start) }) : t("Début du suivi : non défini (date de début du projet vide).")}
-        {lb?.taken_before != null && <> {t("Congés déjà pris avant le système (information) : {days} j.", { days: lb.taken_before })}</>}
+        {t("Méthode : {method}", { method: t(LEAVE_START_METHOD_LABELS[lb?.method ?? "solde_initial"]) })}.{" "}
+        {lb?.method !== "pris_avant" && (lb?.tracking_start ? t("Début du suivi : {date}.", { date: formatDateFr(lb.tracking_start) }) : t("Début du suivi : non défini (date de début du projet vide)."))}
+        {lb && <span className="mt-1 block font-medium text-foreground tabular-nums">{t("Calcul : {formula}", { formula: balanceFormula(t, lb) })}</span>}
       </p>
       <Stats
         t={t}
         items={[
-          ["Solde initial (registres papier)", lb?.initial_balance ?? 0],
+          ...((lb?.method === "pris_avant" ? [["Congés pris avant le système", lb?.taken_before ?? 0]] : [["Solde initial (registres papier)", lb?.initial_balance ?? 0]]) as [string, number][]),
           ["Mois complets de service", lb?.months ?? 0],
           ["Congés acquis", lb?.accrued ?? 0],
           ["Congés pris", lb?.taken ?? 0],

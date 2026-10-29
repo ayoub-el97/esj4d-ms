@@ -193,7 +193,8 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
       </form>
       <p className="mb-2 text-xs text-muted-foreground">
         {t("Solde restant = solde initial + congés acquis depuis le début du suivi − congés approuvés pris depuis le début du suivi + corrections.")}{" "}
-        {t("Acquisition : 1,5 jour par mois complet (taux réglable), depuis le début du suivi ou la date d'entrée si elle est postérieure. Les congés pris avant le système ne sont jamais déduits une seconde fois.")}
+        {t("Acquisition : 1,5 jour par mois complet (taux réglable), depuis le début du suivi ou la date d'entrée si elle est postérieure. Les congés pris avant le système ne sont jamais déduits une seconde fois.")}{" "}
+        {t("Situation A (congés pris avant le système) : acquis depuis la date réelle de début de travail − congés pris avant le système − congés pris dans l'application.")}
       </p>
       <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>
@@ -207,6 +208,7 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
               <TableHead>{t("Date d'entrée")}</TableHead>
               <TableHead>{t("Début du suivi")}</TableHead>
               <TableHead className="text-end">{t("Solde initial")}</TableHead>
+              <TableHead className="text-end">{t("Pris avant le système")}</TableHead>
               <TableHead className="text-end">{t("Acquis au {date}", { date: formatDateFr(asOf) })}</TableHead>
               <TableHead className="text-end">{t("Pris")}</TableHead>
               <TableHead className="text-end">{t("Corrections")}</TableHead>
@@ -218,7 +220,7 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={14} className="text-center text-muted-foreground">
+                <TableCell colSpan={15} className="text-center text-muted-foreground">
                   {t("Aucun employé ne correspond aux filtres.")}
                 </TableCell>
               </TableRow>
@@ -248,7 +250,8 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
                   )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-xs">{b.tracking_start ? formatDateFr(b.tracking_start) : "—"}</TableCell>
-                <TableCell className="text-end">{b.initial_balance || ""}</TableCell>
+                <TableCell className="text-end">{b.method === "pris_avant" ? <span className="text-xs text-muted-foreground">{t("situation A")}</span> : b.initial_balance || ""}</TableCell>
+                <TableCell className="text-end">{b.taken_before || ""}</TableCell>
                 <TableCell className="text-end">{b.accrued}</TableCell>
                 <TableCell className="text-end">{b.taken}</TableCell>
                 <TableCell className="text-end">{b.adjustments || ""}</TableCell>

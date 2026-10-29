@@ -100,8 +100,10 @@ export type LeaveBalance = EmpInfo & {
   initial_balance: number;
   /** Début du suivi des congés dans l'application */
   tracking_start: string | null;
-  /** Congés déjà pris avant le système (information) */
+  /** Congés pris avant le système (somme de l'historique avant le système) */
   taken_before: number | null;
+  /** Méthode de départ du solde (solde initial confirmé / congés pris avant le système) */
+  method: "solde_initial" | "pris_avant";
 };
 
 export type BalanceFilters = { team?: string; q?: string; includeInactive?: boolean; position?: string; status?: string };
@@ -111,7 +113,7 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
   const [{ data, error }, employees] = await Promise.all([supabase.rpc("leave_balances", { p_as_of: asOf }), getEmployees()]);
   if (error) throw new Error(error.message);
   const byId = new Map(employees.map((e) => [e.id, e]));
-  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number; accrual_from?: string | null; initial_balance?: number; tracking_start?: string | null; taken_before?: number | null };
+  type Raw = { employee_id: string; months: number; accrued: number; taken: number; planned: number; adjustments: number; balance: number; accrual_from?: string | null; initial_balance?: number; tracking_start?: string | null; taken_before?: number | null; method?: string };
   return ((data ?? []) as Raw[])
     .map((r) => ({
       ...info(byId.get(r.employee_id)),
@@ -126,6 +128,7 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
       initial_balance: Number(r.initial_balance ?? 0),
       tracking_start: r.tracking_start ?? null,
       taken_before: r.taken_before == null ? null : Number(r.taken_before),
+      method: (r.method === "pris_avant" ? "pris_avant" : "solde_initial") as LeaveBalance["method"],
     }))
     .filter((r) => (f.status === "tous" || f.includeInactive ? true : f.status === "inactifs" ? !r.is_active : r.is_active))
     .filter((r) => !f.team || r.team_type === f.team)
@@ -286,4 +289,17 @@ async function withAuthors(supabase: Awaited<ReturnType<typeof createClient>>, l
   const { data } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
   const names = new Map((data ?? []).map((p) => [p.id as string, (p.full_name as string) || (p.email as string)]));
   return list.map((a) => ({ ...a, created_by_name: a.created_by ? (names.get(a.created_by) ?? "") : "" }));
+}
+
+export type LeaveHistoryBefore = { id: string; employee_id: string; days: number; start_date: string | null; end_date: string | null; note: string; created_at: string; updated_at: string; created_by: string | null; updated_by: string | null; created_by_name: string; updated_by_name: string };
+
+/** « Historique des congés avant le système » d'un employé (registres papier), avec les auteurs. */
+export async function getLeaveHistoryBefore(employeeId: string): Promise<LeaveHistoryBefore[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("leave_history_before").select("*").eq("employee_id", employeeId).order("start_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false });
+  const list = (data ?? []) as Omit<LeaveHistoryBefore, "created_by_name" | "updated_by_name">[];
+  const ids = [...new Set(list.flatMap((h) => [h.created_by, h.updated_by]).filter((x): x is string => !!x))];
+  const { data: profiles } = ids.length ? await supabase.from("profiles").select("id, full_name, email").in("id", ids) : { data: [] };
+  const names = new Map((profiles ?? []).map((p) => [p.id as string, (p.full_name as string) || (p.email as string)]));
+  return list.map((h) => ({ ...h, days: Number(h.days), created_by_name: h.created_by ? (names.get(h.created_by) ?? "") : "", updated_by_name: h.updated_by ? (names.get(h.updated_by) ?? "") : "" }));
 }

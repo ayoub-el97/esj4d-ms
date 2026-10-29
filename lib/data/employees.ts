@@ -35,8 +35,10 @@ export type Employee = {
   in_service_before_start: boolean;
   /** « Date de début dans le système » : début du suivi des congés (vide = début du projet) */
   leave_tracking_start: string | null;
-  /** « Congés déjà pris avant le système » : information (déjà comprise dans le solde initial) */
+  /** Ancienne saisie unique « Congés déjà pris » (reprise dans leave_history_before, migration 037) */
   leave_taken_before: number | null;
+  /** Méthode de départ du solde : solde initial confirmé (B) ou congés pris avant le système (A) */
+  leave_start_method: "solde_initial" | "pris_avant";
   phone: string;
   is_active: boolean;
   /** Libellé libre de la fonction (poste « Autre fonction ») */
@@ -52,7 +54,7 @@ export type Employee = {
 export type DepartureReason = "demission" | "fin_contrat" | "licenciement" | "autre";
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, leave_tracking_start, leave_taken_before, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, leave_tracking_start, leave_taken_before, leave_start_method, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();

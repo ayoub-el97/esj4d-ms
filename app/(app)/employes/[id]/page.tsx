@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmployeeForm } from "../employee-form";
 import { LeaveSummary } from "../leave-summary";
-import { getLeaveBalances } from "@/lib/data/leaves";
+import { getLeaveBalances, getLeaveHistoryBefore } from "@/lib/data/leaves";
+import { LeaveHistoryBeforeCard } from "../leave-history-before";
 import { todayISO } from "@/lib/dates";
 
 export const generateMetadata = pageTitle("Fiche employé");
@@ -31,6 +32,7 @@ export default async function EmployePage({ params, searchParams }: { params: Pr
     <div className="space-y-6">
       <ModuleHeader title={t("Fiche employé")} subtitle={t("NB {nb} · {matricule}", { nb: employee.order_number, matricule: employee.matricule })} backHref={returnTo} />
       {user.permissions.conges.can_view && <LeaveSummary t={t} employeeId={employee.id} hireDate={employee.hire_date} balance={balance} />}
+      {user.permissions.conges.can_view && <LeaveHistoryBeforeCard employeeId={employee.id} entries={await getLeaveHistoryBefore(employee.id)} canEdit={user.role === "admin"} method={balance?.method ?? "solde_initial"} />}
       <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} canEditLeave={user.role === "admin"} initialBalance={balance?.initial_balance ?? 0} />
 
       <Card>

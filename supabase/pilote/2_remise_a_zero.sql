@@ -50,6 +50,10 @@ begin
   if to_regclass('public.daily_team_assignments') is not null then
     execute 'truncate table public.daily_team_assignments restart identity';
   end if;
+  -- Congés pris avant le système (migration 037, si elle a été exécutée)
+  if to_regclass('public.leave_history_before') is not null then
+    execute 'truncate table public.leave_history_before restart identity';
+  end if;
   -- Rapport des absents (migration 036, si elle a été exécutée)
   if to_regclass('public.absence_actions') is not null then
     execute 'truncate table public.absence_reviews, public.medical_certificates, public.absence_actions restart identity';

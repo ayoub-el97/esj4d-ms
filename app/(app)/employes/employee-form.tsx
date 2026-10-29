@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { LEAVE_START_METHODS, LEAVE_START_METHOD_HELP, LEAVE_START_METHOD_LABELS, type LeaveStartMethod } from "@/lib/leave-method";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
@@ -35,6 +36,7 @@ export function EmployeeForm({
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
   const [hireDate, setHireDate] = useState(employee?.hire_date ?? "");
+  const [method, setMethod] = useState<LeaveStartMethod>(employee?.leave_start_method ?? "solde_initial");
 
   const others = collecte.filter((e) => e.id !== employee?.id);
   const chauffeurs = others.filter((e) => e.position === "chauffeur");
@@ -175,15 +177,22 @@ export function EmployeeForm({
                   <p className="text-xs text-muted-foreground">{t("Début du suivi des congés dans l'application. Vide = date de début du projet (Paramètres › Réglages).")}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="leave_taken_before">{t("Congés déjà pris avant le système (facultatif)")}</Label>
-                  <Input id="leave_taken_before" name="leave_taken_before" type="number" step="0.5" min="0" defaultValue={employee?.leave_taken_before ?? ""} />
-                  <p className="text-xs text-muted-foreground">{t("Pour information : déjà compris dans le solde initial, jamais déduit une seconde fois.")}</p>
+                  <Label htmlFor="leave_start_method">{t("Méthode de départ du solde")}</Label>
+                  <NativeSelect id="leave_start_method" name="leave_start_method" value={method} onChange={(e) => setMethod(e.target.value as LeaveStartMethod)}>
+                    {LEAVE_START_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {t(LEAVE_START_METHOD_LABELS[m])}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                  <p className="text-xs text-muted-foreground">{t(LEAVE_START_METHOD_HELP[method])}</p>
+                  {method === "pris_avant" && !hireDate && <p className="text-xs font-medium text-destructive">{t("Renseignez la date de début de travail : sans elle, aucun congé n'est calculé avec cette méthode.")}</p>}
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <input type="hidden" name="leave_initial_current" value={initialBalance} />
-                  <Label htmlFor="leave_initial_balance">{t("Solde initial de congés (jours)")}</Label>
+                  <Label htmlFor="leave_initial_balance">{t("Solde initial de congés (jours)")}{method === "pris_avant" ? ` — ${t("non utilisé avec cette méthode")}` : ""}</Label>
                   <Input id="leave_initial_balance" name="leave_initial_balance" type="number" step="0.5" defaultValue={employee || initialBalance ? initialBalance : ""} placeholder={t("Ex. 12,5")} />
                   <p className="text-xs text-muted-foreground">{t("Solde disponible confirmé d'après les registres papier, au début du suivi dans l'application.")}</p>
                 </div>

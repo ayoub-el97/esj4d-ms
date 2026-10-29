@@ -31,6 +31,7 @@ const employeeSchema = z
     hire_date: optionalDate,
     in_service_before_start: z.boolean().default(false),
     leave_tracking_start: optionalDate,
+    leave_start_method: z.enum(["solde_initial", "pris_avant"]).default("solde_initial"),
     leave_taken_before: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number({ message: "Congés déjà pris : nombre invalide." }).min(0, "Congés déjà pris : nombre invalide.").max(999).nullable()),
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
@@ -70,6 +71,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     hire_date: formData.get("hire_date"),
     in_service_before_start: formData.get("in_service_before_start") === "on",
     leave_tracking_start: formData.get("leave_tracking_start"),
+    leave_start_method: formData.get("leave_start_method") ?? undefined,
     leave_taken_before: formData.get("leave_taken_before"),
     phone: formData.get("phone") ?? "",
     is_active: formData.get("is_active") === "on",
@@ -102,8 +104,10 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
 
   const { id, ...rest0 } = parsed.data;
   // Données de reprise des congés : administrateur uniquement (sinon non transmises, valeurs inchangées)
-  const { leave_tracking_start, leave_taken_before, ...rest1 } = rest0;
-  const rest = auth.user.role === "admin" ? { ...rest1, leave_tracking_start, leave_taken_before } : rest1;
+  // (congés pris avant le système : section « Historique des congés avant le système »)
+  const { leave_tracking_start, leave_taken_before: _before, leave_start_method, ...rest1 } = rest0;
+  void _before;
+  const rest = auth.user.role === "admin" ? { ...rest1, leave_tracking_start, leave_start_method } : rest1;
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
   const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();
@@ -305,6 +309,7 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       in_service_before_start: !!r.in_service_before_start,
       leave_tracking_start: null,
       leave_taken_before: null,
+      leave_start_method: "solde_initial" as const,
       phone: r.phone ?? "",
       is_active: true,
     });
@@ -325,10 +330,11 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       result.errors.push({ line: i + 1, error: t(msg) });
       continue;
     }
-    const { id: _id, leave_tracking_start: _a, leave_taken_before: _b, ...values } = parsed.data;
+    const { id: _id, leave_tracking_start: _a, leave_taken_before: _b, leave_start_method: _c, ...values } = parsed.data;
     void _id;
     void _a;
     void _b;
+    void _c;
     const { error } = await supabase.from("employees").insert(values);
     if (error) result.errors.push({ line: i + 1, error: t(friendlyDbError(error.message)) });
     else result.created++;

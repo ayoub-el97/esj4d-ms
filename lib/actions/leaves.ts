@@ -186,3 +186,44 @@ export async function addLeaveAdjustment(_prev: ActionResult | null, formData: F
   revalidatePath("/conges");
   return { ok: true, message: t("Ajustement enregistré (tracé dans le journal d'audit).") };
 }
+
+const historyBeforeSchema = z
+  .object({
+    id: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.string().uuid().optional()),
+    employee_id: z.string().uuid(),
+    days: z.coerce.number().min(0.5, "Indiquez le nombre de jours (au moins 0,5).").max(999),
+    start_date: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date("Date invalide.").nullable()),
+    end_date: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date("Date invalide.").nullable()),
+    note: z.string().trim().max(1000).default(""),
+  })
+  .refine((d) => !d.start_date || !d.end_date || d.end_date >= d.start_date, { message: "La date de fin ne peut pas précéder la date de début.", path: ["end_date"] });
+
+/** Congés pris avant le système (registres papier) : ajout ou correction, administrateur, journalisé. */
+export async function saveLeaveHistoryBefore(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("conges", "view");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (auth.user.role !== "admin") return { ok: false, error: t("Seul un administrateur peut modifier les données de reprise des congés.") };
+  const parsed = historyBeforeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
+  const { id, ...values } = parsed.data;
+  const supabase = await createClient();
+  const { error } = id ? await supabase.from("leave_history_before").update(values).eq("id", id) : await supabase.from("leave_history_before").insert({ ...values, created_by: auth.user.id });
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  revalidatePath("/conges", "layout");
+  revalidatePath(`/employes/${values.employee_id}`);
+  return { ok: true, message: id ? t("Congés pris avant le système corrigés.") : t("Congés pris avant le système enregistrés.") };
+}
+
+export async function deleteLeaveHistoryBefore(id: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("conges", "view");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (auth.user.role !== "admin") return { ok: false, error: t("Seul un administrateur peut modifier les données de reprise des congés.") };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leave_history_before").delete().eq("id", id).select("employee_id").single();
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  revalidatePath("/conges", "layout");
+  revalidatePath(`/employes/${data.employee_id}`);
+  return { ok: true, message: t("Ligne supprimée (conservée dans le journal).") };
+}
