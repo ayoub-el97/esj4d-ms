@@ -1,4 +1,5 @@
 import { Text, View } from "@react-pdf/renderer";
+import { fmtDays, leaveDashboard } from "@/lib/leave-method";
 import type { AccrualLine, Adjustment, LeaveBalance, LeaveRequest, RecoveryBalance, RecoveryCredit, RecoveryRequest, TakenDay } from "@/lib/data/leaves";
 import type { Employee } from "@/lib/data/employees";
 import { employeeName } from "@/lib/data/employees";
@@ -13,40 +14,31 @@ import { CREDIT_STATE_LABELS, creditLabel } from "@/lib/recovery-credit";
 export function LeaveBalancesPdf({ company, asOf, filterLabel, rows, generatedBy }: { company: string; asOf: string; filterLabel: string; rows: LeaveBalance[]; generatedBy: string }) {
   const { t } = usePdf();
   const columns: Column[] = [
-    { key: "nb", label: "NB", width: 5, align: "center" },
-    { key: "mat", label: "Matricule", width: 9 },
-    { key: "nom", label: "Nom et prénom", width: 19 },
-    { key: "eq", label: "Équipe", width: 8 },
-    { key: "poste", label: "Poste", width: 9 },
-    { key: "entree", label: "Date d'entrée", width: 10 },
-    { key: "init", label: "Solde initial", width: 7, align: "right" },
-    { key: "avant", label: "Pris avant", width: 6, align: "right" },
-    { key: "acq", label: "Acquis", width: 8, align: "right" },
-    { key: "pris", label: "Pris", width: 7, align: "right" },
-    { key: "adj", label: "Corrections", width: 9, align: "right" },
-    { key: "solde", label: "Solde restant", width: 9, align: "right" },
+    { key: "nb", label: "N°", width: 6, align: "center" },
+    { key: "nom", label: "Nom et prénom", width: 34 },
+    { key: "entree", label: "Date d’entrée en service", width: 18 },
+    { key: "conge", label: "Solde congé", width: 14, align: "right" },
+    { key: "pris", label: "Solde pris", width: 14, align: "right" },
+    { key: "restant", label: "Solde restant", width: 14, align: "right" },
   ];
   return (
-    <PdfDocument title={`${t("Solde de congés")} ${asOf}`} company={company} generatedBy={generatedBy} orientation="landscape">
+    <PdfDocument title={`${t("Solde de congés")} ${asOf}`} company={company} generatedBy={generatedBy}>
       <PdfHeader company={company} title={t("Solde de congés")} subtitle={`${t("au {date}", { date: formatDateFr(asOf) })}${filterLabel ? ` — ${filterLabel}` : ""}`} />
       <PdfTable
         columns={columns}
-        rows={rows.map((r) => ({
-          nb: String(r.order_number),
-          mat: r.matricule,
-          nom: r.name,
-          eq: r.team_type ? t(TEAM_LABELS[r.team_type]) : "",
-          poste: r.position ? t(POSITION_LABELS[r.position]) : "",
-          entree: r.hire_date ? formatDateFr(r.hire_date) : r.accrual_from ? `${t("Non renseignée")} (${t("décompte depuis le {date}", { date: formatDateFr(r.accrual_from) })})` : t("Date de début non renseignée"),
-          init: r.method === "pris_avant" ? "A" : r.initial_balance ? String(r.initial_balance) : "",
-          avant: r.taken_before ? String(r.taken_before) : "",
-          acq: String(r.accrued),
-          pris: String(r.taken),
-          adj: r.adjustments ? String(r.adjustments) : "",
-          solde: String(r.balance),
-        }))}
+        rows={rows.map((r, i) => {
+          const d = leaveDashboard(r);
+          return {
+            nb: String(i + 1),
+            nom: r.name,
+            entree: r.hire_date ? formatDateFr(r.hire_date) : t("Date manquante — à compléter"),
+            conge: d.missingStart ? "—" : fmtDays(d.conge),
+            pris: d.missingStart ? "—" : fmtDays(d.pris),
+            restant: d.missingStart ? "—" : `${fmtDays(d.restant)}${d.restant < 0 ? ` (${t("À vérifier")})` : ""}`,
+          };
+        })}
       />
-      <Text style={[styles.small, { marginTop: 6 }]}>{t("Solde = congés acquis − congés effectivement pris + corrections. Acquisition : 1,5 jour par mois complet de service.")}</Text>
+      <Text style={[styles.small, { marginTop: 6 }]}>{t("Solde congé : 1,5 jour par mois complet de service depuis la date d'entrée en service. Solde pris : congés pris avant le système + congés approuvés déjà pris dans l'application. Solde restant = Solde congé − Solde pris. Calcul au {date}.", { date: formatDateFr(asOf) })}</Text>
     </PdfDocument>
   );
 }

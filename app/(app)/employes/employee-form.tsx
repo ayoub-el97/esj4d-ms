@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { toast } from "sonner";
 import { LEAVE_START_METHODS, LEAVE_START_METHOD_HELP, LEAVE_START_METHOD_LABELS, type LeaveStartMethod } from "@/lib/leave-method";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
@@ -36,7 +37,7 @@ export function EmployeeForm({
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
   const [hireDate, setHireDate] = useState(employee?.hire_date ?? "");
-  const [method, setMethod] = useState<LeaveStartMethod>(employee?.leave_start_method ?? "solde_initial");
+  const [method, setMethod] = useState<LeaveStartMethod>(employee?.leave_start_method ?? "pris_avant");
 
   const others = collecte.filter((e) => e.id !== employee?.id);
   const chauffeurs = others.filter((e) => e.position === "chauffeur");
@@ -153,7 +154,7 @@ export function EmployeeForm({
               </NativeSelect>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="hire_date">{t("Date de début de travail (facultatif)")}</Label>
+              <Label htmlFor="hire_date">{t("Date d’entrée en service (facultatif)")}</Label>
               <Input id="hire_date" name="hire_date" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
               <p className="text-xs text-muted-foreground">
                 {t("Laissez vide si la date réelle est inconnue (employé déjà en poste avant l'application) : aucune date n'est supposée. Sert au calcul des congés acquis.")}
@@ -193,7 +194,21 @@ export function EmployeeForm({
                 <div className="space-y-1">
                   <input type="hidden" name="leave_initial_current" value={initialBalance} />
                   <Label htmlFor="leave_initial_balance">{t("Solde initial de congés (jours)")}{method === "pris_avant" ? ` — ${t("non utilisé avec cette méthode")}` : ""}</Label>
-                  <Input id="leave_initial_balance" name="leave_initial_balance" type="number" step="0.5" defaultValue={employee || initialBalance ? initialBalance : ""} placeholder={t("Ex. 12,5")} />
+                  <Input
+                    id="leave_initial_balance"
+                    name="leave_initial_balance"
+                    type="number"
+                    step="0.5"
+                    defaultValue={employee || initialBalance ? initialBalance : ""}
+                    placeholder={t("Ex. 12,5")}
+                    onChange={(e) => {
+                      // Un solde initial confirmé n'a de sens qu'avec la méthode « solde initial »
+                      if (e.target.value.trim() !== "" && Number(e.target.value) !== initialBalance && method === "pris_avant") {
+                        setMethod("solde_initial");
+                        toast.info(t("Méthode « Solde initial confirmé » sélectionnée : le solde initial saisi sera utilisé."));
+                      }
+                    }}
+                  />
                   <p className="text-xs text-muted-foreground">{t("Solde disponible confirmé d'après les registres papier, au début du suivi dans l'application.")}</p>
                 </div>
                 <div className="space-y-1">

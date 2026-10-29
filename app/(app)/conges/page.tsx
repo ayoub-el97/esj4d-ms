@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { fmtDays, leaveDashboard } from "@/lib/leave-method";
 import { CalendarPlus, History, RotateCcw, Scale, Search, Timer } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getEmployees, employeeName } from "@/lib/data/employees";
@@ -192,78 +193,63 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
         </Button>
       </form>
       <p className="mb-2 text-xs text-muted-foreground">
-        {t("Solde restant = solde initial + congés acquis depuis le début du suivi − congés approuvés pris depuis le début du suivi + corrections.")}{" "}
-        {t("Acquisition : 1,5 jour par mois complet (taux réglable), depuis le début du suivi ou la date d'entrée si elle est postérieure. Les congés pris avant le système ne sont jamais déduits une seconde fois.")}{" "}
-        {t("Situation A (congés pris avant le système) : acquis depuis la date réelle de début de travail − congés pris avant le système − congés pris dans l'application.")}
+        {t("Solde congé : 1,5 jour par mois complet de service depuis la date d'entrée en service. Solde pris : congés pris avant le système + congés approuvés déjà pris dans l'application. Solde restant = Solde congé − Solde pris. Calcul au {date}.", { date: formatDateFr(asOf) })}
       </p>
       <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("NB")}</TableHead>
-              <TableHead>{t("Matricule")}</TableHead>
               <TableHead>{t("Nom et prénom")}</TableHead>
-              <TableHead>{t("Équipe")}</TableHead>
-              <TableHead>{t("Poste")}</TableHead>
-              <TableHead>{t("Date d'entrée")}</TableHead>
-              <TableHead>{t("Début du suivi")}</TableHead>
-              <TableHead className="text-end">{t("Solde initial")}</TableHead>
-              <TableHead className="text-end">{t("Pris avant le système")}</TableHead>
-              <TableHead className="text-end">{t("Acquis au {date}", { date: formatDateFr(asOf) })}</TableHead>
-              <TableHead className="text-end">{t("Pris")}</TableHead>
-              <TableHead className="text-end">{t("Corrections")}</TableHead>
+              <TableHead>{t("Date d’entrée en service")}</TableHead>
+              <TableHead className="text-end">{t("Solde congé")}</TableHead>
+              <TableHead className="text-end">{t("Solde pris")}</TableHead>
               <TableHead className="text-end">{t("Solde restant")}</TableHead>
-              <TableHead className="text-end">{t("Acceptés à venir")}</TableHead>
-              <TableHead>{t("Statut")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={15} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   {t("Aucun employé ne correspond aux filtres.")}
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((b) => (
-              <TableRow key={b.employee_id}>
-                <TableCell>{b.order_number}</TableCell>
-                <TableCell className="font-mono text-xs">{b.matricule}</TableCell>
-                <TableCell>
-                  <Link href={`/conges/${b.employee_id}?date=${asOf}`} className="font-medium hover:underline">
-                    {b.name}
-                  </Link>
-                </TableCell>
-                <TableCell>{b.team_type ? t(TEAM_LABELS[b.team_type]) : ""}</TableCell>
-                <TableCell>{b.position ? t(POSITION_LABELS[b.position]) : ""}</TableCell>
-                <TableCell>
-                  {b.hire_date ? (
-                    formatDateFr(b.hire_date)
-                  ) : b.accrual_from ? (
-                    <span className="text-xs text-muted-foreground" title={t("Date de début non renseignée : congés décomptés depuis le début du projet.")}>
-                      {t("Non renseignée")} · {t("décompte depuis le {date}", { date: formatDateFr(b.accrual_from) })}
-                    </span>
+            {rows.map((b) => {
+              const d = leaveDashboard(b);
+              return (
+                <TableRow key={b.employee_id} className={!b.is_active ? "opacity-60" : undefined}>
+                  <TableCell>
+                    <Link href={`/conges/${b.employee_id}?date=${asOf}`} className="font-medium hover:underline">
+                      {b.name}
+                    </Link>
+                    <div className="text-[11px] text-muted-foreground">
+                      {[b.position ? t(POSITION_LABELS[b.position]) : "", b.team_type ? t(TEAM_LABELS[b.team_type]) : "", b.method === "solde_initial" ? t("solde initial confirmé") : "", !b.is_active ? t("Inactif") : ""].filter(Boolean).join(" · ")}
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {b.hire_date ? formatDateFr(b.hire_date) : <span className="text-xs font-medium text-destructive">{t("Date manquante — à compléter")}</span>}
+                  </TableCell>
+                  {d.missingStart ? (
+                    <TableCell colSpan={3} className="text-end text-xs text-muted-foreground">
+                      {t("Non calculé : renseignez la date d’entrée en service")}
+                    </TableCell>
                   ) : (
-                    <span className="text-xs text-destructive" title={t("Aucun congé n'est calculé tant que la date de début n'est pas renseignée.")}>
-                      {t("Date de début non renseignée")}
-                    </span>
+                    <>
+                      <TableCell className="text-end tabular-nums" title={b.adjustments ? t("dont corrections : {days} j", { days: b.adjustments }) : undefined}>
+                        {fmtDays(d.conge)}
+                      </TableCell>
+                      <TableCell className="text-end tabular-nums" title={t("Avant le système : {before} j · depuis le système : {after} j", { before: fmtDays(b.taken_before ?? 0), after: fmtDays(b.taken) })}>
+                        {fmtDays(d.pris)}
+                      </TableCell>
+                      <TableCell className="text-end">
+                        <Badge variant={d.restant < 0 ? "destructive" : "secondary"}>{fmtDays(d.restant)}</Badge>
+                        {d.restant < 0 && <div className="mt-0.5 text-[10px] font-medium text-destructive">{t("À vérifier")}</div>}
+                      </TableCell>
+                    </>
                   )}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-xs">{b.tracking_start ? formatDateFr(b.tracking_start) : "—"}</TableCell>
-                <TableCell className="text-end">{b.method === "pris_avant" ? <span className="text-xs text-muted-foreground">{t("situation A")}</span> : b.initial_balance || ""}</TableCell>
-                <TableCell className="text-end">{b.taken_before || ""}</TableCell>
-                <TableCell className="text-end">{b.accrued}</TableCell>
-                <TableCell className="text-end">{b.taken}</TableCell>
-                <TableCell className="text-end">{b.adjustments || ""}</TableCell>
-                <TableCell className="text-end">
-                  <Badge variant={b.balance < 0 ? "destructive" : "secondary"}>{b.balance}</Badge>
-                </TableCell>
-                <TableCell className="text-end text-muted-foreground">{b.planned || ""}</TableCell>
-                <TableCell>
-                  <Badge variant={b.is_active ? "secondary" : "outline"}>{b.is_active ? t("Actif") : t("Inactif")}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

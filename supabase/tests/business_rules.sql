@@ -376,9 +376,12 @@ begin
   select * into r from public.work_month_range('2026-10-01');
   assert r.month_start = '2026-10-08' and r.month_end = '2026-11-07', 'mois « octobre 2026 » = 08/10 → 07/11';
 
-  -- Congés : un mois complet seulement au 08/11 pour un employé entré avant le projet
+  -- Congés (migration 039) : par défaut, depuis la date d'entrée en service (01/01 → 07/11 = 10 mois complets)
   insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
   values ('B099', 'Test', 'Projet', 'balayeur', 'nettoiement', 0, '2026-01-01') returning id into e;
+  assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 15, 'depuis l''entrée en service : 10 mois au 07/11';
+  -- Méthode « solde initial confirmé » : décompte depuis le début du projet (un mois complet seulement au 08/11)
+  update public.employees set leave_start_method = 'solde_initial' where id = e;
   assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 0, 'pas de mois complet avant le 08/11';
   assert (select accrued from public.leave_balances('2026-11-08') where employee_id = e) = 1.5, '1,5 jour au 08/11';
 

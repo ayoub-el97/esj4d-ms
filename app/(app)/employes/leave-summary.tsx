@@ -11,8 +11,8 @@ export function LeaveSummary({ t, employeeId, hireDate, balance }: { t: TFunctio
   const taken = balance?.taken ?? 0;
   const before = balance?.taken_before ?? null;
   const items: { label: string; value: string; kind: "saisi" | "calcule"; strong?: boolean; hint?: string }[] = [
-    { label: "Date de début de travail", value: hireDate ? formatDateFr(hireDate) : t("Non renseignée"), kind: "saisi" },
-    { label: "Total des congés acquis", value: `${balance?.accrued ?? 0} ${t("j")}`, kind: "calcule", hint: balance?.accrual_from ? t("depuis le {date}", { date: formatDateFr(balance.accrual_from) }) : t("aucun décompte (date de début inconnue)") },
+    { label: "Date d’entrée en service", value: hireDate ? formatDateFr(hireDate) : t("Date manquante — à compléter"), kind: "saisi" },
+    { label: "Solde congé", value: `${balance?.accrued ?? 0} ${t("j")}`, kind: "calcule", hint: balance?.accrual_from ? t("depuis le {date}", { date: formatDateFr(balance.accrual_from) }) : t("aucun décompte (date de début inconnue)") },
     {
       label: "Solde initial",
       value: balance?.method === "pris_avant" ? "—" : `${balance?.initial_balance ?? 0} ${t("j")}`,
@@ -21,8 +21,8 @@ export function LeaveSummary({ t, employeeId, hireDate, balance }: { t: TFunctio
     },
     { label: "Congés pris avant le système", value: before == null ? "0 " + t("j") : `${before} ${t("j")}`, kind: "saisi", hint: balance?.method === "pris_avant" ? t("déduits du solde") : t("déjà compris dans le solde initial") },
     { label: "Congés pris depuis le système", value: `${taken} ${t("j")}`, kind: "calcule", hint: t("congés approuvés") },
-    { label: "Total des congés pris", value: `${taken + (before ?? 0)} ${t("j")}`, kind: "calcule" },
-    { label: "Solde actuel des congés", value: `${balance?.balance ?? 0} ${t("j")}`, kind: "calcule", strong: true, hint: balance?.adjustments ? t("dont corrections : {days} j", { days: balance.adjustments }) : undefined },
+    { label: "Solde pris", value: `${taken + (before ?? 0)} ${t("j")}`, kind: "calcule", hint: t("avant + depuis le système") },
+    { label: "Solde restant", value: `${balance?.balance ?? 0} ${t("j")}`, kind: "calcule", strong: true, hint: balance?.adjustments ? t("dont corrections : {days} j", { days: balance.adjustments }) : undefined },
   ];
   return (
     <Card>

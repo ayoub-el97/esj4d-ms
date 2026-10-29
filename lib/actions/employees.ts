@@ -31,7 +31,7 @@ const employeeSchema = z
     hire_date: optionalDate,
     in_service_before_start: z.boolean().default(false),
     leave_tracking_start: optionalDate,
-    leave_start_method: z.enum(["solde_initial", "pris_avant"]).default("solde_initial"),
+    leave_start_method: z.enum(["solde_initial", "pris_avant"]).default("pris_avant"),
     leave_taken_before: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number({ message: "Congés déjà pris : nombre invalide." }).min(0, "Congés déjà pris : nombre invalide.").max(999).nullable()),
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
@@ -309,7 +309,7 @@ export async function createEmployeesBulk(rows: BulkEmployeeInput[]): Promise<Ac
       in_service_before_start: !!r.in_service_before_start,
       leave_tracking_start: null,
       leave_taken_before: null,
-      leave_start_method: "solde_initial" as const,
+      leave_start_method: "pris_avant" as const,
       phone: r.phone ?? "",
       is_active: true,
     });
