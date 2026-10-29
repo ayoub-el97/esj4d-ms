@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isOfficePosition, workPeriodsFor } from "@/lib/default-times";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
@@ -39,6 +40,7 @@ const employeeSchema = z
     is_active: z.boolean(),
     job_title: z.string().trim().max(60).default(""),
     work_schedule: z.string().trim().max(80).default(""),
+    work_period: z.preprocess((v) => (v === "" || v == null ? null : v), z.enum(["matin", "apres_midi", "milieu", "nuit"]).nullable()),
   })
   .transform((d) => ({
     ...d,
@@ -79,6 +81,7 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
     is_active: formData.get("is_active") === "on",
     job_title: formData.get("job_title") ?? "",
     work_schedule: formData.get("work_schedule") ?? "",
+    work_period: formData.get("work_period"),
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
@@ -103,6 +106,12 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
   void _tracking;
   void _method;
   const rest = auth.user.role === "admin" ? { ...rest1, leave_taken_before } : rest1;
+  // Période de travail : seulement celles proposées pour le poste (mécanicien, chef d'équipe : matin fixe)
+  const periods = workPeriodsFor(rest.position);
+  if (rest.work_period && !(periods as string[]).includes(rest.work_period)) rest.work_period = periods.length ? null : "matin";
+  if (!periods.length) rest.work_period = "matin";
+  // Direction, secrétariat, responsable : repos le dimanche si aucun jour de repos n'est choisi
+  if (isOfficePosition(rest.position) && rest.rest_day == null) rest.rest_day = 0;
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
   const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();

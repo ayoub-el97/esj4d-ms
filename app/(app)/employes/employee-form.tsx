@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { WORK_PERIOD_LABELS, defaultShiftTimes, endsNextDay, isOfficePosition, workPeriodsFor } from "@/lib/default-times";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
@@ -176,6 +177,27 @@ export function EmployeeForm({
                 <p className="text-xs text-muted-foreground">{t("Enregistrée lors du départ (Actions › Désactiver).")}</p>
               </div>
             )}
+            <div className="space-y-1">
+              <Label htmlFor="work_period">{t("Période de travail")}</Label>
+              {workPeriodsFor(position).length ? (
+                <NativeSelect id="work_period" name="work_period" defaultValue={employee?.work_period && (workPeriodsFor(position) as string[]).includes(employee.work_period) ? employee.work_period : ""}>
+                  <option value="">{t("— Non définie —")}</option>
+                  {workPeriodsFor(position).map((p) => (
+                    <option key={p} value={p}>
+                      {t(WORK_PERIOD_LABELS[p])} ({defaultShiftTimes(position, p).timeIn} – {defaultShiftTimes(position, p).timeOut}
+                      {endsNextDay(defaultShiftTimes(position, p).timeIn, defaultShiftTimes(position, p).timeOut) ? ` ${t("le lendemain")}` : ""})
+                    </option>
+                  ))}
+                </NativeSelect>
+              ) : (
+                <>
+                  <input type="hidden" name="work_period" value="matin" />
+                  <Input value={`${t("Matin")} (06:00 – 14:00)`} disabled />
+                </>
+              )}
+              <p className="text-xs text-muted-foreground">{t("Horaires proposés chaque jour dans le Pointage (modifiables pour une journée sans changer la fiche).")}</p>
+              {isOfficePosition(position) && <p className="text-xs text-amber-700 dark:text-amber-400">{t("Direction, secrétariat, responsable : repos le dimanche, pas de travail les jours fériés, aucune heure supplémentaire.")}</p>}
+            </div>
             <div className="space-y-1">
               <Label htmlFor="work_schedule">{t("Horaire habituel (facultatif)")}</Label>
               <Input id="work_schedule" name="work_schedule" defaultValue={employee?.work_schedule ?? ""} maxLength={80} placeholder={t("Ex. Matin 06:00 – 13:00")} />

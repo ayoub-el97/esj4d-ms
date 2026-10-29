@@ -5,7 +5,7 @@ import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
 import type { DayAssignment, EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
-import { DEFAULT_TIME_IN, DEFAULT_TIME_OUT } from "@/lib/default-times";
+import { defaultShiftTimes } from "@/lib/default-times";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
 export type WorkDay = {
@@ -75,6 +75,7 @@ export function toOption(e: Employee): EmployeeOption {
     rest_day: e.rest_day,
     chauffeur_id: e.chauffeur_id,
     substitute_id: e.substitute_id,
+    work_period: e.work_period ?? null,
   };
 }
 
@@ -135,6 +136,7 @@ export async function buildSheet(date: string, team: TeamType) {
       position: a.position,
       team_type: a.team_type,
       usual_position: e?.position ?? a.position,
+      work_period: e?.work_period ?? null,
       order_number: e?.order_number ?? 0,
       name: e ? employeeName(e) : "—",
       matricule: e?.matricule ?? "",
@@ -192,6 +194,7 @@ export async function buildSheet(date: string, team: TeamType) {
       position: dayPosition,
       team_type: team,
       usual_position: e.position,
+      work_period: e.work_period ?? null,
       order_number: e.order_number,
       name: employeeName(e),
       matricule: e.matricule,
@@ -229,12 +232,13 @@ export async function buildSheet(date: string, team: TeamType) {
     }
   }
 
-  // Lignes non encore enregistrées d'un jour travaillé : 06:00 – 14:00 proposés (modifiables).
-  // Les heures déjà enregistrées ne sont jamais remplacées.
+  // Lignes non encore enregistrées d'un jour travaillé : horaires de la période de travail
+  // (fonction du jour + fiche), modifiables. Les heures déjà enregistrées ne sont jamais remplacées.
   for (const r of rows) {
     if (r.id === null && r.shift === 1 && (r.status === "present" || r.status === "repos_travaille") && !r.time_in && !r.time_out) {
-      r.time_in = DEFAULT_TIME_IN;
-      r.time_out = DEFAULT_TIME_OUT;
+      const d = defaultShiftTimes(r.position, r.work_period);
+      r.time_in = d.timeIn;
+      r.time_out = d.timeOut;
     }
   }
 

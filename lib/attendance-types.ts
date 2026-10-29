@@ -43,6 +43,8 @@ export type SheetRow = {
   leave_override?: { id: string; reason: string; at: string } | null;
   /** Affectation temporaire du jour dans une autre équipe que l'équipe permanente */
   assignment?: DayAssignment | null;
+  /** Période de travail de la fiche (horaires proposés) */
+  work_period?: string | null;
 };
 
 /** Affectation temporaire d'un employé à une équipe pour une date (la fiche n'est pas modifiée). */
@@ -70,4 +72,5 @@ export type EmployeeOption = {
   rest_day: number | null;
   chauffeur_id: string | null;
   substitute_id: string | null;
+  work_period?: string | null;
 };

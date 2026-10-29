@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { cleaningGroups, collecteGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
-import { DEFAULT_TIME_IN, DEFAULT_TIME_OUT, suggestedTimeOut } from "@/lib/default-times";
+import { defaultShiftTimes, endsNextDay, isOfficePosition, suggestedTimeOut } from "@/lib/default-times";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeftRight, Copy, Lock, Plus, Save, Trash2, Undo2, UserPlus } from "lucide-react";
@@ -151,9 +151,10 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
         employee_id: o.id,
         shift: 1,
         status: o.rest_day === dow ? "repos_travaille" : "present",
-        // Heures proposées par défaut (modifiables)
-        time_in: DEFAULT_TIME_IN,
-        time_out: DEFAULT_TIME_OUT,
+        // Heures de la période de travail (modifiables)
+        time_in: defaultShiftTimes(dayPosition, o.work_period).timeIn,
+        time_out: defaultShiftTimes(dayPosition, o.work_period).timeOut,
+        work_period: o.work_period ?? null,
         overtime_manual: 0,
         overtime_auto: 0,
         observation: "",
@@ -617,7 +618,7 @@ function GroupRows({
                     status: next,
                     ...(next !== "absent_maladie" ? { sick_departure: false } : {}),
                     // Jour travaillé sans heures saisies : 06:00 – 14:00 proposés (modifiables)
-                    ...(isWorked(next) && r.shift === 1 && !r.time_in && !r.time_out ? { time_in: DEFAULT_TIME_IN, time_out: DEFAULT_TIME_OUT } : {}),
+                    ...(isWorked(next) && r.shift === 1 && !r.time_in && !r.time_out ? { time_in: defaultShiftTimes(r.position, r.work_period).timeIn, time_out: defaultShiftTimes(r.position, r.work_period).timeOut } : {}),
                   });
                 }}
                 className={cn("min-w-32", r.leave_lock && !r.leave_override && "border-emerald-400 font-medium")}
@@ -712,11 +713,18 @@ function GroupRows({
             </td>
             <td className="px-2 py-1">
               <Input type="time" value={r.time_out} disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))} onChange={(e) => onUpdate(i, { time_out: e.target.value })} className="w-28" />
+              {isWorked(r.status) && endsNextDay(r.time_in, r.time_out) && <div className="mt-0.5 text-[10px] font-medium text-indigo-700 not-italic dark:text-indigo-300">{t("le lendemain")}</div>}
+              {isWorked(r.status) && r.shift === 1 && defaultShiftTimes(r.position, r.work_period).missing && (
+                <a href={`/employes/${r.employee_id}`} className="mt-0.5 block text-[10px] text-amber-700 not-italic underline-offset-2 hover:underline dark:text-amber-400" title={t("Choisir la période de travail dans la fiche employé")}>
+                  {t("Période de travail non définie")}
+                </a>
+              )}
               {sickDeparture(r) && <div className="mt-0.5 text-[10px] text-muted-foreground not-italic">{t("heure de départ")}</div>}
             </td>
             <td className="px-2 py-1">
               {(() => {
-                const auto = autoOvertime(r.time_in, r.time_out, r.status);
+                // Direction, secrétariat, responsable : aucune heure supplémentaire
+                const auto = isOfficePosition(r.position) || isOfficePosition(r.usual_position) ? 0 : autoOvertime(r.time_in, r.time_out, r.status);
                 const manual = Number(r.overtime_manual) || 0;
                 return (
                   <div className="space-y-0.5">
@@ -728,7 +736,7 @@ function GroupRows({
                       value={r.overtime_manual}
                       aria-label={t("Heures supplémentaires manuelles")}
                       title={t("Heures supplémentaires manuelles (ajoutées aux heures automatiques)")}
-                      disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r))}
+                      disabled={!canEdit || !(isWorked(r.status) || sickDeparture(r)) || isOfficePosition(r.position) || isOfficePosition(r.usual_position)}
                       onChange={(e) => onUpdate(i, { overtime_manual: Number(e.target.value) })}
                       className="w-20"
                     />

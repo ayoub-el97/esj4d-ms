@@ -45,6 +45,8 @@ export type Employee = {
   job_title: string;
   /** Horaire habituel (texte libre, informatif) */
   work_schedule: string;
+  /** Période de travail (horaires proposés au pointage) : matin, apres_midi, milieu, nuit */
+  work_period: "matin" | "apres_midi" | "milieu" | "nuit" | null;
   /** Départ : dernier jour de travail, motif, commentaire (employé désactivé) */
   departure_date: string | null;
   departure_reason: DepartureReason | null;
@@ -54,7 +56,7 @@ export type Employee = {
 export type DepartureReason = "demission" | "fin_contrat" | "licenciement" | "autre";
 
 export const EMPLOYEE_COLUMNS =
-  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, leave_tracking_start, leave_taken_before, leave_start_method, phone, is_active, job_title, work_schedule, departure_date, departure_reason, departure_comment";
+  "id, order_number, matricule, last_name, first_name, position, team_type, rest_day, truck_id, chauffeur_id, substitute_id, hire_date, in_service_before_start, leave_tracking_start, leave_taken_before, leave_start_method, phone, is_active, job_title, work_schedule, work_period, departure_date, departure_reason, departure_comment";
 
 export function employeeName(e: Pick<Employee, "last_name" | "first_name">): string {
   return `${e.last_name} ${e.first_name}`.trim();
