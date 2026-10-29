@@ -26,19 +26,26 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
   const supabase = await createClient();
   const { data: report } = await supabase.from("truck_daily_reports").select("*").eq("id", id).maybeSingle<TruckDailyReport>();
   if (!report) notFound();
-  const [workDay, trucks, employees, photos, changes, summary] = await Promise.all([
+  const [workDay, trucks, employees, photos, lineChanges, crewChanges, summary, { data: crewRows }] = await Promise.all([
     getWorkDay(report.activity_date),
     getTrucks(),
     getEmployees(),
     getPhotosFor("truck_report", [report.id]),
     getRecordChanges("truck_daily_reports", { ids: [report.id] }),
+    getRecordChanges("truck_report_crew", { ids: [report.id] }),
     getChangeSummary("truck_daily_reports", [report.id]),
+    supabase.from("truck_report_crew").select("employee_id, position, created_at").eq("report_id", report.id).order("created_at"),
   ]);
+  const changes = [...lineChanges, ...crewChanges].sort((a, b) => b.at.localeCompare(a.at));
   const canEdit = user.permissions.rapport_camions.can_edit && workDay?.status !== "closed";
   // Chauffeurs proposés : chauffeurs actuels de la Collecte, plus le chauffeur enregistré sur cette
   // ligne (même s'il a changé d'équipe ou de fonction depuis) pour ne jamais l'effacer
   const chauffeurs = employees.filter((e) => (e.team_type === "collecte" && DRIVER_POSITIONS.includes(e.position)) || e.id === report.chauffeur_id);
   const empName = new Map(employees.map((e) => [e.id, employeeName(e)]));
+  // Équipiers de ce poste (fonction au moment de l'affectation) ; employés actifs proposés en plus
+  const initialCrew = (crewRows ?? []).map((c) => ({ id: c.employee_id as string, name: empName.get(c.employee_id as string) ?? "—", position: c.position as string }));
+  const crewIds = new Set(initialCrew.map((c) => c.id));
+  const crewOptions = employees.filter((e) => e.is_active || crewIds.has(e.id) || e.id === report.chauffeur_id).map((e) => ({ id: e.id, name: employeeName(e), position: e.position, team_type: e.team_type }));
   const plate = new Map(trucks.map((x) => [x.id, x.matricule]));
   const num = (v: unknown) => (v == null || v === "" ? "—" : String(Number(v)));
   const fields: ChangeField[] = [
@@ -48,7 +55,7 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
     { key: "loads", label: "Vidages (ticket — tonnage)", format: (v) => (Array.isArray(v) && v.length ? v.map((l: { ticket?: string; tonnage?: number | null }, i) => `${i + 1}. ${l.ticket || "—"} — ${l.tonnage ?? "—"} t`).join(" ; ") : "—") },
     { key: "tonnage_total", label: "Tonnage total", format: num },
     { key: "dumps_count", label: "Nombre de vidages", format: num },
-    { key: "rippers_count", label: "Rippeurs", format: num },
+    { key: "rippers_count", label: "Nombre d'équipiers", format: num },
     { key: "km_start", label: "Km départ", format: num },
     { key: "km_end", label: "Km fin", format: num },
     { key: "fuel", label: "Carburant", format: num },
@@ -66,8 +73,13 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
       {s && <LastChange t={t} at={s.last_at} user={s.last_user} modified={s.modified} className="mb-3" />}
-      <TruckReportForm report={{ ...report, loads: report.loads ?? [] }} photos={photos.get(report.id) ?? []} isAdmin={user.role === "admin"} defaultDate={report.activity_date} trucks={trucks} chauffeurs={chauffeurs} canEdit={canEdit} />
-      <ChangeLog t={t} entries={changes} fields={fields} />
+      <TruckReportForm report={{ ...report, loads: report.loads ?? [] }} photos={photos.get(report.id) ?? []} isAdmin={user.role === "admin"} defaultDate={report.activity_date} trucks={trucks} chauffeurs={chauffeurs} canEdit={canEdit} crewOptions={crewOptions} initialCrew={initialCrew} />
+      <ChangeLog
+        t={t}
+        entries={changes}
+        fields={fields}
+        actionText={(e) => (e.record_id === report.id ? undefined : e.action === "INSERT" ? t("Équipier ajouté : {name}", { name: empName.get(String(e.new_data?.employee_id)) ?? "—" }) : t("Équipier retiré : {name}", { name: empName.get(String(e.old_data?.employee_id)) ?? "—" }))}
+      />
       <ModuleButtons
         pdfSlot={
           <>

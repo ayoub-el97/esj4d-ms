@@ -49,7 +49,7 @@ export async function registerPhoto(input: RegisterPhotoInput): Promise<ActionRe
   if (!d.storage_path.startsWith(`${d.entity_type}/${d.entity_id}/`)) return { ok: false, error: t("Chemin de stockage incohérent.") };
 
   const supabase = await createClient();
-  const { data, error } = await supabase.from("photos").insert({ ...d, uploaded_by: auth.user.id }).select("id, storage_path, phase, caption, created_at").single();
+  const { data, error } = await supabase.from("photos").insert({ ...d, uploaded_by: auth.user.id }).select("id, storage_path, phase, caption, created_at, mime_type").single();
   if (error) {
     // Nettoyage du fichier orphelin
     await supabase.storage.from(PHOTO_BUCKET).remove([d.storage_path]);

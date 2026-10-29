@@ -18,6 +18,8 @@ export type PhotoItem = {
   created_at: string;
   /** URL signée (valide ~1 h) */
   url: string;
+  /** image/jpeg, image/png, application/pdf… */
+  mime_type?: string;
 };
 
 export const PHOTO_BUCKET = "photos";

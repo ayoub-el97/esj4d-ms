@@ -4,15 +4,15 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Save, Trash2 } from "lucide-react";
-import { deleteMedicalCertificate, saveDecision, saveEngagement, saveMedicalCertificate, setAbsenceClassification } from "@/lib/actions/absences";
+import { deleteMedicalCertificate, saveDecision, saveEngagement, saveMedicalCertificate, setAbsenceClassification, setCertificateState } from "@/lib/actions/absences";
 import type { AbsenceAction, MedicalCertificate } from "@/lib/data/absences";
 import {
   ABSENCE_CLASSES,
   ABSENCE_CLASS_LABELS,
-  CERTIFICATE_STATUSES,
-  CERTIFICATE_STATUS_LABELS,
-  CERTIFICATE_VERIFICATIONS,
-  CERTIFICATE_VERIFICATION_LABELS,
+  CERTIFICATE_STATES,
+  CERTIFICATE_STATE_LABELS,
+  certificateState,
+  type CertificateState,
   ENGAGEMENT_STATUSES,
   ENGAGEMENT_STATUS_LABELS,
   type AbsenceClass,
@@ -115,22 +115,12 @@ export function CertificateForm({ employeeId, certificate, defaultFrom, defaultT
           <Label>{t("Date de remise du certificat")}</Label>
           <Input type="date" name="submitted_on" defaultValue={certificate?.submitted_on ?? ""} />
         </div>
-        <div className="space-y-1">
-          <Label>{t("État du certificat")}</Label>
-          <NativeSelect name="status" defaultValue={certificate?.status ?? "en_attente"}>
-            {CERTIFICATE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(CERTIFICATE_STATUS_LABELS[s])}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
         <div className="space-y-1 sm:col-span-2">
-          <Label>{t("Vérification (utilisateur autorisé)")}</Label>
-          <NativeSelect name="verification" defaultValue={certificate?.verification ?? "non_verifiee"}>
-            {CERTIFICATE_VERIFICATIONS.map((s) => (
+          <Label>{t("Statut du certificat")}</Label>
+          <NativeSelect name="state" defaultValue={certificate ? certificateState(certificate.status, certificate.verification) : "en_attente"}>
+            {CERTIFICATE_STATES.map((s) => (
               <option key={s} value={s}>
-                {t(CERTIFICATE_VERIFICATION_LABELS[s])}
+                {t(CERTIFICATE_STATE_LABELS[s])}
               </option>
             ))}
           </NativeSelect>
@@ -140,11 +130,44 @@ export function CertificateForm({ employeeId, certificate, defaultFrom, defaultT
         <Label>{t("Commentaire (documentation médicale)")}</Label>
         <Textarea name="comment" defaultValue={certificate?.comment ?? ""} rows={2} />
       </div>
-      <p className="text-xs text-muted-foreground">{t("Un document ajouté ne justifie pas l'absence automatiquement : choisissez « Accepté » après vérification. « Refusé » compte les jours couverts comme absences non justifiées.")}</p>
+      <p className="text-xs text-muted-foreground">{t("Un document ajouté ne justifie pas l'absence automatiquement : choisissez « Certificat validé » après vérification. « Certificat refusé » compte les jours couverts comme absences non justifiées.")}</p>
       <SubmitButton size="sm">
         <Save /> {certificate ? t("Enregistrer les modifications") : t("Enregistrer le certificat")}
       </SubmitButton>
     </form>
+  );
+}
+
+/** Statut du certificat, modifiable directement (utilisateur autorisé, journalisé). */
+export function CertificateStateSelect({ certificate }: { certificate: MedicalCertificate }) {
+  const { t } = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const current = certificateState(certificate.status, certificate.verification);
+  return (
+    <NativeSelect
+      aria-label={t("Statut du certificat")}
+      value={current}
+      disabled={pending}
+      className="h-8 w-auto text-xs"
+      onChange={(e) => {
+        const next = e.target.value as CertificateState;
+        if (next === "refuse" && !window.confirm(t("Refuser ce certificat ? Les jours couverts seront comptés comme absences non justifiées."))) return;
+        start(async () => {
+          const r = await setCertificateState(certificate.id, next);
+          if (r.ok) {
+            toast.success(r.message);
+            router.refresh();
+          } else toast.error(r.error);
+        });
+      }}
+    >
+      {CERTIFICATE_STATES.map((s) => (
+        <option key={s} value={s}>
+          {t(CERTIFICATE_STATE_LABELS[s])}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }
 

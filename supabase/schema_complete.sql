@@ -6473,3 +6473,326 @@ end;
 $$;
 grant execute on function public.record_change_summary(text, uuid[]) to authenticated;
 
+-- ===== supabase/migrations/045_certificats_medicaux.sql =====
+-- =============================================================================
+-- 045 — Certificats médicaux : PDF, entrée créée depuis le pointage « Absent maladie »
+--
+--  Réutilise le module existant (migration 036) : table medical_certificates (employé, période
+--  de maladie, date de remise, statut, vérification) et documents dans le bucket privé « photos »
+--  (entity_type = 'medical_certificate', accès réservé : pointage en modification, liens signés
+--  temporaires, jamais d'URL publique). Aucune donnée existante n'est modifiée ou supprimée.
+--
+--  1. Le stockage accepte aussi les PDF (certificat scanné), 10 Mo maximum par fichier.
+--  2. Pointage « Absent maladie » → entrée « En attente de certificat » créée automatiquement pour
+--     la période de maladie (jours consécutifs, jours de repos / non pointés entre deux compris),
+--     ou prolongée ; jamais de doublon (un jour déjà couvert par un certificat ne crée rien).
+--     Pointage corrigé (plus « Absent maladie ») : l'entrée automatique encore vide (aucun document,
+--     toujours « En attente ») est réduite ou retirée. Une entrée avec document n'est jamais touchée.
+--  3. Reprise : les jours « Absent maladie » déjà pointés sans certificat reçoivent leur entrée.
+-- =============================================================================
+
+-- ---------- 1. PDF acceptés dans le bucket privé ----------------------------------------------
+update storage.buckets
+   set allowed_mime_types = (select array_agg(distinct m) from unnest(coalesce(allowed_mime_types, '{}'::text[]) || array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']) m),
+       file_size_limit = greatest(coalesce(file_size_limit, 0), 10485760)
+ where id = 'photos';
+
+-- ---------- 2. Entrée créée automatiquement depuis le pointage ------------------------------
+alter table public.medical_certificates add column if not exists auto_created boolean not null default false;
+
+-- Jour de maladie : au moins une ligne « Absent maladie » et aucune ligne travaillée ce jour
+create or replace function public.is_sick_day(p_employee uuid, p_date date)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select bool_or(a.status::text = 'absent_maladie') and not bool_or(a.status::text in ('present', 'repos_travaille'))
+    from public.attendance a
+   where a.employee_id = p_employee and a.activity_date = p_date;
+$$;
+
+-- Aucun jour travaillé entre deux dates (exclues) : même épisode de maladie
+create or replace function public.no_work_between(p_employee uuid, p_after date, p_before date)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1 from public.attendance a
+     where a.employee_id = p_employee and a.activity_date > p_after and a.activity_date < p_before
+       and a.status::text in ('present', 'repos_travaille', 'absent'));
+$$;
+
+-- Entrée « En attente de certificat » encore vide (créée automatiquement, aucun document)
+create or replace function public.certificate_is_empty_auto(p_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.medical_certificates c
+     where c.id = p_id and c.auto_created and c.status = 'en_attente' and c.verification = 'non_verifiee'
+       and not exists (select 1 from public.photos p where p.entity_type = 'medical_certificate' and p.entity_id = c.id));
+$$;
+
+create or replace function public.sync_sick_certificate(p_employee uuid, p_date date)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_start date;
+  v_end date;
+  v_min date;
+  v_max date;
+begin
+  if p_employee is null or p_date is null then
+    return;
+  end if;
+  if coalesce(public.is_sick_day(p_employee, p_date), false) then
+    -- Déjà couvert par un certificat (automatique ou saisi) : rien à créer
+    if exists (select 1 from public.medical_certificates c where c.employee_id = p_employee and p_date between c.start_date and c.end_date) then
+      return;
+    end if;
+    -- Même épisode : entrée automatique vide juste avant (prolongée) ou juste après (avancée)
+    select c.id into v_id from public.medical_certificates c
+     where c.employee_id = p_employee and c.end_date < p_date and p_date - c.end_date <= 7
+       and public.certificate_is_empty_auto(c.id) and public.no_work_between(p_employee, c.end_date, p_date)
+     order by c.end_date desc limit 1;
+    if v_id is not null then
+      update public.medical_certificates set end_date = p_date where id = v_id;
+      return;
+    end if;
+    select c.id into v_id from public.medical_certificates c
+     where c.employee_id = p_employee and c.start_date > p_date and c.start_date - p_date <= 7
+       and public.certificate_is_empty_auto(c.id) and public.no_work_between(p_employee, p_date, c.start_date)
+     order by c.start_date limit 1;
+    if v_id is not null then
+      update public.medical_certificates set start_date = p_date where id = v_id;
+      return;
+    end if;
+    insert into public.medical_certificates (employee_id, start_date, end_date, status, verification, auto_created, comment)
+    values (p_employee, p_date, p_date, 'en_attente', 'non_verifiee', true, '');
+  else
+    -- Plus « Absent maladie » ce jour : l'entrée automatique encore vide suit le pointage
+    for v_id, v_start, v_end in
+      select c.id, c.start_date, c.end_date from public.medical_certificates c
+       where c.employee_id = p_employee and p_date between c.start_date and c.end_date and public.certificate_is_empty_auto(c.id)
+    loop
+      select min(g.d::date), max(g.d::date) into v_min, v_max
+        from generate_series(v_start::timestamp, v_end::timestamp, interval '1 day') g(d)
+       where g.d::date <> p_date and coalesce(public.is_sick_day(p_employee, g.d::date), false);
+      if v_min is null then
+        delete from public.medical_certificates where id = v_id;
+      elsif v_min <> v_start or v_max <> v_end then
+        update public.medical_certificates set start_date = v_min, end_date = v_max where id = v_id;
+      end if;
+    end loop;
+  end if;
+end;
+$$;
+revoke all on function public.sync_sick_certificate(uuid, date) from public;
+
+create or replace function public.attendance_sick_certificate()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    perform public.sync_sick_certificate(old.employee_id, old.activity_date);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and (tg_op = 'INSERT' or new.employee_id is distinct from old.employee_id or new.activity_date is distinct from old.activity_date or new.status is distinct from old.status) then
+    perform public.sync_sick_certificate(new.employee_id, new.activity_date);
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists attendance_sick_certificate on public.attendance;
+create trigger attendance_sick_certificate after insert or update of status, employee_id, activity_date or delete on public.attendance
+  for each row execute function public.attendance_sick_certificate();
+
+-- Certificat saisi à la main (ou dates corrigées) : il remplace les entrées automatiques encore vides
+-- qui le chevauchent (pas de doublon) ; les jours de maladie hors de sa période gardent leur entrée.
+create or replace function public.medical_certificate_absorb_auto()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  a record;
+  d date;
+begin
+  if new.auto_created and tg_op = 'INSERT' then
+    return null;
+  end if;
+  for a in
+    select c.id, c.start_date, c.end_date from public.medical_certificates c
+     where c.employee_id = new.employee_id and c.id <> new.id
+       and c.start_date <= new.end_date and c.end_date >= new.start_date
+       and public.certificate_is_empty_auto(c.id)
+  loop
+    delete from public.medical_certificates where id = a.id;
+    for d in select g::date from generate_series(a.start_date::timestamp, a.end_date::timestamp, interval '1 day') g loop
+      if d < new.start_date or d > new.end_date then
+        perform public.sync_sick_certificate(new.employee_id, d);
+      end if;
+    end loop;
+  end loop;
+  return null;
+end;
+$$;
+drop trigger if exists medical_certificates_absorb_auto on public.medical_certificates;
+create trigger medical_certificates_absorb_auto after insert or update of start_date, end_date, employee_id on public.medical_certificates
+  for each row execute function public.medical_certificate_absorb_auto();
+
+-- ---------- 3. Reprise des jours « Absent maladie » déjà pointés ------------------------------
+do $$
+declare r record;
+begin
+  for r in
+    select distinct a.employee_id, a.activity_date
+      from public.attendance a
+     where a.status::text = 'absent_maladie'
+     order by a.employee_id, a.activity_date
+  loop
+    perform public.sync_sick_certificate(r.employee_id, r.activity_date);
+  end loop;
+end $$;
+
+-- ===== supabase/migrations/046_equipes_par_poste.sql =====
+-- =============================================================================
+-- 046 — Rapport camions : équipe propre à chaque poste (Matin / Soir)
+--
+--  Un même camion peut travailler le matin et le soir avec des équipes différentes. Jusqu'ici,
+--  l'équipe affichée pour chaque ligne camion venait du rapport de collecte du jour (une seule
+--  équipe par camion et par jour) : la ligne du Soir montrait l'équipe du Matin.
+--
+--  Désormais chaque ligne camion (Matin ou Soir, truck_daily_reports) a :
+--   - son chauffeur (colonne existante chauffeur_id) ;
+--   - ses équipiers (nouvelle table truck_report_crew : employés de la base, sans doublon,
+--     fonction au moment de l'affectation conservée) ;
+--   - son tonnage, ses vidages, ses km (colonnes existantes).
+--  La ligne du Soir n'hérite jamais de l'équipe du Matin.
+--  La ligne Matin n° 1 suit le rapport de collecte / le pointage tant que son équipe n'a pas été
+--  corrigée dans le rapport camions (crew_manual).
+--  Reprise : l'équipe actuelle de chaque rapport de collecte est copiée sur la ligne Matin n° 1
+--  du même camion et du même jour (aucune équipe inventée pour le Soir). Aucune donnée supprimée.
+-- =============================================================================
+
+alter table public.truck_daily_reports add column if not exists crew_manual boolean not null default false;
+
+create table if not exists public.truck_report_crew (
+  id             uuid primary key default gen_random_uuid(),
+  report_id      uuid not null references public.truck_daily_reports (id) on delete cascade,
+  activity_date  date not null,
+  employee_id    uuid not null references public.employees (id) on delete restrict,
+  -- fonction de l'employé au moment de l'affectation (historique conservé)
+  position       text not null default '',
+  created_at     timestamptz not null default now(),
+  created_by     uuid references auth.users (id),
+  updated_at     timestamptz not null default now(),
+  updated_by     uuid references auth.users (id),
+  unique (report_id, employee_id)
+);
+create index if not exists truck_report_crew_employee_idx on public.truck_report_crew (employee_id, activity_date);
+
+-- ---------- Reprise de l'équipe du Matin (avant les contrôles de journée clôturée) --------------
+insert into public.truck_report_crew (report_id, activity_date, employee_id, position)
+select t.id, t.activity_date, r.employee_id,
+       coalesce((select a.position::text from public.attendance a
+                  where a.employee_id = r.employee_id and a.activity_date = t.activity_date and a.shift = 1 limit 1), e.position::text)
+  from public.truck_daily_reports t
+  join public.collection_reports c on c.activity_date = t.activity_date and c.truck_id = t.truck_id
+  join public.collection_report_rippers r on r.report_id = c.id
+  join public.employees e on e.id = r.employee_id
+ where t.shift = 'matin' and t.line_no = 1 and r.employee_id is distinct from t.chauffeur_id
+on conflict (report_id, employee_id) do nothing;
+
+-- ---------- Date et fonction reprises de la ligne et de la fiche ----------------------------
+create or replace function public.truck_report_crew_defaults()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  select t.activity_date into new.activity_date from public.truck_daily_reports t where t.id = new.report_id;
+  if coalesce(new.position, '') = '' then
+    select coalesce((select a.position::text from public.attendance a where a.employee_id = new.employee_id and a.activity_date = new.activity_date and a.shift = 1 limit 1), e.position::text)
+      into new.position from public.employees e where e.id = new.employee_id;
+  end if;
+  return new;
+end;
+$$;
+
+-- Nombre de rippeurs de la ligne = nombre d'équipiers nommés
+create or replace function public.truck_report_crew_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_id uuid := coalesce(new.report_id, old.report_id);
+begin
+  update public.truck_daily_reports t
+     set rippers_count = (select count(*) from public.truck_report_crew c where c.report_id = v_id)
+   where t.id = v_id and t.rippers_count is distinct from (select count(*) from public.truck_report_crew c where c.report_id = v_id);
+  return null;
+end;
+$$;
+
+-- Déclencheurs avant : ordre alphabétique (date d'abord, puis contrôle de journée clôturée)
+drop trigger if exists truck_report_crew_a_defaults on public.truck_report_crew;
+create trigger truck_report_crew_a_defaults before insert or update on public.truck_report_crew
+  for each row execute function public.truck_report_crew_defaults();
+drop trigger if exists truck_report_crew_day_open on public.truck_report_crew;
+create trigger truck_report_crew_day_open before insert or update or delete on public.truck_report_crew
+  for each row execute function public.assert_day_open();
+drop trigger if exists truck_report_crew_set_audit on public.truck_report_crew;
+create trigger truck_report_crew_set_audit before insert or update on public.truck_report_crew
+  for each row execute function public.set_audit_columns();
+drop trigger if exists truck_report_crew_audit on public.truck_report_crew;
+create trigger truck_report_crew_audit after insert or update or delete on public.truck_report_crew
+  for each row execute function public.audit_trigger();
+drop trigger if exists truck_report_crew_zz_count on public.truck_report_crew;
+create trigger truck_report_crew_zz_count after insert or delete on public.truck_report_crew
+  for each row execute function public.truck_report_crew_count();
+
+alter table public.truck_report_crew enable row level security;
+drop policy if exists "truck_report_crew_select" on public.truck_report_crew;
+create policy "truck_report_crew_select" on public.truck_report_crew for select to authenticated using (public.can_view('rapport_camions'));
+drop policy if exists "truck_report_crew_write" on public.truck_report_crew;
+create policy "truck_report_crew_write" on public.truck_report_crew for all to authenticated
+  using (public.can_edit('rapport_camions') or public.can_edit('rapport_journalier'))
+  with check (public.can_edit('rapport_camions') or public.can_edit('rapport_journalier'));
+grant select, insert, update, delete on public.truck_report_crew to authenticated;
+
+-- ---------- Journal des modifications (migration 044) : équipe de la ligne -------------------
+create or replace function public.audit_table_module(p_table text)
+returns text
+language sql
+immutable
+as $$
+  select case p_table
+    when 'attendance' then 'pointage'
+    when 'cleaning_reports' then 'rapport_journalier'
+    when 'cleaning_report_agents' then 'rapport_journalier'
+    when 'collection_reports' then 'rapport_journalier'
+    when 'collection_report_rippers' then 'rapport_journalier'
+    when 'cleaning_daily_summary' then 'rapport_journalier'
+    when 'truck_daily_reports' then 'rapport_camions'
+    when 'truck_report_crew' then 'rapport_camions'
+  end;
+$$;
+

@@ -9,6 +9,7 @@ import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { deletePhotosOfEntity } from "@/lib/actions/photos";
 import { syncCleaningReport, syncCollectionReports } from "@/lib/report-sync";
+import { setLineCrew, syncMorningLine } from "@/lib/truck-crew";
 import type { ActionResult } from "@/lib/types";
 
 const dateSchema = z.string().date("Date invalide.");
@@ -153,9 +154,7 @@ export async function createCollectionReport(date: string, truckId: string): Pro
   if (ripperIds.length) {
     await supabase.from("collection_report_rippers").insert(ripperIds.map((employee_id) => ({ report_id: report.id, employee_id })));
   }
-  await supabase
-    .from("truck_daily_reports")
-    .upsert({ activity_date: date, truck_id: truckId, shift: "matin", line_no: 1, chauffeur_id: chauffeur?.id ?? null, rippers_count: ripperIds.length }, { onConflict: "activity_date,truck_id,shift,line_no" });
+  await syncMorningLine(supabase, { date, truckId, chauffeurId: chauffeur?.id ?? null, crew: ripperIds });
 
   revalidatePath("/rapport-journalier/collecte");
   revalidatePath("/rapport-camions");
@@ -244,10 +243,12 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
     }
   }
 
-  // Lien avec le rapport camions (ligne Matin n° 1) : chauffeur et nombre de rippeurs seulement
-  await supabase
-    .from("truck_daily_reports")
-    .upsert({ activity_date: existing.activity_date, truck_id: d.truck_id, shift: "matin", line_no: 1, chauffeur_id: d.chauffeur_id, rippers_count: new Set(d.rippers).size }, { onConflict: "activity_date,truck_id,shift,line_no" });
+  // Lien avec le rapport camions (ligne Matin n° 1) : chauffeur et équipe (le Soir garde la sienne)
+  try {
+    await syncMorningLine(supabase, { date: existing.activity_date, truckId: d.truck_id, chauffeurId: d.chauffeur_id, crew: d.rippers });
+  } catch (e) {
+    return { ok: false, error: t(friendlyError((e as Error).message)) };
+  }
 
   revalidatePath("/rapport-journalier", "layout");
   revalidatePath("/rapport-camions");
@@ -317,6 +318,10 @@ export async function saveTruckReport(_prev: ActionResult<{ id: string; date: st
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
   const { id, ...rest } = parsed.data;
   const values: Record<string, unknown> = { ...rest, km: null }; // km parcourus recalculés par la base (fin − départ)
+  // Équipiers de ce poste (employés de la base) : indépendants de l'autre poste du même camion
+  const crewSubmitted = formData.get("crew_submitted") === "1";
+  const crewIds = [...new Set(formData.getAll("crew").map(String))].filter((x) => uuid.safeParse(x).success && x !== rest.chauffeur_id);
+  if (crewSubmitted && crewIds.length) values.rippers_count = crewIds.length;
   if (auth.user.role === "admin") {
     const override = formData.get("dumps_override") === "on";
     values.dumps_override = override;
@@ -325,8 +330,19 @@ export async function saveTruckReport(_prev: ActionResult<{ id: string; date: st
 
   const supabase = await createClient();
   if (id) {
+    const { data: before } = await supabase.from("truck_daily_reports").select("chauffeur_id").eq("id", id).maybeSingle();
     const { error } = await supabase.from("truck_daily_reports").update(values).eq("id", id);
     if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    if (crewSubmitted) {
+      try {
+        const { changed } = await setLineCrew(supabase, id, crewIds, rest.chauffeur_id);
+        // Équipe ou chauffeur corrigés ici : la mise à jour depuis le pointage ne les écrase plus
+        if (changed || (before?.chauffeur_id ?? null) !== (rest.chauffeur_id ?? null)) await supabase.from("truck_daily_reports").update({ crew_manual: true }).eq("id", id);
+        if (!crewIds.length) await supabase.from("truck_daily_reports").update({ rippers_count: rest.rippers_count }).eq("id", id);
+      } catch (e) {
+        return { ok: false, error: t(friendlyError((e as Error).message)) };
+      }
+    }
     revalidatePath("/rapport-camions");
     revalidatePath("/rapport-journalier/global");
     return { ok: true, message: t("Ligne camion enregistrée."), data: { id, date: rest.activity_date } };
@@ -343,10 +359,17 @@ export async function saveTruckReport(_prev: ActionResult<{ id: string; date: st
     .maybeSingle();
   const { data, error } = await supabase
     .from("truck_daily_reports")
-    .insert({ ...values, line_no: (last?.line_no ?? 0) + 1 })
+    .insert({ ...values, line_no: (last?.line_no ?? 0) + 1, crew_manual: crewSubmitted })
     .select("id")
     .single();
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  if (crewSubmitted && crewIds.length) {
+    try {
+      await setLineCrew(supabase, data.id, crewIds, rest.chauffeur_id);
+    } catch (e) {
+      return { ok: false, error: t(friendlyError((e as Error).message)) };
+    }
+  }
   revalidatePath("/rapport-camions");
   revalidatePath("/rapport-journalier/global");
   return { ok: true, message: t("Ligne camion enregistrée."), data: { id: data.id, date: rest.activity_date } };

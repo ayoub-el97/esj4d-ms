@@ -14,13 +14,13 @@ type Shot = { key: string; file: File; url: string };
  * Si la caméra n'est pas accessible (permission refusée, navigateur ancien),
  * l'appareil photo du téléphone est proposé, une photo à la fois, autant de fois que voulu.
  */
-export function CameraCaptureButton({ onCapture, size = "sm" }: { onCapture: (files: File[]) => void; size?: "sm" | "default" }) {
+export function CameraCaptureButton({ onCapture, size = "sm", label = "Prendre des photos" }: { onCapture: (files: File[]) => void; size?: "sm" | "default"; /** clé de traduction */ label?: string }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button type="button" variant="outline" size={size} onClick={() => setOpen(true)}>
-        <Camera /> {t("Prendre des photos")}
+        <Camera /> {t(label)}
       </Button>
       {open && (
         <CameraDialog

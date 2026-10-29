@@ -5,7 +5,8 @@ import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
-import { ABSENCE_CLASSES, CERTIFICATE_STATUSES, CERTIFICATE_VERIFICATIONS, ENGAGEMENT_STATUSES, type AbsenceClass } from "@/lib/absence-types";
+import { ABSENCE_CLASSES, CERTIFICATE_STATES, CERTIFICATE_STATUSES, CERTIFICATE_VERIFICATIONS, ENGAGEMENT_STATUSES, certificateColumns, type AbsenceClass, type CertificateState } from "@/lib/absence-types";
+import { todayISO } from "@/lib/dates";
 import type { ActionResult } from "@/lib/types";
 
 const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().date("Date invalide.").nullable());
@@ -47,6 +48,8 @@ const certificateSchema = z
     submitted_on: optDate,
     status: z.enum(CERTIFICATE_STATUSES as [string, ...string[]]).default("en_attente"),
     verification: z.enum(CERTIFICATE_VERIFICATIONS as [string, ...string[]]).default("non_verifiee"),
+    /** Statut affiché (choix unique) : remplace status + verification */
+    state: z.enum(CERTIFICATE_STATES as [string, ...string[]]).optional(),
     comment: z.string().trim().max(1000).default(""),
   })
   .refine((d) => d.end_date >= d.start_date, { message: "La date de fin ne peut pas précéder la date de début.", path: ["end_date"] });
@@ -58,12 +61,36 @@ export async function saveMedicalCertificate(_prev: ActionResult | null, formDat
   if ("error" in auth) return { ok: false, error: t(auth.error) };
   const parsed = certificateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
-  const { id, ...values } = parsed.data;
+  const { id, state, ...rest } = parsed.data;
+  const values = { ...rest, ...(state ? certificateColumns(state as CertificateState) : {}) };
+  // Certificat remis (reçu, à vérifier, validé, refusé) : date de remise = aujourd'hui si non renseignée
+  if (values.status !== "en_attente" && !values.submitted_on) values.submitted_on = todayISO();
   const supabase = await createClient();
   const { error } = id ? await supabase.from("medical_certificates").update(values).eq("id", id) : await supabase.from("medical_certificates").insert(values);
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   await refresh(values.employee_id);
   return { ok: true, message: id ? t("Certificat médical mis à jour.") : t("Certificat médical enregistré. Ajoutez les photos du certificat quand il est remis.") };
+}
+
+/** Statut du certificat (utilisateur autorisé) : en attente, reçu, à vérifier, validé, refusé. */
+export async function setCertificateState(id: string, state: CertificateState): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("pointage", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(id).success || !CERTIFICATE_STATES.includes(state)) return { ok: false, error: t("Données invalides.") };
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("medical_certificates").select("submitted_on").eq("id", id).maybeSingle();
+  if (!cur) return { ok: false, error: t("Certificat introuvable.") };
+  const cols = certificateColumns(state);
+  const { data, error } = await supabase
+    .from("medical_certificates")
+    .update({ ...cols, submitted_on: cols.status !== "en_attente" ? (cur.submitted_on ?? todayISO()) : cur.submitted_on })
+    .eq("id", id)
+    .select("employee_id")
+    .single();
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  await refresh(data.employee_id);
+  return { ok: true, message: t("Statut du certificat enregistré.") };
 }
 
 export async function deleteMedicalCertificate(id: string): Promise<ActionResult> {

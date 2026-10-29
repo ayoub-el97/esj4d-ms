@@ -25,6 +25,38 @@ export const CERTIFICATE_VERIFICATION_LABELS: Record<CertificateVerification, st
   refusee: "Refusé (jours comptés non justifiés)",
 };
 
+/**
+ * Statut affiché d'un certificat médical (un seul choix pour l'utilisateur), enregistré dans les
+ * deux colonnes existantes : status (remise) et verification (contrôle par un utilisateur autorisé).
+ */
+export type CertificateState = "en_attente" | "recu" | "a_verifier" | "valide" | "refuse";
+export const CERTIFICATE_STATES: CertificateState[] = ["en_attente", "recu", "a_verifier", "valide", "refuse"];
+export const CERTIFICATE_STATE_LABELS: Record<CertificateState, string> = {
+  en_attente: "En attente de certificat",
+  recu: "Certificat reçu",
+  a_verifier: "À vérifier",
+  valide: "Certificat validé",
+  refuse: "Certificat refusé",
+};
+export const CERTIFICATE_STATE_STYLES: Record<CertificateState, string> = {
+  en_attente: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  recu: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+  a_verifier: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  valide: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  refuse: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+};
+export function certificateState(status: CertificateStatus, verification: CertificateVerification): CertificateState {
+  if (verification === "acceptee") return "valide";
+  if (verification === "refusee") return "refuse";
+  return status;
+}
+/** Colonnes enregistrées pour un statut choisi. Validé / refusé : le certificat est forcément remis. */
+export function certificateColumns(state: CertificateState): { status: CertificateStatus; verification: CertificateVerification } {
+  if (state === "valide") return { status: "recu", verification: "acceptee" };
+  if (state === "refuse") return { status: "recu", verification: "refusee" };
+  return { status: state, verification: "non_verifiee" };
+}
+
 export type EngagementStatus = "a_preparer" | "en_attente_signature" | "signe";
 export const ENGAGEMENT_STATUSES: EngagementStatus[] = ["a_preparer", "en_attente_signature", "signe"];
 export const ENGAGEMENT_STATUS_LABELS: Record<EngagementStatus, string> = { a_preparer: "À préparer", en_attente_signature: "En attente de signature", signe: "Signé" };

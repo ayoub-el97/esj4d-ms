@@ -46,6 +46,8 @@ export type MedicalCertificate = {
   status: CertificateStatus;
   verification: CertificateVerification;
   comment: string;
+  /** Entrée créée automatiquement depuis le pointage « Absent maladie » */
+  auto_created?: boolean;
   created_at: string;
   photos: PhotoItem[];
 };

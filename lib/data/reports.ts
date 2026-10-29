@@ -239,7 +239,9 @@ export async function getCollectionReport(id: string): Promise<CollectionReportF
 // ---------------------------------------------------------------------------
 // Rapport camions
 // ---------------------------------------------------------------------------
-export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null; crew: string[]; photos: PhotoItem[] };
+/** Équipier d'une ligne camion (fonction au moment de l'affectation) */
+export type TruckCrewMember = { id: string; name: string; position: string };
+export type TruckReportRow = TruckDailyReport & { truck: Truck | null; chauffeur_name: string; report_id: string | null; /** Noms des équipiers de ce poste */ crew: string[]; crew_members: TruckCrewMember[]; photos: PhotoItem[] };
 
 export async function getTruckReports(filters: { date?: string; from?: string; to?: string; truck?: string }, limit = 500): Promise<TruckReportRow[]> {
   const supabase = await createClient();
@@ -254,30 +256,30 @@ export async function getTruckReports(filters: { date?: string; from?: string; t
   const empById = new Map(employees.map((e) => [e.id, e]));
   const truckById = new Map(trucks.map((t) => [t.id, t]));
 
-  // Rapport collecte du même jour et du même camion : lien + noms de l'équipe (rippeurs)
+  // Équipe propre à chaque ligne (Matin ou Soir) : jamais celle de l'autre poste
+  const crewByLine = new Map<string, TruckCrewMember[]>();
+  if (rows.length) {
+    const { data: crew } = await supabase.from("truck_report_crew").select("report_id, employee_id, position, created_at").in("report_id", rows.map((r) => r.id)).order("created_at");
+    for (const x of crew ?? []) {
+      const e = empById.get(x.employee_id);
+      crewByLine.set(x.report_id, [...(crewByLine.get(x.report_id) ?? []), { id: x.employee_id, name: e ? employeeName(e) : "—", position: x.position }]);
+    }
+  }
+  // Rapport collecte du même jour et du même camion : lien
   let links = new Map<string, string>();
-  const crewByReport = new Map<string, string[]>();
   if (rows.length) {
     const { data: reports } = await supabase
       .from("collection_reports")
       .select("id, activity_date, truck_id")
       .in("activity_date", Array.from(new Set(rows.map((r) => r.activity_date))));
     links = new Map((reports ?? []).map((r) => [`${r.activity_date}:${r.truck_id}`, r.id]));
-    const ids = (reports ?? []).map((r) => r.id);
-    if (ids.length) {
-      const { data: rippers } = await supabase.from("collection_report_rippers").select("report_id, employee_id").in("report_id", ids);
-      for (const x of rippers ?? []) {
-        const e = empById.get(x.employee_id);
-        if (e) crewByReport.set(x.report_id, [...(crewByReport.get(x.report_id) ?? []), employeeName(e)]);
-      }
-    }
   }
 
   return rows
     .map((r) => {
       const c = r.chauffeur_id ? empById.get(r.chauffeur_id) : null;
       const reportId = links.get(`${r.activity_date}:${r.truck_id}`) ?? null;
-      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: reportId, crew: reportId ? (crewByReport.get(reportId) ?? []) : [], photos: photosByLine.get(r.id) ?? [] };
+      return { ...r, truck: truckById.get(r.truck_id) ?? null, chauffeur_name: c ? employeeName(c) : "", report_id: reportId, crew: (crewByLine.get(r.id) ?? []).map((m) => m.name), crew_members: crewByLine.get(r.id) ?? [], photos: photosByLine.get(r.id) ?? [] };
     })
     // Jour (récent d'abord), camion, Matin avant Soir, n° de ligne
     .sort(

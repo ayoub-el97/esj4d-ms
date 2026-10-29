@@ -900,4 +900,50 @@ begin
   raise notice 'OK 26 historique modifiable : corrections sur les mêmes enregistrements, journal et indicateur « Modifié »';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- 27. Certificat médical : entrée créée depuis le pointage « Absent maladie », sans doublon
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid; c uuid;
+begin
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('M027', 'Malade', 'Cert', 'balayeur', 'nettoiement', 3, '2025-01-01') returning id into e;
+  -- lundi 3 et mardi 4 août : Absent maladie → une seule entrée « En attente de certificat » du 3 au 4
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values
+    ('2026-08-03', e, 1, 'absent_maladie', 'balayeur', 'nettoiement'),
+    ('2026-08-04', e, 1, 'absent_maladie', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.medical_certificates where employee_id = e) = 1, 'une seule entrée pour l''épisode';
+  select id into c from public.medical_certificates where employee_id = e;
+  assert (select start_date = '2026-08-03' and end_date = '2026-08-04' and status = 'en_attente' and auto_created from public.medical_certificates where id = c), 'entrée du 3 au 4, en attente, automatique';
+  -- mercredi 5 : jour de repos (non pointé) ; jeudi 6 : toujours malade → même entrée prolongée
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-08-06', e, 1, 'absent_maladie', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.medical_certificates where employee_id = e) = 1 and (select end_date from public.medical_certificates where id = c) = '2026-08-06', 'même épisode prolongé jusqu''au 6 (pas de doublon)';
+  -- réenregistrement de la feuille (même statut) : rien ne change
+  update public.attendance set observation = 'fièvre' where employee_id = e and activity_date = '2026-08-04';
+  assert (select count(*) from public.medical_certificates where employee_id = e) = 1, 'réenregistrement : pas de doublon';
+  -- pointage corrigé : le 6 n'était pas un jour de maladie → entrée réduite au 3–4
+  update public.attendance set status = 'present', time_in = '06:00', time_out = '14:00' where employee_id = e and activity_date = '2026-08-06';
+  assert (select end_date from public.medical_certificates where id = c) = '2026-08-04', 'entrée réduite quand le pointage est corrigé';
+  -- certificat remis (document) : il n'est plus jamais modifié ni supprimé automatiquement
+  insert into public.photos (storage_path, entity_type, entity_id, phase, mime_type, uploaded_by)
+  values ('medical_certificate/' || c || '/page1.pdf', 'medical_certificate', c, 'justificatif', 'application/pdf', '11111111-1111-1111-1111-111111111111');
+  assert (select status = 'recu' and submitted_on is not null from public.medical_certificates where id = c), 'document ajouté : Certificat reçu, date de remise enregistrée';
+  update public.attendance set status = 'absent' where employee_id = e and activity_date in ('2026-08-03', '2026-08-04');
+  assert exists (select 1 from public.medical_certificates where id = c and start_date = '2026-08-03' and end_date = '2026-08-04'), 'certificat avec document conservé tel quel';
+  -- nouvel épisode plus tard, sans document : nouvelle entrée ; retour à « Présent » → retirée
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-08-20', e, 1, 'absent_maladie', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.medical_certificates where employee_id = e) = 2, 'nouvel épisode : nouvelle entrée';
+  update public.attendance set status = 'present', time_in = '06:00', time_out = '14:00' where employee_id = e and activity_date = '2026-08-20';
+  assert (select count(*) from public.medical_certificates where employee_id = e) = 1, 'entrée vide retirée quand le jour n''est plus un jour de maladie';
+  -- épisode du 24 au 26 (entrée automatique), puis certificat saisi à la main pour le 25–26 :
+  -- il remplace l'entrée automatique sur sa période, le 24 garde la sienne (pas de doublon)
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values
+    ('2026-08-24', e, 1, 'absent_maladie', 'balayeur', 'nettoiement'), ('2026-08-25', e, 1, 'absent_maladie', 'balayeur', 'nettoiement'), ('2026-08-26', e, 1, 'absent_maladie', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.medical_certificates where employee_id = e and start_date = '2026-08-24' and end_date = '2026-08-26' and auto_created) = 1, 'épisode 24–26 : une entrée automatique';
+  insert into public.medical_certificates (employee_id, start_date, end_date, comment) values (e, '2026-08-25', '2026-08-26', 'Grippe');
+  assert (select count(*) from public.medical_certificates where employee_id = e and start_date <= '2026-08-26' and end_date >= '2026-08-24') = 2, 'certificat 25–26 + entrée automatique du 24';
+  assert exists (select 1 from public.medical_certificates where employee_id = e and auto_created and start_date = '2026-08-24' and end_date = '2026-08-24'), 'le 24 garde son entrée automatique';
+  raise notice 'OK 27 certificats médicaux : entrée liée à l''absence, créée / prolongée depuis le pointage, sans doublon';
+end $$;
+
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='

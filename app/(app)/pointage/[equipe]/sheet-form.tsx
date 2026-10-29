@@ -395,6 +395,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
               <GroupRows
                 key={g.key}
                 t={t}
+                date={date}
                 dow={dow}
                 title={g.title}
                 tone={g.tone}
@@ -495,6 +496,7 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
 
 function GroupRows({
   t,
+  date,
   dow,
   title,
   tone,
@@ -519,6 +521,8 @@ function GroupRows({
   /** Numéro d'affichage de chaque ligne (1, 2, 3… dans l'ordre de la liste) */
   numbers: Map<number, number>;
   t: TFunction;
+  /** Date de la feuille (lien vers le certificat médical de ce jour) */
+  date: string;
   dow: number;
   title: string | null;
   rows: SheetRow[];
@@ -688,8 +692,8 @@ function GroupRows({
                 </button>
               )}
               {r.status === "absent_maladie" && r.id && (
-                <a href={`/pointage/absences/${r.employee_id}`} className="mt-0.5 block text-[11px] text-indigo-700 underline-offset-2 hover:underline">
-                  {t("Certificat médical (maintenant ou plus tard)")}
+                <a href={`/pointage/absences/${r.employee_id}?date=${date}#certificats`} className="mt-0.5 block text-[11px] text-indigo-700 underline-offset-2 hover:underline">
+                  {t("Certificat médical : prendre une photo ou importer (maintenant ou plus tard)")}
                 </a>
               )}
               {r.status === "absent_maladie" && (

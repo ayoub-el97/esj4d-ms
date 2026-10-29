@@ -61,7 +61,10 @@ begin
 
   -- Données d'exploitation : vidées en une instruction, sans CASCADE (si une table conservée
   -- dépendait d'une de ces tables, Postgres refuserait et rien ne serait modifié).
-  truncate table
+  -- Équipes Matin / Soir des lignes camion (migration 046, si elle a été exécutée) : même instruction.
+  execute 'truncate table '
+    || case when to_regclass('public.truck_report_crew') is not null then 'public.truck_report_crew, ' else '' end
+    || '
     public.attendance_leave_overrides,
     public.attendance_period_snapshots,
     public.attendance_sheet_meta,
@@ -88,7 +91,7 @@ begin
     public.work_task_agents,
     public.work_tasks,
     public.work_days
-  restart identity;
+  restart identity';
 
   -- Employés puis camions (référencés par les chefs d'équipe conservés : suppression ligne à ligne)
   delete from public.employees;

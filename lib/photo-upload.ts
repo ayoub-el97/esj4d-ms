@@ -10,11 +10,16 @@ export type UploadTarget = {
   activityDate: string | null;
   employeeId?: string | null;
   location?: string;
+  /** Documents (certificat médical…) : PDF accepté tel quel, sans compression */
+  allowPdf?: boolean;
 };
 
 /** Limite du stockage (bucket « photos ») et formats acceptés. */
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
+/** PDF (document scanné) : 10 Mo maximum */
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 
 /** Erreur lisible (clé de traduction + variables) pour l'utilisateur. */
 export class PhotoUploadError extends Error {
@@ -51,9 +56,12 @@ async function prepare(file: File): Promise<{ blob: Blob; type: string }> {
  * l'enregistrement en base échoue (pas de fichier orphelin).
  */
 export async function uploadPhotoFile(file: File, target: UploadTarget): Promise<PhotoItem> {
-  if (!file.type.startsWith("image/") && !isHeic(file)) throw new PhotoUploadError("Ce fichier n'est pas une image.");
-  const { blob, type } = await prepare(file);
-  const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
+  const pdf = isPdf(file);
+  if (pdf && !target.allowPdf) throw new PhotoUploadError("Ce fichier n'est pas une image.");
+  if (!pdf && !file.type.startsWith("image/") && !isHeic(file)) throw new PhotoUploadError(target.allowPdf ? "Format non pris en charge : utilisez une photo JPG ou PNG, ou un PDF." : "Ce fichier n'est pas une image.");
+  if (pdf && file.size > MAX_PDF_BYTES) throw new PhotoUploadError("PDF trop lourd ({size} Mo, maximum 10 Mo).", { size: (file.size / 1024 / 1024).toFixed(1) });
+  const { blob, type } = pdf ? { blob: file as Blob, type: "application/pdf" } : await prepare(file);
+  const ext = type === "application/pdf" ? "pdf" : type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
   const path = `${target.entityType}/${target.entityId}/${crypto.randomUUID()}.${ext}`;
   const supabase = createClient();
   const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: type, upsert: false, cacheControl: "3600" });

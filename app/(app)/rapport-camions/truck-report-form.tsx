@@ -12,6 +12,7 @@ import type { PhotoItem } from "@/lib/photo-types";
 import { cn } from "@/lib/utils";
 import { formatDateFr } from "@/lib/dates";
 import { useUnsavedChanges } from "@/lib/use-unsaved";
+import { CrewPicker, type CrewOption } from "@/components/crew-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,8 @@ export function TruckReportForm({
   chauffeurs,
   canEdit,
   isAdmin = false,
+  crewOptions = [],
+  initialCrew = [],
 }: {
   report: TruckDailyReport | null;
   photos?: PhotoItem[];
@@ -44,6 +47,10 @@ export function TruckReportForm({
   chauffeurs: Employee[];
   canEdit: boolean;
   isAdmin?: boolean;
+  /** Employés de la base proposés comme équipiers (et chauffeur) de ce poste */
+  crewOptions?: CrewOption[];
+  /** Équipiers déjà enregistrés sur cette ligne */
+  initialCrew?: { id: string; name: string; position?: string }[];
 }) {
   const { t } = useT();
   const router = useRouter();
@@ -53,6 +60,8 @@ export function TruckReportForm({
   const [kmEnd, setKmEnd] = useState(report?.km_end != null ? String(report.km_end) : "");
   const [newPhotos, setNewPhotos] = useState<PendingPhoto[]>([]);
   const unsaved = useUnsavedChanges();
+  const [chauffeurId, setChauffeurId] = useState(report?.chauffeur_id ?? "");
+  const otherEmployees = crewOptions.filter((o) => !chauffeurs.some((c) => c.id === o.id));
 
   const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveTruckReport>> | null, formData: FormData) => {
     const r = await saveTruckReport(prev, formData);
@@ -134,18 +143,34 @@ export function TruckReportForm({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="chauffeur_id">{t("Chauffeur")}</Label>
-                <NativeSelect id="chauffeur_id" name="chauffeur_id" defaultValue={report?.chauffeur_id ?? ""}>
+                <NativeSelect id="chauffeur_id" name="chauffeur_id" value={chauffeurId} onChange={(e) => setChauffeurId(e.target.value)}>
                   <option value="">{t("— Aucun —")}</option>
-                  {chauffeurs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.last_name} {c.first_name}
-                    </option>
-                  ))}
+                  <optgroup label={t("Chauffeurs")}>
+                    {chauffeurs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.last_name} {c.first_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {otherEmployees.length > 0 && (
+                    <optgroup label={t("Autres employés")}>
+                      {otherEmployees.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </NativeSelect>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="rippers_count">{t("Équipe : nombre de rippeurs")}</Label>
-                <Input id="rippers_count" name="rippers_count" type="number" min="0" defaultValue={report?.rippers_count ?? 0} />
+              <input type="hidden" name="rippers_count" value={report?.rippers_count ?? 0} />
+              <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+                <Label>{shift === "matin" ? t("Équipiers du Matin") : t("Équipiers du Soir")}</Label>
+                <CrewPicker options={crewOptions} initial={initialCrew} excludeId={chauffeurId || null} disabled={!canEdit} onChange={unsaved.markDirty} />
+                <p className="text-xs text-muted-foreground">
+                  {t("Équipe propre à ce poste : l'équipe de l'autre poste du même camion n'est jamais reprise.")}
+                  {!initialCrew.length && (report?.rippers_count ?? 0) > 0 && ` ${t("Enregistré auparavant : {count} rippeur(s) sans nom.", { count: report?.rippers_count ?? 0 })}`}
+                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="km_start">{t("Km départ")}</Label>

@@ -11,8 +11,9 @@ import {
   ABSENCE_ALERT_STYLES,
   ABSENCE_CLASS_LABELS,
   ABSENCE_CLASS_STYLES,
-  CERTIFICATE_STATUS_LABELS,
-  CERTIFICATE_VERIFICATION_LABELS,
+  CERTIFICATE_STATE_LABELS,
+  CERTIFICATE_STATE_STYLES,
+  certificateState,
   ENGAGEMENT_STATUS_LABELS,
   absenceEpisodes,
   type AbsenceClass,
@@ -22,8 +23,10 @@ import { cn } from "@/lib/utils";
 import { ModuleHeader } from "@/components/module-header";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { CertificateDocuments } from "@/components/certificate-documents";
+import { FileHeart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CertificateActions, CertificateForm, ClassificationEditor, DecisionForm, EngagementForm } from "../absences-ui";
+import { CertificateActions, CertificateForm, CertificateStateSelect, ClassificationEditor, DecisionForm, EngagementForm } from "../absences-ui";
 
 export const generateMetadata = pageTitle("Historique des absences");
 
@@ -41,16 +44,18 @@ function auditLine(t: TFunction, h: { tbl: string; action: string; old_data: Rec
     h.tbl === "absence_reviews"
       ? `${formatDateFr(String(d.activity_date))} → ${h.action === "DELETE" ? t("selon le pointage") : t(ABSENCE_CLASS_LABELS[d.classification as AbsenceClass] ?? String(d.classification))}${d.comment ? ` (${d.comment})` : ""}`
       : h.tbl === "medical_certificates"
-        ? `${formatDateFr(String(d.start_date))} → ${formatDateFr(String(d.end_date))} · ${t(CERTIFICATE_STATUS_LABELS[d.status as "recu"] ?? String(d.status))} · ${t(CERTIFICATE_VERIFICATION_LABELS[d.verification as "acceptee"] ?? String(d.verification))}`
+        ? `${formatDateFr(String(d.start_date))} → ${formatDateFr(String(d.end_date))} · ${t(CERTIFICATE_STATE_LABELS[certificateState(d.status as "recu", d.verification as "acceptee")] ?? String(d.status))}${d.submitted_on ? ` · ${t("remis le {date}", { date: formatDateFr(String(d.submitted_on)) })}` : ""}`
         : d.kind === "decision"
           ? `${t("Décision")} : ${d.decision} (${formatDateFr(String(d.decision_date))})`
           : `${t("Engagement écrit")} : ${t(ENGAGEMENT_STATUS_LABELS[d.status as "signe"] ?? String(d.status))}`;
   return `${what} — ${t(AUDIT_ACTIONS[h.action] ?? h.action)} : ${detail}`;
 }
 
-export default async function EmployeeAbsencesPage({ params }: { params: Promise<{ employeeId: string }> }) {
+export default async function EmployeeAbsencesPage({ params, searchParams }: { params: Promise<{ employeeId: string }>; searchParams: Promise<{ date?: string }> }) {
   const [user, t] = await Promise.all([requireModule("pointage"), getT()]);
   const { employeeId } = await params;
+  // Lien depuis le pointage (« Certificat médical ») : certificat de cette date mis en avant
+  const focusDate = (await searchParams).date;
   const employee = (await getEmployees()).find((e) => e.id === employeeId);
   if (!employee) notFound();
   const canEdit = user.permissions.pointage.can_edit;
@@ -113,12 +118,13 @@ export default async function EmployeeAbsencesPage({ params }: { params: Promise
                       <span className="text-xs text-muted-foreground">{t("{count} jour(s)", { count: ep.days.length })}</span>
                       <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", ABSENCE_CLASS_STYLES[ep.classification])}>{t(ABSENCE_CLASS_LABELS[ep.classification])}</span>
                       {cert && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("Certificat : {status}", { status: t(CERTIFICATE_STATUS_LABELS[cert.status]) })}
-                          {cert.submitted_on ? ` · ${t("remis le {date}", { date: formatDateFr(cert.submitted_on) })}` : ""}
-                        </span>
+                        <a href={`#cert-${cert.id}`} className="inline-flex flex-wrap items-center gap-1 text-xs hover:underline">
+                          <span className={cn("rounded-full px-2 py-0.5 font-medium", CERTIFICATE_STATE_STYLES[certificateState(cert.status, cert.verification)])}>{t(CERTIFICATE_STATE_LABELS[certificateState(cert.status, cert.verification)])}</span>
+                          {cert.submitted_on && <span className="text-muted-foreground">{t("remis le {date}", { date: formatDateFr(cert.submitted_on) })}</span>}
+                          {canEdit && <span className="text-primary">{cert.photos.length ? t("Voir le certificat") : t("Ajouter le certificat")}</span>}
+                        </a>
                       )}
-                      {ep.classification === "maladie" && !cert && <span className="text-xs font-medium text-orange-700">{t("Certificat médical non enregistré")}</span>}
+                      {ep.classification === "maladie" && !cert && <span className="text-xs font-medium text-orange-700">{t("En attente de certificat")}</span>}
                     </div>
                     <ul className="mt-2 space-y-1">
                       {ep.days.map((d) => (
@@ -139,32 +145,38 @@ export default async function EmployeeAbsencesPage({ params }: { params: Promise
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="certificats" className="scroll-mt-20">
             <CardHeader>
               <CardTitle>{t("Certificats médicaux")}</CardTitle>
               <CardDescription>{t("Le certificat peut être remis plus tard : sa date de remise est enregistrée à part des dates d'absence. Documents privés (utilisateurs autorisés).")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {certificates.length === 0 && <p className="text-sm text-muted-foreground">{t("Aucun certificat médical.")}</p>}
-              {certificates.map((c) => (
-                <div key={c.id} className="space-y-2 rounded-lg border p-3 text-sm">
+              {certificates.map((c) => {
+                const state = certificateState(c.status, c.verification);
+                const focused = !!focusDate && focusDate >= c.start_date && focusDate <= c.end_date;
+                return (
+                <div key={c.id} id={`cert-${c.id}`} className={cn("scroll-mt-20 space-y-2 rounded-lg border p-3 text-sm", focused && "ring-2 ring-primary")}>
                   <div className="flex flex-wrap items-center gap-2">
+                    <FileHeart className="size-4 text-muted-foreground" />
                     <span className="font-semibold">{c.start_date === c.end_date ? formatDateFr(c.start_date) : t("du {from} au {to}", { from: formatDateFr(c.start_date), to: formatDateFr(c.end_date) })}</span>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{t(CERTIFICATE_STATUS_LABELS[c.status])}</span>
-                    <span className="text-xs text-muted-foreground">{t(CERTIFICATE_VERIFICATION_LABELS[c.verification])}</span>
+                    <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", CERTIFICATE_STATE_STYLES[state])}>{t(CERTIFICATE_STATE_LABELS[state])}</span>
                     <span className="text-xs text-muted-foreground">{c.submitted_on ? t("remis le {date}", { date: formatDateFr(c.submitted_on) }) : t("pas encore remis")}</span>
+                    {c.auto_created && <span className="text-xs text-muted-foreground">· {t("créé depuis le pointage « Absent maladie »")}</span>}
+                    {canEdit && <span className="ms-auto"><CertificateStateSelect certificate={c} /></span>}
                   </div>
                   {c.comment && <p className="text-xs">{c.comment}</p>}
                   {canEdit ? (
                     <>
-                      <PhotoUploader entityType="medical_certificate" entityId={c.id} phase="justificatif" activityDate={null} employeeId={employeeId} photos={c.photos} canEdit={canEdit} title={t("Certificat (photos)")} />
+                      <CertificateDocuments certificateId={c.id} employeeId={employeeId} startDate={c.start_date} files={c.photos} canEdit={canEdit} fileLabel={`certificat-${employeeName(employee).replace(/[^\p{L}\d]+/gu, "-")}-${c.start_date}`} />
                       <CertificateActions certificate={c} employeeId={employeeId} />
                     </>
                   ) : (
                     <p className="text-xs text-muted-foreground">{t("Document réservé aux utilisateurs autorisés.")}</p>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {canEdit && (
                 <details className="rounded-lg border p-3" open={certificates.length === 0 && !!lastSick}>
                   <summary className="cursor-pointer text-sm font-medium">{t("Ajouter un certificat médical")}</summary>

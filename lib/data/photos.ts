@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { PHOTO_BUCKET, PHOTO_URL_TTL, type PhotoEntityType, type PhotoItem, type PhotoPhase } from "@/lib/photo-types";
 
-type PhotoRow = { id: string; storage_path: string; entity_id: string; phase: PhotoPhase; caption: string; created_at: string };
+type PhotoRow = { id: string; storage_path: string; entity_id: string; phase: PhotoPhase; caption: string; created_at: string; mime_type: string | null };
 
 /** Photos d'un ensemble d'entités, avec URL signées (accès privé contrôlé). */
 export async function getPhotosFor(entityType: PhotoEntityType, entityIds: string[]): Promise<Map<string, PhotoItem[]>> {
@@ -12,7 +12,7 @@ export async function getPhotosFor(entityType: PhotoEntityType, entityIds: strin
   const supabase = await createClient();
   const { data } = await supabase
     .from("photos")
-    .select("id, storage_path, entity_id, phase, caption, created_at")
+    .select("id, storage_path, entity_id, phase, caption, created_at, mime_type")
     .eq("entity_type", entityType)
     .in("entity_id", entityIds)
     .order("created_at")
@@ -23,7 +23,7 @@ export async function getPhotosFor(entityType: PhotoEntityType, entityIds: strin
   const urls = await signPaths(rows.map((r) => r.storage_path));
   for (const r of rows) {
     const list = result.get(r.entity_id) ?? [];
-    list.push({ id: r.id, storage_path: r.storage_path, phase: r.phase, caption: r.caption, created_at: r.created_at, url: urls.get(r.storage_path) ?? "" });
+    list.push({ id: r.id, storage_path: r.storage_path, phase: r.phase, caption: r.caption, created_at: r.created_at, url: urls.get(r.storage_path) ?? "", mime_type: r.mime_type ?? undefined });
     result.set(r.entity_id, list);
   }
   return result;

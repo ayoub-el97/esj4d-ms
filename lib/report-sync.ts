@@ -1,4 +1,5 @@
 import "server-only";
+import { syncMorningLine } from "@/lib/truck-crew";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -142,10 +143,8 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
       const { error: e2 } = await supabase.from("collection_report_rippers").insert(added.map((employee_id) => ({ report_id: report.id, employee_id })));
       if (e2) throw new Error(e2.message);
     }
-    const { error: e3 } = await supabase
-      .from("truck_daily_reports")
-      .upsert({ activity_date: date, truck_id: team.truckId, shift: "matin", line_no: 1, chauffeur_id: team.chauffeurId, rippers_count: team.crew.length }, { onConflict: "activity_date,truck_id,shift,line_no" });
-    if (e3) throw new Error(e3.message);
+    // Ligne camion du Matin : même chauffeur et même équipe (la ligne du Soir garde sa propre équipe)
+    await syncMorningLine(supabase, { date, truckId: team.truckId, chauffeurId: team.chauffeurId, crew: team.crew });
   }
 
   // Rapports du jour dont le camion n'est plus utilisé (camion échangé) : retirés s'ils sont vides
