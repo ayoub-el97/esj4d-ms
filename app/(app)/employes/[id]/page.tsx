@@ -8,6 +8,9 @@ import { ModuleHeader } from "@/components/module-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmployeeForm } from "../employee-form";
+import { LeaveSummary } from "../leave-summary";
+import { getLeaveBalances } from "@/lib/data/leaves";
+import { todayISO } from "@/lib/dates";
 
 export const generateMetadata = pageTitle("Fiche employé");
 
@@ -20,12 +23,15 @@ export default async function EmployePage({ params, searchParams }: { params: Pr
   const returnTo = retour && RETURN_TARGETS.includes(retour) ? retour : "/employes";
   const [employee, trucks, collecte, restHistory] = await Promise.all([getEmployee(id), getTrucks(true), getEmployees({ team: "collecte", onlyActive: true }), getRestDayHistory(id)]);
   if (!employee) notFound();
+  // Congés payés : visibles si l'utilisateur peut consulter le module Congé / Récupération
+  const balance = user.permissions.conges.can_view ? ((await getLeaveBalances(todayISO(), { includeInactive: true }).catch(() => [])).find((b) => b.employee_id === id) ?? null) : null;
   const day = (d: number | null) => (d == null ? t("— Non défini —") : t(WEEKDAY_LABELS[d]));
 
   return (
     <div className="space-y-6">
       <ModuleHeader title={t("Fiche employé")} subtitle={t("NB {nb} · {matricule}", { nb: employee.order_number, matricule: employee.matricule })} backHref={returnTo} />
-      <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} canEditLeave={user.role === "admin"} />
+      {user.permissions.conges.can_view && <LeaveSummary t={t} employeeId={employee.id} hireDate={employee.hire_date} balance={balance} />}
+      <EmployeeForm employee={employee} trucks={trucks} collecte={collecte} returnTo={returnTo} canEditLeave={user.role === "admin"} initialBalance={balance?.initial_balance ?? 0} />
 
       <Card>
         <CardHeader>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { initialBalanceDelta } from "@/lib/leave-initial";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
@@ -77,6 +78,15 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
+  // Solde initial de congés saisi depuis la fiche (administrateur) : enregistré comme correction
+  // « solde initial » égale à l'écart (historique : date, utilisateur, motif, jours)
+  const rawInitial = String(formData.get("leave_initial_balance") ?? "").trim().replace(",", ".");
+  const wantedInitial = rawInitial === "" ? null : Number(rawInitial);
+  if (wantedInitial != null && (!Number.isFinite(wantedInitial) || Math.abs(wantedInitial) > 999)) return { ok: false, error: t("Solde initial de congés : nombre invalide.") };
+  const initialReason = String(formData.get("leave_initial_reason") ?? "").trim();
+  const initialDelta = auth.user.role === "admin" ? initialBalanceDelta(Number(formData.get("leave_initial_current") ?? 0) || 0, wantedInitial) : null;
+  if (initialDelta != null && initialReason.length < 3) return { ok: false, error: t("Indiquez le motif de la saisie ou de la correction du solde initial de congés.") };
+
   // Doublon : même nom et prénom, sans matricule pour les distinguer
   const supabaseCheck = await createClient();
   const homonym = await findHomonym(supabaseCheck, parsed.data.last_name, parsed.data.first_name, parsed.data.matricule, parsed.data.id);
@@ -97,8 +107,20 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
   const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();
-  const { error } = id ? await supabase.from("employees").update(values).eq("id", id) : await supabase.from("employees").insert(values);
+  const { data: saved, error } = id ? await supabase.from("employees").update(values).eq("id", id).select("id").single() : await supabase.from("employees").insert(values).select("id").single();
   if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
+
+  if (initialDelta != null && saved) {
+    // Écart recalculé sur la base (le solde a pu être corrigé entre-temps dans Congé / Récupération)
+    const { data: ini } = await supabase.from("leave_adjustments").select("days").eq("employee_id", saved.id).eq("kind", "conge").eq("category", "solde_initial");
+    const current = (ini ?? []).reduce((s, a) => s + Number(a.days), 0);
+    const delta = initialBalanceDelta(current, wantedInitial);
+    if (delta != null) {
+      const { error: e2 } = await supabase.from("leave_adjustments").insert({ employee_id: saved.id, kind: "conge", category: "solde_initial", days: delta, reason: initialReason, created_by: auth.user.id });
+      if (e2) return { ok: false, error: t("Fiche enregistrée, mais le solde initial n'a pas été enregistré : {message}", { message: t(friendlyDbError(e2.message)) }) };
+    }
+    revalidatePath("/conges", "layout");
+  }
 
   revalidatePath("/employes");
   revalidatePath("/profil");

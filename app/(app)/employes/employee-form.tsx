@@ -18,6 +18,7 @@ export function EmployeeForm({
   collecte,
   returnTo = "/employes",
   canEditLeave = false,
+  initialBalance = 0,
 }: {
   employee: Employee | null;
   trucks: Truck[];
@@ -27,6 +28,8 @@ export function EmployeeForm({
   returnTo?: string;
   /** Données de reprise des congés modifiables (administrateur) */
   canEditLeave?: boolean;
+  /** Solde initial actuel (somme des corrections « solde initial ») */
+  initialBalance?: number;
 }) {
   const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
@@ -177,9 +180,22 @@ export function EmployeeForm({
                   <p className="text-xs text-muted-foreground">{t("Pour information : déjà compris dans le solde initial, jamais déduit une seconde fois.")}</p>
                 </div>
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <input type="hidden" name="leave_initial_current" value={initialBalance} />
+                  <Label htmlFor="leave_initial_balance">{t("Solde initial de congés (jours)")}</Label>
+                  <Input id="leave_initial_balance" name="leave_initial_balance" type="number" step="0.5" defaultValue={employee || initialBalance ? initialBalance : ""} placeholder={t("Ex. 12,5")} />
+                  <p className="text-xs text-muted-foreground">{t("Solde disponible confirmé d'après les registres papier, au début du suivi dans l'application.")}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="leave_initial_reason">{t("Motif de la saisie ou de la correction")}</Label>
+                  <Input id="leave_initial_reason" name="leave_initial_reason" placeholder={t("Ex. Registre papier vérifié le 28/10/2026")} />
+                  <p className="text-xs text-muted-foreground">{t("Obligatoire si le solde initial change : la date, l'utilisateur, le motif et l'écart sont conservés dans l'historique.")}</p>
+                </div>
+              </div>
               {employee && (
                 <p className="text-xs">
-                  {t("Le solde initial (registres papier) se saisit dans")}{" "}
+                  {t("Historique et corrections du solde :")}{" "}
                   <a className="text-primary underline" href={`/conges/${employee.id}`}>
                     {t("Congé / Récupération › fiche de l'employé")}
                   </a>{" "}
