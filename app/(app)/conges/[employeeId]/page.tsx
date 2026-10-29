@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { LEAVE_START_METHOD_LABELS, balanceFormula } from "@/lib/leave-method";
+import { fmtDays, leaveDashboard } from "@/lib/leave-method";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { employeeName, getEmployee } from "@/lib/data/employees";
@@ -65,14 +65,13 @@ export default async function EmployeeLeavesPage({ params, searchParams }: { par
 
       <h2 className="mb-2 text-lg font-semibold">{t("Congés")}</h2>
       <p className="mb-2 text-sm text-muted-foreground">
-        {t("Méthode : {method}", { method: t(LEAVE_START_METHOD_LABELS[lb?.method ?? "solde_initial"]) })}.{" "}
-        {lb?.method !== "pris_avant" && (lb?.tracking_start ? t("Début du suivi : {date}.", { date: formatDateFr(lb.tracking_start) }) : t("Début du suivi : non défini (date de début du projet vide)."))}
-        {lb && <span className="mt-1 block font-medium text-foreground tabular-nums">{t("Calcul : {formula}", { formula: balanceFormula(t, lb) })}</span>}
+        {t("Solde congé : 1,5 jour par mois complet de service depuis la date d'entrée en service. Solde pris : congés pris avant le système + congés approuvés déjà pris dans l'application. Solde restant = Solde congé − Solde pris. Calcul au {date}.", { date: formatDateFr(asOf) })}
+        {lb && lb.hire_date && <span className="mt-1 block font-medium text-foreground tabular-nums">{t("Calcul : {conge} − {pris} = {restant} j", { conge: fmtDays(leaveDashboard(lb).conge), pris: fmtDays(leaveDashboard(lb).pris), restant: fmtDays(leaveDashboard(lb).restant) })}</span>}
       </p>
       <Stats
         t={t}
         items={[
-          ...((lb?.method === "pris_avant" ? [["Congés pris avant le système", lb?.taken_before ?? 0]] : [["Solde initial (registres papier)", lb?.initial_balance ?? 0]]) as [string, number][]),
+          ["Congés pris avant le système", lb?.taken_before ?? 0],
           ["Mois complets de service", lb?.months ?? 0],
           ["Congés acquis", lb?.accrued ?? 0],
           ["Congés pris", lb?.taken ?? 0],

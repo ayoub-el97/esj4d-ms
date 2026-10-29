@@ -134,7 +134,7 @@ export async function getLeaveBalances(asOf: string, f: BalanceFilters = {}): Pr
     .filter((r) => !f.team || r.team_type === f.team)
     .filter((r) => !f.position || r.position === f.position)
     // « À compléter » : ni date d'entrée ni solde initial (aucun congé ne peut être calculé de façon sûre)
-    .filter((r) => f.status !== "a-completer" || (!r.hire_date && !r.initial_balance))
+    .filter((r) => f.status !== "a-completer" || !r.hire_date)
     .filter((r) => matchesQuery(r, f.q))
     .sort((a, b) => a.order_number - b.order_number);
 }

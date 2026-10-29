@@ -380,10 +380,10 @@ begin
   insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
   values ('B099', 'Test', 'Projet', 'balayeur', 'nettoiement', 0, '2026-01-01') returning id into e;
   assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 15, 'depuis l''entrée en service : 10 mois au 07/11';
-  -- Méthode « solde initial confirmé » : décompte depuis le début du projet (un mois complet seulement au 08/11)
+  -- (040) Un seul calcul : la méthode n'a plus d'effet
   update public.employees set leave_start_method = 'solde_initial' where id = e;
-  assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 0, 'pas de mois complet avant le 08/11';
-  assert (select accrued from public.leave_balances('2026-11-08') where employee_id = e) = 1.5, '1,5 jour au 08/11';
+  assert (select accrued from public.leave_balances('2026-11-07') where employee_id = e) = 15, 'calcul unique depuis l''entrée en service';
+  assert (select accrued from public.leave_balances('2026-12-01') where employee_id = e) = 16.5, '11 mois complets au 01/12';
 
   -- Rapport mensuel : le pointage du 05/11 compte dans le mois « octobre »
   insert into public.attendance (activity_date, employee_id, status, position, team_type) values ('2026-11-05', e, 'present', 'balayeur', 'nettoiement')

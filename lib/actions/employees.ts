@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { initialBalanceDelta } from "@/lib/leave-initial";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertModule, friendlyError } from "@/lib/auth";
@@ -32,7 +31,10 @@ const employeeSchema = z
     in_service_before_start: z.boolean().default(false),
     leave_tracking_start: optionalDate,
     leave_start_method: z.enum(["solde_initial", "pris_avant"]).default("pris_avant"),
-    leave_taken_before: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number({ message: "Congés déjà pris : nombre invalide." }).min(0, "Congés déjà pris : nombre invalide.").max(999).nullable()),
+    leave_taken_before: z.preprocess(
+      (v) => (v === "" || v == null ? null : Number(String(v).replace(",", "."))),
+      z.number({ message: "Congés pris avant le système : indiquez un nombre de jours (0 ou plus)." }).min(0, "Congés pris avant le système : indiquez un nombre de jours (0 ou plus).").max(999).refine((n) => Number.isInteger(n * 2), "Congés pris avant le système : par jour ou demi-journée (ex. 4,5).").nullable(),
+    ),
     phone: z.string().trim().default(""),
     is_active: z.boolean(),
     job_title: z.string().trim().max(60).default(""),
@@ -80,15 +82,6 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
   });
   if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
 
-  // Solde initial de congés saisi depuis la fiche (administrateur) : enregistré comme correction
-  // « solde initial » égale à l'écart (historique : date, utilisateur, motif, jours)
-  const rawInitial = String(formData.get("leave_initial_balance") ?? "").trim().replace(",", ".");
-  const wantedInitial = rawInitial === "" ? null : Number(rawInitial);
-  if (wantedInitial != null && (!Number.isFinite(wantedInitial) || Math.abs(wantedInitial) > 999)) return { ok: false, error: t("Solde initial de congés : nombre invalide.") };
-  const initialReason = String(formData.get("leave_initial_reason") ?? "").trim();
-  const initialDelta = auth.user.role === "admin" ? initialBalanceDelta(Number(formData.get("leave_initial_current") ?? 0) || 0, wantedInitial) : null;
-  if (initialDelta != null && initialReason.length < 3) return { ok: false, error: t("Indiquez le motif de la saisie ou de la correction du solde initial de congés.") };
-
   // Doublon : même nom et prénom, sans matricule pour les distinguer
   const supabaseCheck = await createClient();
   const homonym = await findHomonym(supabaseCheck, parsed.data.last_name, parsed.data.first_name, parsed.data.matricule, parsed.data.id);
@@ -104,27 +97,19 @@ export async function saveEmployee(_prev: ActionResult | null, formData: FormDat
 
   const { id, ...rest0 } = parsed.data;
   // Données de reprise des congés : administrateur uniquement (sinon non transmises, valeurs inchangées)
-  // (congés pris avant le système : section « Historique des congés avant le système »)
-  const { leave_tracking_start, leave_taken_before: _before, leave_start_method, ...rest1 } = rest0;
-  void _before;
-  const rest = auth.user.role === "admin" ? { ...rest1, leave_tracking_start, leave_start_method } : rest1;
+  // Congés : seuls la date d'entrée en service et les congés pris avant le système sont saisis ;
+  // « congés pris avant le système » : administrateur uniquement (anciens champs de reprise non modifiés)
+  const { leave_tracking_start: _tracking, leave_taken_before, leave_start_method: _method, ...rest1 } = rest0;
+  void _tracking;
+  void _method;
+  const rest = auth.user.role === "admin" ? { ...rest1, leave_taken_before } : rest1;
   // Fiche réactivée par le formulaire : le départ enregistré est levé (il reste dans le journal)
   const values = rest.is_active ? { ...rest, departure_date: null, departure_reason: null, departure_comment: "" } : rest;
   const supabase = await createClient();
   const { data: saved, error } = id ? await supabase.from("employees").update(values).eq("id", id).select("id").single() : await supabase.from("employees").insert(values).select("id").single();
   if (error) return { ok: false, error: t(friendlyDbError(error.message)) };
 
-  if (initialDelta != null && saved) {
-    // Écart recalculé sur la base (le solde a pu être corrigé entre-temps dans Congé / Récupération)
-    const { data: ini } = await supabase.from("leave_adjustments").select("days").eq("employee_id", saved.id).eq("kind", "conge").eq("category", "solde_initial");
-    const current = (ini ?? []).reduce((s, a) => s + Number(a.days), 0);
-    const delta = initialBalanceDelta(current, wantedInitial);
-    if (delta != null) {
-      const { error: e2 } = await supabase.from("leave_adjustments").insert({ employee_id: saved.id, kind: "conge", category: "solde_initial", days: delta, reason: initialReason, created_by: auth.user.id });
-      if (e2) return { ok: false, error: t("Fiche enregistrée, mais le solde initial n'a pas été enregistré : {message}", { message: t(friendlyDbError(e2.message)) }) };
-    }
-    revalidatePath("/conges", "layout");
-  }
+  if (saved) revalidatePath("/conges", "layout");
 
   revalidatePath("/employes");
   revalidatePath("/profil");

@@ -1,8 +1,6 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { toast } from "sonner";
-import { LEAVE_START_METHODS, LEAVE_START_METHOD_HELP, LEAVE_START_METHOD_LABELS, type LeaveStartMethod } from "@/lib/leave-method";
 import { saveEmployee } from "@/lib/actions/employees";
 import type { Employee, Truck } from "@/lib/data/employees";
 import { useT } from "@/lib/i18n/client";
@@ -20,7 +18,6 @@ export function EmployeeForm({
   collecte,
   returnTo = "/employes",
   canEditLeave = false,
-  initialBalance = 0,
 }: {
   employee: Employee | null;
   trucks: Truck[];
@@ -30,14 +27,11 @@ export function EmployeeForm({
   returnTo?: string;
   /** Données de reprise des congés modifiables (administrateur) */
   canEditLeave?: boolean;
-  /** Solde initial actuel (somme des corrections « solde initial ») */
-  initialBalance?: number;
 }) {
   const { t } = useT();
   const [state, action] = useActionState(saveEmployee, null);
   const [position, setPosition] = useState<Position>(employee?.position ?? "balayeur");
   const [hireDate, setHireDate] = useState(employee?.hire_date ?? "");
-  const [method, setMethod] = useState<LeaveStartMethod>(employee?.leave_start_method ?? "pris_avant");
 
   const others = collecte.filter((e) => e.id !== employee?.id);
   const chauffeurs = others.filter((e) => e.position === "chauffeur");
@@ -153,80 +147,27 @@ export function EmployeeForm({
                 ))}
               </NativeSelect>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="hire_date">{t("Date d’entrée en service (facultatif)")}</Label>
-              <Input id="hire_date" name="hire_date" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
-              <p className="text-xs text-muted-foreground">
-                {t("Laissez vide si la date réelle est inconnue (employé déjà en poste avant l'application) : aucune date n'est supposée. Sert au calcul des congés acquis.")}
-              </p>
-              {!hireDate && (
-                <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-2 text-xs">
-                  <input type="checkbox" name="in_service_before_start" defaultChecked={employee?.in_service_before_start ?? false} className="mt-0.5 size-4" />
-                  <span>
-                    <span className="font-medium">{t("Déjà en poste au début du projet")}</span>
-                    <span className="block text-muted-foreground">{t("Les congés sont alors décomptés depuis la date de début du projet (Paramètres › Réglages). Sinon, aucun congé n'est calculé tant que la date de début n'est pas renseignée.")}</span>
-                  </span>
-                </label>
-              )}
-            </div>
-            <fieldset className="space-y-2 rounded-lg border p-3 sm:col-span-2" disabled={!canEditLeave}>
-              <legend className="px-1 text-sm font-medium">{t("Congés — reprise des registres papier")}</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="leave_tracking_start">{t("Date de début dans le système (facultatif)")}</Label>
-                  <Input id="leave_tracking_start" name="leave_tracking_start" type="date" defaultValue={employee?.leave_tracking_start ?? ""} />
-                  <p className="text-xs text-muted-foreground">{t("Début du suivi des congés dans l'application. Vide = date de début du projet (Paramètres › Réglages).")}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="leave_start_method">{t("Méthode de départ du solde")}</Label>
-                  <NativeSelect id="leave_start_method" name="leave_start_method" value={method} onChange={(e) => setMethod(e.target.value as LeaveStartMethod)}>
-                    {LEAVE_START_METHODS.map((m) => (
-                      <option key={m} value={m}>
-                        {t(LEAVE_START_METHOD_LABELS[m])}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                  <p className="text-xs text-muted-foreground">{t(LEAVE_START_METHOD_HELP[method])}</p>
-                  {method === "pris_avant" && !hireDate && <p className="text-xs font-medium text-destructive">{t("Renseignez la date de début de travail : sans elle, aucun congé n'est calculé avec cette méthode.")}</p>}
-                </div>
+            {/* Congés : deux champs saisis, tout le reste est calculé (Solde congé, Solde pris, Solde restant) */}
+            <fieldset className="grid gap-3 rounded-lg border p-3 sm:col-span-2 sm:grid-cols-2">
+              <legend className="px-1 text-sm font-medium">{t("Congés")}</legend>
+              <div className="space-y-1">
+                <Label htmlFor="hire_date">{t("Date d’entrée en service")}</Label>
+                <Input id="hire_date" name="hire_date" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+                {hireDate ? (
+                  <p className="text-xs text-muted-foreground">{t("Point de départ du calcul : 1,5 jour par mois complet de service.")}</p>
+                ) : (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{t("Date d’entrée en service manquante : les congés ne sont pas calculés tant qu’elle n’est pas renseignée.")}</p>
+                )}
+                {/* Ancienne case « déjà en poste » : valeur conservée, plus utilisée */}
+                {employee?.in_service_before_start && <input type="hidden" name="in_service_before_start" value="on" />}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <input type="hidden" name="leave_initial_current" value={initialBalance} />
-                  <Label htmlFor="leave_initial_balance">{t("Solde initial de congés (jours)")}{method === "pris_avant" ? ` — ${t("non utilisé avec cette méthode")}` : ""}</Label>
-                  <Input
-                    id="leave_initial_balance"
-                    name="leave_initial_balance"
-                    type="number"
-                    step="0.5"
-                    defaultValue={employee || initialBalance ? initialBalance : ""}
-                    placeholder={t("Ex. 12,5")}
-                    onChange={(e) => {
-                      // Un solde initial confirmé n'a de sens qu'avec la méthode « solde initial »
-                      if (e.target.value.trim() !== "" && Number(e.target.value) !== initialBalance && method === "pris_avant") {
-                        setMethod("solde_initial");
-                        toast.info(t("Méthode « Solde initial confirmé » sélectionnée : le solde initial saisi sera utilisé."));
-                      }
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">{t("Solde disponible confirmé d'après les registres papier, au début du suivi dans l'application.")}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="leave_initial_reason">{t("Motif de la saisie ou de la correction")}</Label>
-                  <Input id="leave_initial_reason" name="leave_initial_reason" placeholder={t("Ex. Registre papier vérifié le 28/10/2026")} />
-                  <p className="text-xs text-muted-foreground">{t("Obligatoire si le solde initial change : la date, l'utilisateur, le motif et l'écart sont conservés dans l'historique.")}</p>
-                </div>
-              </div>
-              {employee && (
-                <p className="text-xs">
-                  {t("Historique et corrections du solde :")}{" "}
-                  <a className="text-primary underline" href={`/conges/${employee.id}`}>
-                    {t("Congé / Récupération › fiche de l'employé")}
-                  </a>{" "}
-                  {t("(motif obligatoire, historique conservé).")}
+              <div className="space-y-1">
+                <Label htmlFor="leave_taken_before">{t("Congés pris avant le système (jours)")}</Label>
+                <Input id="leave_taken_before" name="leave_taken_before" type="number" step="0.5" min="0" inputMode="decimal" defaultValue={employee?.leave_taken_before ?? ""} placeholder="0" disabled={!canEditLeave} />
+                <p className="text-xs text-muted-foreground">
+                  {canEditLeave ? t("Total des jours pris avant l’utilisation de l’application (registres papier), demi-journées acceptées. Jamais les congés pris depuis.") : t("Modifiable par l'administrateur uniquement.")}
                 </p>
-              )}
-              {!canEditLeave && <p className="text-xs text-muted-foreground">{t("Modifiable par l'administrateur uniquement.")}</p>}
+              </div>
             </fieldset>
             {employee?.departure_date && (
               <div className="space-y-1">

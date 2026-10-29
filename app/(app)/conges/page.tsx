@@ -185,7 +185,7 @@ async function LeaveBalanceSection({ sp }: { sp: SP }) {
             <option value="">{t("Actifs")}</option>
             <option value="inactifs">{t("Inactifs")}</option>
             <option value="tous">{t("Tous")}</option>
-            <option value="a-completer">{t("À compléter (ni date d'entrée ni solde initial)")}</option>
+            <option value="a-completer">{t("À compléter (date d’entrée en service manquante)")}</option>
           </NativeSelect>
         </div>
         <Button type="submit" variant="outline">
