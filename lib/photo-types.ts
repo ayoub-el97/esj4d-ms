@@ -8,7 +8,7 @@ export const PHOTO_PHASE_LABELS: Record<PhotoPhase, string> = {
   document: "Document",
 };
 
-export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry" | "truck_repair" | "truck_report" | "material_purchase" | "medical_certificate" | "absence_action";
+export type PhotoEntityType = "cleaning_report_agent" | "collection_report" | "warning" | "green_waste" | "work_task" | "fuel_entry" | "truck_repair" | "truck_report" | "material_purchase" | "medical_certificate" | "absence_action" | "company_contract";
 
 export type PhotoItem = {
   id: string;

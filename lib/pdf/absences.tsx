@@ -3,7 +3,8 @@ import type { Employee } from "@/lib/data/employees";
 import { employeeName } from "@/lib/data/employees";
 import { formatDateFr } from "@/lib/dates";
 import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
-import { PdfFooter, PdfHeader, PdfTable, styles } from "./components";
+import { PdfDocument, PdfFooter, PdfHeader, PdfTable, styles } from "./components";
+import { ABSENCE_ALERT_SHORT, type AbsenceAlert } from "@/lib/absence-types";
 import { usePdf } from "./context";
 
 /** Engagement écrit relatif aux absences, à faire signer par l'employé (document à imprimer). */
@@ -65,5 +66,33 @@ export function EngagementAbsencesPdf({ company, employee, unjustifiedDates, gen
         <PdfFooter company={company} generatedBy={generatedBy} />
       </Page>
     </Document>
+  );
+}
+
+/** Rapport des absents sur une période : absences par employé et alertes. */
+export function AbsencesPeriodPdf({ company, subtitle, rows, generatedBy }: { company: string; subtitle: string; rows: { name: string; position: string; non_justifiee: number; maladie: number; justifiee: number; total: number; certificates: number; alert: AbsenceAlert; unjustified_all: number }[]; generatedBy: string }) {
+  const { t } = usePdf();
+  const sum = (k: "non_justifiee" | "maladie" | "total" | "certificates") => rows.reduce((s, r) => s + r[k], 0);
+  return (
+    <PdfDocument title={`${t("Rapport des absents")} ${subtitle}`} company={company} generatedBy={generatedBy}>
+      <PdfHeader company={company} title={t("Rapport des absents")} subtitle={subtitle} />
+      <PdfTable
+        columns={[
+          { key: "n", label: "N°", width: 5, align: "center" },
+          { key: "nom", label: "Nom et prénom", width: 26 },
+          { key: "poste", label: "Poste", width: 14 },
+          { key: "nj", label: "Non justifiées", width: 11, align: "right" },
+          { key: "ml", label: "Maladie", width: 9, align: "right" },
+          { key: "tot", label: "Total", width: 8, align: "right" },
+          { key: "cert", label: "Certificats", width: 9, align: "right" },
+          { key: "al", label: "Alerte / suivi", width: 18 },
+        ]}
+        rows={[
+          ...rows.map((r, i) => ({ n: String(i + 1), nom: r.name, poste: t(POSITION_LABELS[r.position as keyof typeof POSITION_LABELS] ?? r.position), nj: String(r.non_justifiee), ml: String(r.maladie), tot: String(r.total), cert: String(r.certificates), al: r.alert === "aucune" ? "" : `${t(ABSENCE_ALERT_SHORT[r.alert])} (${r.unjustified_all})` })),
+          { nom: t("Total"), nj: String(sum("non_justifiee")), ml: String(sum("maladie")), tot: String(sum("total")), cert: String(sum("certificates")) },
+        ]}
+      />
+      <Text style={[styles.small, { marginTop: 4 }]}>{t("Source : le pointage. Un jour « Absent » ou « Absent maladie » compte une seule fois par employé ; Repos, Congé payé et Récupération ne sont pas des absences. Alertes : 2e absence non justifiée → engagement écrit ; plus de 4 → décision du responsable (cumul de toutes les absences non justifiées).")}</Text>
+    </PdfDocument>
   );
 }

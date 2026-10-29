@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Building2, ListPlus, Plus, Truck, UserCog, Users } from "lucide-react";
+import { Building2, ListPlus, Plus, Truck, UserCog, Users, FileSignature } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getEmployeeRows, getEmployees, getTrucks, employeeName } from "@/lib/data/employees";
 import { getSettings, getTeamLeads, logoUrl } from "@/lib/data/settings";
@@ -48,6 +48,11 @@ export default async function ProfilPage({ searchParams }: { searchParams: Promi
               {x.icon} {x.label}
             </LinkButton>
           ))}
+        {canCompany && (
+          <LinkButton href="/profil/contrats" variant="outline" className="shrink-0">
+            <FileSignature /> {t("Contrats")}
+          </LinkButton>
+        )}
       </nav>
 
       {tab === "entreprise" && canCompany && <CompanyTab canEdit={user.permissions.parametres.can_edit} />}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -136,28 +137,16 @@ export function CompanyForm({ companyName, agencyName, details, logoUrl, canEdit
                 <Input id="company_legal" name="company_legal" defaultValue={details.legal} placeholder={t("Ex. ICE …, RC …, IF …")} />
                 <p className="text-xs text-muted-foreground">{t("Le nom, le logo et ces coordonnées apparaissent dans les en-têtes des rapports et des PDF. Les modifier ne change aucun enregistrement.")}</p>
               </div>
-              <div className="space-y-3 rounded-lg border p-3">
-                <p className="text-sm font-medium">{t("Contrat de la société")}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="company_contract_start">{t("Date de début du contrat de la société")}</Label>
-                    <Input id="company_contract_start" name="company_contract_start" type="date" defaultValue={details.contractStart} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="company_contract_end">{t("Date de fin du contrat de la société")}</Label>
-                    <Input id="company_contract_end" name="company_contract_end" type="date" defaultValue={details.contractEnd} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="company_contract_ref">{t("Référence du contrat (facultatif)")}</Label>
-                    <Input id="company_contract_ref" name="company_contract_ref" defaultValue={details.contractRef} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="contract_alert_days">{t("Alertes avant la fin (jours)")}</Label>
-                    <Input id="contract_alert_days" name="contract_alert_days" defaultValue={details.alertDays} placeholder="90,60,30" dir="ltr" />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">{t("Des rappels partagés sont créés automatiquement dans « Rappels et alertes » à chaque seuil avant la fin, puis à l'expiration du contrat.")}</p>
-              </div>
+              <p className="rounded-lg border p-3 text-sm">
+                {t("Contrats de la société (dates, rappels, archives, exports) :")}{" "}
+                <Link href="/profil/contrats" className="font-medium text-primary underline-offset-2 hover:underline">
+                  {t("gérer les contrats")}
+                </Link>
+              </p>
+              <input type="hidden" name="company_contract_start" value={details.contractStart} />
+              <input type="hidden" name="company_contract_end" value={details.contractEnd} />
+              <input type="hidden" name="company_contract_ref" value={details.contractRef} />
+              <input type="hidden" name="contract_alert_days" value={details.alertDays} />
             </fieldset>
             {canEdit && <SubmitButton>{t("Enregistrer")}</SubmitButton>}
           </form>

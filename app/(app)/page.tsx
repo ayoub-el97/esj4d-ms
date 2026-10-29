@@ -10,7 +10,7 @@ import { NavIcon } from "@/lib/nav-icons";
 import { RemindersPanel } from "@/components/reminders-panel";
 import { FleetAlertsCard } from "@/components/fleet-alerts";
 import { getSetupHint } from "@/lib/data/setup";
-import { getSettings } from "@/lib/data/settings";
+import { getCurrentContract } from "@/lib/data/contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -141,22 +141,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
 /** Échéance du contrat de la société (Profil › Entreprise). */
 async function ContractBanner({ t, today }: { t: (k: string, v?: Record<string, string | number>) => string; today: string }) {
-  const s = await getSettings();
-  const end = s.company_contract_end;
-  if (!end) return null;
+  const c = await getCurrentContract();
+  if (!c) return null;
+  const end = c.end_date;
   const left = Math.round((Date.parse(end) - Date.parse(today)) / 86_400_000);
-  const max = Math.max(0, ...String(s.contract_alert_days).split(",").map(Number).filter(Number.isFinite));
+  const max = Math.max(0, ...String(c.alert_days).split(",").map(Number).filter(Number.isFinite));
   const tone = left < 0 ? "border-red-300 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200" : left <= max ? "border-orange-300 bg-orange-50 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200" : "bg-card text-muted-foreground";
   const fin = end.split("-").reverse().join("/");
   return (
-    <Link href="/profil" className={cn("flex items-center gap-3 rounded-2xl border p-3 text-sm shadow-sm transition hover:shadow-md", tone)}>
+    <Link href={`/profil/contrats/${c.id}`} className={cn("flex items-center gap-3 rounded-2xl border p-3 text-sm shadow-sm transition hover:shadow-md", tone)}>
       <span className="flex-1">
         {left < 0
           ? t("Contrat de la société expiré depuis le {date}.", { date: fin })
           : left === 0
             ? t("Contrat de la société : dernier jour aujourd'hui ({date}).", { date: fin })
             : t("Contrat de la société jusqu'au {date} (dans {n} jours).", { date: fin, n: left })}
-        {s.company_contract_ref ? ` — ${t("Réf.")} ${s.company_contract_ref}` : ""}
+        {` — ${t("Réf.")} ${c.reference}`}
       </span>
       <ChevronRight className="size-4 shrink-0 rtl:rotate-180" />
     </Link>

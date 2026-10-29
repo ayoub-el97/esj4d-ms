@@ -29,7 +29,10 @@ import { MonthlyReportPdf, WorkerReportPdf } from "./monthly";
 import { FuelCostsPdf, FuelEntryPdf, FuelReportPdf } from "./fuel";
 import { FleetPdf, RepairExpensesPdf, RepairPdf, TruckRepairHistoryPdf } from "./repairs";
 import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
-import { EngagementAbsencesPdf } from "./absences";
+import { AbsencesPeriodPdf, EngagementAbsencesPdf } from "./absences";
+import { ContractReportPdf } from "./contracts";
+import { getContract, getContractSummary } from "@/lib/data/contracts";
+import { getAbsenceSummary } from "@/lib/data/absences";
 import { getPurchase, getPurchaseReport, getPurchases } from "@/lib/data/purchases";
 import { categoryLabel } from "@/lib/purchase-types";
 import { resolvePurchasePeriod } from "@/app/(app)/achats/period";
@@ -89,6 +92,16 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
         `pointage-${team}-${date}.pdf`,
         createElement(AttendanceSheetPdf, { ...common, agency: settings.agency_name, teamLead: sheet.teamLead, date, team, rows: sheet.rows, trucks: sheet.trucks }),
       );
+    }
+    case "contrat": {
+      if (!params.id) return null;
+      const [contract, summary] = await Promise.all([getContract(params.id), getContractSummary(params.id)]);
+      if (!contract) return null;
+      return done("parametres", `${t("Rapport du contrat")} ${contract.reference}`, `rapport-contrat-${contract.reference.replace(/[^\w.-]+/g, "-")}.pdf`, createElement(ContractReportPdf, { ...common, contract, summary }));
+    }
+    case "absences": {
+      const rows = (await getAbsenceSummary(range.from, range.to)).filter((r) => r.total > 0 || r.alert !== "aucune").map((r) => ({ ...r, position: r.employee.position }));
+      return done("pointage", `${t("Rapport des absents")} ${subtitle}`, `absences-${slug}.pdf`, createElement(AbsencesPeriodPdf, { ...common, subtitle, rows }));
     }
     case "engagement-absences": {
       if (!params.employee) return null;
