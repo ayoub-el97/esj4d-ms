@@ -40,6 +40,8 @@ export function DateField({
         max={max}
         className="w-auto"
         onChange={(e) => {
+          // Feuille de présence modifiée et non enregistrée : confirmation avant de changer de date
+          if ((window as unknown as { __pointageDirty?: boolean }).__pointageDirty && !window.confirm(t("Des modifications ne sont pas enregistrées. Changer de date quand même ?"))) return;
           if (!e.target.value) return;
           const params = new URLSearchParams(searchParams.toString());
           params.set(param, e.target.value);

@@ -114,6 +114,13 @@ export async function buildSheet(date: string, team: TeamType) {
     return a && a.team === rowTeam && a.team !== a.usual_team ? a : null;
   };
   const dow = getDay(parseISO(date));
+  // Jour de repos hebdomadaire compris dans un congé accepté : jour de repos, pas un jour de congé
+  for (const id of [...onLeave]) {
+    if (byId.get(id)?.rest_day === dow) {
+      onLeave.delete(id);
+      leaveByEmployee.delete(id);
+    }
+  }
   const rows: SheetRow[] = [];
 
   for (const a of existing ?? []) {
@@ -167,6 +174,8 @@ export async function buildSheet(date: string, team: TeamType) {
     // Équipe du jour : affectation temporaire, sinon équipe permanente
     const dayTeam = assignments.get(e.id)?.team ?? e.team_type;
     if (dayTeam !== team || !availableOn(e, date) || alreadyIn.has(e.id)) continue;
+    // Feuille d'une date passée : un employé entré en service après cette date n'y figure pas
+    if (e.hire_date && e.hire_date > date) continue;
     const asg = assignmentOf(e.id, team);
     const dayPosition = asg?.position ?? e.position;
     const defaultStatus: AttendanceStatus = holiday
@@ -412,4 +421,14 @@ export async function getDaySummary(date: string) {
     checks.push({ key: tk.id, label: m("Programme de travail — {place}", { place: tk.location || "—" }), href: `/programme/${tk.id}`, missing });
   }
   return { attendance: summary, total: (data ?? []).length, checks };
+}
+
+export type DayAuditEntry = { at: string; action: string; user_email: string | null; employee_id: string | null; old_data: Record<string, unknown> | null; new_data: Record<string, unknown> | null };
+
+/** Journal des modifications d'une feuille de présence (date + équipe), du plus récent au plus ancien. */
+export async function getAttendanceDayAudit(date: string, team: TeamType): Promise<DayAuditEntry[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("attendance_day_audit", { p_date: date, p_team: team });
+  if (error) return [];
+  return (data ?? []) as DayAuditEntry[];
 }

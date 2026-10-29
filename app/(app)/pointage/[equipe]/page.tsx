@@ -2,7 +2,8 @@ import { POSITION_LABELS } from "@/lib/types";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
-import { buildSheet, getWorkDay } from "@/lib/data/attendance";
+import { buildSheet, getAttendanceDayAudit, getWorkDay } from "@/lib/data/attendance";
+import { DayAuditCard } from "./day-audit";
 import { getSettings, getTeamLeads, logoUrl } from "@/lib/data/settings";
 import { isISODate, todayISO, formatDateLongFr } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
@@ -27,7 +28,7 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
 
   const sp = await searchParams;
   const date = isISODate(sp.date) ? sp.date : todayISO();
-  const [workDay, sheet, settings, leads] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings(), getTeamLeads(true)]);
+  const [workDay, sheet, settings, leads, audit] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings(), getTeamLeads(true), getAttendanceDayAudit(date, team)]);
   const closed = workDay?.status === "closed";
   const canEdit = user.permissions.pointage.can_edit && !closed;
 
@@ -78,6 +79,8 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         isHoliday={!!sheet.holidayLabel}
         elsewhere={sheet.elsewhere}
       />
+
+      <DayAuditCard t={t} entries={audit} names={new Map(sheet.options.map((o) => [o.id, o.name]))} />
 
       <ModuleButtons
         pdfSlot={<PdfExportButton kind="pointage" params={{ date, equipe: team }} />}

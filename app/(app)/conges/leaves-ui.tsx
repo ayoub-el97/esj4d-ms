@@ -4,7 +4,9 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Ban, CalendarPlus, Check, RotateCcw, X } from "lucide-react";
-import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest } from "@/lib/actions/leaves";
+import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest, previewLeaveRequest } from "@/lib/actions/leaves";
+import type { LeaveSegment } from "@/lib/leave-segments";
+import { formatDateFr } from "@/lib/dates";
 import { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
 import { todayISO } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
@@ -73,10 +75,26 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
   const { t } = useT();
   const router = useRouter();
   const [state, action] = useActionState(createLeaveRequest, null);
+  const [employee, setEmployee] = useState(defaultEmployee ?? "");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [days, setDays] = useState("");
-  const computed = daysBetween(start, end);
+  // Aperçu : jours de repos exclus, périodes de congé, total déduit
+  const [preview, setPreview] = useState<{ key: string; segments: LeaveSegment[]; restDays: string[]; total: number; restUnknown: boolean; calendarDays: number } | null>(null);
+  const previewKey = employee && start && end && end >= start ? `${employee}|${start}|${end}` : "";
+  useEffect(() => {
+    if (!previewKey) return;
+    let live = true;
+    const [emp, s, e] = previewKey.split("|");
+    previewLeaveRequest(emp, s, e).then((r) => {
+      if (live && r.ok && r.data) setPreview({ key: previewKey, ...r.data });
+    });
+    return () => {
+      live = false;
+    };
+  }, [previewKey]);
+  const shown = preview && preview.key === previewKey ? preview : null;
+  const computed = shown ? shown.total : daysBetween(start, end);
   useEffect(() => {
     if (state?.ok) {
       toast.success(state.message);
@@ -91,7 +109,7 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
           <ActionMessage state={state} />
           <div className="space-y-1">
             <Label htmlFor="employee_id">{t("Employé")}</Label>
-            <NativeSelect id="employee_id" name="employee_id" defaultValue={defaultEmployee ?? ""} required>
+            <NativeSelect id="employee_id" name="employee_id" value={employee} onChange={(e) => setEmployee(e.target.value)} required>
               <option value="">{t("— Choisir —")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -114,6 +132,31 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
               <Input id="end_date" name="end_date" type="date" required value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
             </div>
           </div>
+          {shown && (
+            <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-xs">
+              <p>
+                {t("Période demandée : du {from} au {to} ({count} jour(s))", { from: formatDateFr(start), to: formatDateFr(end), count: shown.calendarDays })}
+              </p>
+              {shown.restDays.length > 0 && (
+                <p className="text-indigo-800 dark:text-indigo-300">
+                  {t("Jours de repos exclus : {days}", { days: shown.restDays.map((d) => formatDateFr(d)).join(", ") })}
+                </p>
+              )}
+              <p>
+                {t("Périodes de congé :")}{" "}
+                {shown.segments.length
+                  ? shown.segments.map((s) => (s.from === s.to ? formatDateFr(s.from) : t("du {from} au {to}", { from: formatDateFr(s.from), to: formatDateFr(s.to) })) + ` (${s.days} ${t("j")})`).join(" ; ")
+                  : t("aucune (uniquement des jours de repos)")}
+              </p>
+              <p className="font-semibold">{t("Total déduit du solde : {count} jour(s)", { count: shown.total })}</p>
+              {shown.restUnknown && (
+                <label className="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  <input type="checkbox" name="confirm_rest_unknown" className="mt-0.5 size-4" required />
+                  <span>{t("Jour de repos de l'employé non défini : aucun jour n'est exclu. Je confirme la demande telle quelle.")}</span>
+                </label>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="requested_days">{t("Nombre de jours demandés")}</Label>

@@ -5,7 +5,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getOptionalUser } from "@/lib/auth";
 import { companyDetailLines, getSettings, logoUrl } from "@/lib/data/settings";
-import { buildSheet, getMonthlyAttendance } from "@/lib/data/attendance";
+import { buildSheet, getAttendanceHistory, getMonthlyAttendance } from "@/lib/data/attendance";
 import { getCleaningReport, getCleaningSummary, getCollectionReports, getTruckMonthly, getTruckReports } from "@/lib/data/reports";
 import { getLeaveBalances, getLeaveDetail, getLeaveRequests, getRecoveryBalances, getRecoveryDetail, getRecoveryRequests } from "@/lib/data/leaves";
 import { getEmployee, getTrucks } from "@/lib/data/employees";
@@ -21,7 +21,7 @@ import { getLocale, getMessages, pdfLocale } from "@/lib/i18n/server";
 import { TEAM_LABELS, TEAM_SLUGS, type AppModule, ALL_POSITIONS } from "@/lib/types";
 import { runWithPdfContext, type PdfContextValue } from "./context";
 import { embedPhotos } from "./embed-photos";
-import { AttendanceSheetPdf, MonthlyAttendancePdf } from "./attendance-sheet";
+import { AttendanceHistoryPdf, AttendanceSheetPdf, MonthlyAttendancePdf } from "./attendance-sheet";
 import { CleaningReportPdf, CollectionReportPdf, GlobalDailyPdf, TruckMonthlyPdf, TruckReportsPdf } from "./reports";
 import { GreenWastePdf, TasksPdf, WarningsPdf } from "./modules";
 import { EmployeeLeavePdf, LeaveBalancesPdf, LeaveHistoryPdf, RecoveryBalancesPdf, RecoveryHistoryPdf, WorkersPeriodPdf } from "./leaves";
@@ -114,6 +114,10 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       const employee = { ...(emp as unknown as Employee), matricule: (emp as unknown as Employee).matricule ?? "" };
       const unjustifiedDates = ((days ?? []) as { activity_date: string; classification: string }[]).filter((d) => d.classification === "non_justifiee").map((d) => d.activity_date).sort();
       return done("pointage", `${t("Engagement écrit relatif aux absences")} — ${employee.last_name} ${employee.first_name}`, `engagement-absences-${employee.last_name}.pdf`, createElement(EngagementAbsencesPdf, { ...common, employee, unjustifiedDates }));
+    }
+    case "pointage-historique": {
+      const rows = await getAttendanceHistory({ from: range.from, to: range.to, employee: params.employee || undefined, team: params.team || undefined, position: params.position || undefined, status: params.status || undefined }, 3000);
+      return done("pointage", `${t("Historique du pointage")} ${subtitle}`, `historique-pointage-${slug}.pdf`, createElement(AttendanceHistoryPdf, { ...common, subtitle, rows }));
     }
     case "pointage-mensuel": {
       const month = params.mois;

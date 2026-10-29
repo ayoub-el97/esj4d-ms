@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { Fuel, Truck, Wrench } from "lucide-react";
+import { Fuel, Truck, Wrench, History } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 /** Deux parties du rapport camions : rapport général et carburant. */
-export async function TruckTabs({ active }: { active: "general" | "carburant" | "reparations" }) {
+export async function TruckTabs({ active }: { active: "general" | "historique" | "carburant" | "reparations" }) {
   const t = await getT();
   const tabs = [
     { key: "general", href: "/rapport-camions", label: t("1. Rapport général"), icon: Truck },
+    { key: "historique", href: "/rapport-camions/historique", label: t("Historique des rapports camions"), icon: History },
     { key: "carburant", href: "/rapport-camions/carburant", label: t("2. Carburant"), icon: Fuel },
     { key: "reparations", href: "/reparations", label: t("3. Réparations"), icon: Wrench },
   ] as const;

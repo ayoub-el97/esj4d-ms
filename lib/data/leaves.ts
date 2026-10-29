@@ -52,6 +52,9 @@ export type LeaveRequest = EmpInfo & {
   decided_by_name: string;
   decision_note: string;
   created_at: string;
+  /** Périodes de congé (jours de repos hebdomadaires exclus) et nombre de jours de repos exclus */
+  segments?: { from: string; to: string; days: number }[];
+  rest_days_excluded?: number;
 };
 
 export type RequestFilters = { employee?: string; status?: string; from?: string; to?: string; q?: string };
@@ -72,6 +75,16 @@ export async function getLeaveRequests(f: RequestFilters = {}, limit = 1000): Pr
   const [{ data }, employees] = await Promise.all([q, getEmployees()]);
   const byId = new Map(employees.map((e) => [e.id, e]));
   const deciders = await decidersById((data ?? []).map((r) => r.decided_by));
+  // Périodes de congé (jours de repos hebdomadaires exclus)
+  const ids = (data ?? []).map((r) => r.id as string);
+  const { data: parts } = ids.length ? await supabase.rpc("leave_requests_breakdown", { p_ids: ids }) : { data: [] };
+  const byRequest = new Map<string, { segments: { from: string; to: string; days: number }[]; rest_days: number }>();
+  for (const p of (parts ?? []) as { request_id: string; seg_start: string | null; seg_end: string | null; days: number; rest_days: number }[]) {
+    const x = byRequest.get(p.request_id) ?? { segments: [], rest_days: 0 };
+    if (p.seg_start && p.seg_end) x.segments.push({ from: p.seg_start, to: p.seg_end, days: Number(p.days) });
+    x.rest_days = Math.max(x.rest_days, Number(p.rest_days));
+    byRequest.set(p.request_id, x);
+  }
   return (data ?? [])
     .map((r) => ({
       ...r,
@@ -79,6 +92,8 @@ export async function getLeaveRequests(f: RequestFilters = {}, limit = 1000): Pr
       days: Number(r.days),
       requested_days: Number(r.requested_days),
       decided_by_name: r.decided_by ? (deciders.get(r.decided_by) ?? "") : "",
+      segments: byRequest.get(r.id)?.segments ?? [],
+      rest_days_excluded: byRequest.get(r.id)?.rest_days ?? 0,
     }))
     .filter((r) => matchesQuery(r, f.q)) as LeaveRequest[];
 }

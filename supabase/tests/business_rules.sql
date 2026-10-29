@@ -635,6 +635,8 @@ do $$
 declare e uuid; req uuid; req2 uuid; ov uuid; taken0 numeric; r record;
 begin
   select id into e from public.employees where matricule = 'B003';
+  -- (042) jour de repos hors de la période (lundi) : les 3 dates sont des jours de congé
+  update public.employees set rest_day = 1 where id = e;
   -- Pointage déjà saisi le 21/11 (présent) avant la demande
   insert into public.attendance (activity_date, employee_id, status, position, team_type, time_in) values ('2026-11-21', e, 'present', 'balayeur', 'nettoiement', '07:00');
   taken0 := (select taken from public.leave_balances('2026-11-30') where employee_id = e);
@@ -838,6 +840,27 @@ begin
   assert s.worked_days = 1 and s.sick_days = 3 and s.overtime_total = 6, format('synthèse : travaillés %s (attendu 1), maladie %s (attendu 3), HS %s (attendu 6)', s.worked_days, s.sick_days, s.overtime_total);
   delete from public.attendance where employee_id = e and activity_date between '2026-11-24' and '2026-11-27';
   raise notice 'OK 24 départ anticipé pour maladie : Absent maladie, 0 h standard, heures en HS manuelles';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 25. Congés : jour de repos applicable à chaque date (changement de jour de repos pendant la période)
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid;
+begin
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('R025', 'Repos', 'Change', 'balayeur', 'nettoiement', 3, '2025-01-01') returning id into e;
+  -- historique daté : mercredi jusqu'au 14/11, vendredi à partir du 15/11
+  update public.employees set rest_day = 5 where id = e;
+  -- lignes écrites automatiquement (aujourd'hui) remplacées par un historique daté
+  delete from public.employee_rest_day_history where employee_id = e;
+  insert into public.employee_rest_day_history (employee_id, old_rest_day, new_rest_day, changed_at) values (e, null, 3, '2025-01-01'), (e, 3, 5, '2026-11-15 08:00');
+  assert public.is_rest_day(e, '2026-11-11'), 'mercredi 11/11 : repos (ancien jour)';
+  assert not public.is_rest_day(e, '2026-11-13'), 'vendredi 13/11 : travaillé (avant le changement)';
+  assert public.is_rest_day(e, '2026-11-20'), 'vendredi 20/11 : repos (nouveau jour)';
+  assert not public.is_rest_day(e, '2026-11-18'), 'mercredi 18/11 : travaillé (après le changement)';
+  assert (select count(*) from public.leave_period_breakdown(e, '2026-11-09', '2026-11-21') where rest) = 2, '2 jours de repos exclus sur la période';
+  raise notice 'OK 25 congés : jour de repos applicable à chaque date (historique des changements)';
 end $$;
 
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='

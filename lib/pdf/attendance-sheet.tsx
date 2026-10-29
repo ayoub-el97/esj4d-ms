@@ -181,3 +181,43 @@ export function MonthlyAttendancePdf({
     </PdfDocument>
   );
 }
+
+/** Historique du pointage (filtres de la page) : une ligne par pointage, du plus récent au plus ancien. */
+export function AttendanceHistoryPdf({ company, subtitle, rows, generatedBy }: { company: string; subtitle: string; rows: { activity_date: string; team_type: string; name: string; position: string; status: string; time_in: string | null; time_out: string | null; overtime_hours: number; observation: string; updated_by_email: string }[]; generatedBy: string }) {
+  const { t } = usePdf();
+  return (
+    <PdfDocument title={`${t("Historique du pointage")} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
+      <PdfHeader company={company} title={t("Historique du pointage")} subtitle={subtitle} />
+      <PdfTable
+        columns={[
+          { key: "d", label: "Date", width: 9 },
+          { key: "eq", label: "Équipe", width: 9 },
+          { key: "nom", label: "Nom et prénom", width: 19 },
+          { key: "poste", label: "Poste", width: 11 },
+          { key: "st", label: "Statut", width: 11 },
+          { key: "in", label: "Heure d'entrée", width: 7, align: "center" },
+          { key: "out", label: "Heure de sortie", width: 7, align: "center" },
+          { key: "hs", label: "HS", width: 5, align: "center" },
+          { key: "obs", label: "Observation", width: 14 },
+          { key: "by", label: "Saisi par", width: 8 },
+        ]}
+        rows={rows.map((r) => {
+          const worked = WORKED_STATUSES.includes(r.status as never);
+          return {
+            d: formatDateFr(r.activity_date),
+            eq: t(TEAM_LABELS[r.team_type as TeamType] ?? r.team_type),
+            nom: r.name,
+            poste: t(POSITION_LABELS[r.position as keyof typeof POSITION_LABELS] ?? r.position),
+            st: t(ATTENDANCE_STATUS_LABELS[r.status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? r.status),
+            in: worked ? (r.time_in ?? "").slice(0, 5) : "",
+            out: worked ? (r.time_out ?? "").slice(0, 5) + (worked && r.time_in && r.time_out && r.time_out.slice(0, 5) <= r.time_in.slice(0, 5) ? " (+1)" : "") : "",
+            hs: Number(r.overtime_hours) ? fmtHours(Number(r.overtime_hours)) : "",
+            obs: r.observation,
+            by: r.updated_by_email,
+          };
+        })}
+      />
+      <Text style={[styles.small, { marginTop: 4 }]}>{t("{count} ligne(s). (+1) : sortie le lendemain.", { count: rows.length })}</Text>
+    </PdfDocument>
+  );
+}

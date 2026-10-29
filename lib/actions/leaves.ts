@@ -6,6 +6,7 @@ import { assertModule, friendlyError } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
+import { leaveSegments, type LeaveDay, type LeaveSegment } from "@/lib/leave-segments";
 
 // Les demandes de congé et de récupération ne sont jamais supprimées :
 // elles changent de statut (en attente / acceptée / refusée) et chaque changement est journalisé.
@@ -39,6 +40,14 @@ export async function createLeaveRequest(_prev: ActionResult | null, formData: F
   const decided = d.status !== "en_attente";
 
   const supabase = await createClient();
+  // Jours de repos hebdomadaires exclus : jour de repos inconnu → confirmation explicite
+  const { data: days } = await supabase.rpc("leave_period_breakdown", { p_employee: d.employee_id, p_start: d.start_date, p_end: d.end_date });
+  const b = leaveSegments((days ?? []) as LeaveDay[]);
+  if (b.restUnknown && formData.get("confirm_rest_unknown") !== "on") {
+    return { ok: false, error: t("Le jour de repos de cet employé n'est pas défini : aucun jour ne peut être exclu. Cochez la confirmation ou renseignez son jour de repos.") };
+  }
+  if (b.total === 0) return { ok: false, error: t("La période ne contient que des jours de repos : aucun jour de congé à déduire.") };
+  if (d.requested_days > b.total) return { ok: false, error: t("Nombre de jours demandés supérieur aux jours de congé de la période ({count} jour(s) hors repos).", { count: b.total }) };
   const { error } = await supabase.from("leave_requests").insert({
     ...d,
     decided_by: decided ? auth.user.id : null,
@@ -226,4 +235,17 @@ export async function deleteLeaveHistoryBefore(id: string): Promise<ActionResult
   revalidatePath("/conges", "layout");
   revalidatePath(`/employes/${data.employee_id}`);
   return { ok: true, message: t("Ligne supprimée (conservée dans le journal).") };
+}
+
+/** Aperçu d'une demande : jours de repos exclus, périodes de congé et total déduit (avant confirmation). */
+export async function previewLeaveRequest(employeeId: string, start: string, end: string): Promise<ActionResult<{ segments: LeaveSegment[]; restDays: string[]; total: number; restUnknown: boolean; calendarDays: number }>> {
+  const t = await getT();
+  const auth = await assertModule("conges", "view");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(employeeId).success || !z.string().date().safeParse(start).success || !z.string().date().safeParse(end).success || end < start) return { ok: false, error: t("Données invalides.") };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("leave_period_breakdown", { p_employee: employeeId, p_start: start, p_end: end });
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  const list = (data ?? []) as LeaveDay[];
+  return { ok: true, data: { ...leaveSegments(list), calendarDays: list.length } };
 }

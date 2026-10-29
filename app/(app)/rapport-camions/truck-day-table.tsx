@@ -143,6 +143,9 @@ export function TruckDayTable({ rows, canEdit, t }: { rows: TruckReportRow[]; ca
               canEdit ? (
                 <TableRow key={`${g.key}-add`}>
                   <TableCell colSpan={cols} className="py-1 text-xs">
+                    <a href={`/api/pdf/camions?date=${g.date}&truck=${first.truck_id}`} target="_blank" rel="noopener" className="me-3 inline-flex items-center gap-1 text-primary hover:underline">
+                      {t("PDF de ce rapport")}
+                    </a>
                     <Link href={`/rapport-camions/nouveau?date=${g.date}&camion=${first.truck_id}&poste=${soir.length ? "matin" : "soir"}`} className="inline-flex items-center gap-1 text-primary hover:underline">
                       <Plus className="size-3" /> {soir.length ? t("Ajouter une ligne pour ce camion") : t("Ajouter le travail du soir pour ce camion")}
                     </Link>

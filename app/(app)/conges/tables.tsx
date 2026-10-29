@@ -55,7 +55,15 @@ export async function LeaveRequestsTable({ requests, canEdit, showEmployee = tru
               <TableCell>{formatDateFr(r.request_date)}</TableCell>
               <TableCell>{formatDateFr(r.start_date)}</TableCell>
               <TableCell>{formatDateFr(r.end_date)}</TableCell>
-              <TableCell className="text-end">{r.requested_days}</TableCell>
+              <TableCell className="text-end">
+                {r.requested_days}
+                {!!r.rest_days_excluded && (
+                  <div className="text-[11px] font-normal text-indigo-700 dark:text-indigo-300" title={(r.segments ?? []).map((x) => (x.from === x.to ? formatDateFr(x.from) : `${formatDateFr(x.from)} → ${formatDateFr(x.to)}`)).join(" ; ")}>
+                    {t("{count} j de repos exclus", { count: r.rest_days_excluded })}
+                    {(r.segments ?? []).length > 1 && <span className="block">{t("{count} périodes", { count: (r.segments ?? []).length })}</span>}
+                  </div>
+                )}
+              </TableCell>
               <TableCell>
                 <StatusBadge status={r.status} />
               </TableCell>

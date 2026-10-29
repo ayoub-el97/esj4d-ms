@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { cleaningGroups, collecteGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
 import { defaultShiftTimes, endsNextDay, isOfficePosition, suggestedTimeOut } from "@/lib/default-times";
@@ -80,6 +80,19 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
   const [assignedAway, setAssignedAway] = useState<ElsewhereRow[]>(() => elsewhere.filter((x) => x.assigned && x.shift === 1));
 
   const optionsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
+  // Modifications non enregistrées : confirmation avant de quitter la page ou de changer de date
+  useEffect(() => {
+    (window as unknown as { __pointageDirty?: boolean }).__pointageDirty = dirty;
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      (window as unknown as { __pointageDirty?: boolean }).__pointageDirty = false;
+    };
+  }, [dirty]);
   const dow = new Date(`${date}T12:00:00`).getDay();
 
   const update = (idx: number, patch: Partial<SheetRow>) => {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PdfExportButton } from "@/components/pdf-export-button";
 import { expectedEnd, fmtHours } from "@/lib/overtime";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
@@ -28,7 +29,10 @@ export default async function HistoriquePage({ searchParams }: { searchParams: P
 
   return (
     <div>
-      <ModuleHeader title={t("Historique du pointage")} subtitle={t("{count} ligne(s)", { count: rows.length })} backHref="/pointage" />
+      <ModuleHeader title={t("Historique du pointage")} subtitle={t("{count} ligne(s)", { count: rows.length })} backHref="/pointage">
+        <PdfExportButton kind="pointage-historique" params={Object.fromEntries(Object.entries(sp).filter(([, v]) => v)) as Record<string, string>} label="Exporter l'historique en PDF" />
+      </ModuleHeader>
+      <p className="mb-3 text-xs text-muted-foreground">{t("Chaque journée est enregistrée séparément et n'est jamais recréée à partir de la liste actuelle des employés. Cliquez sur un nom pour ouvrir la feuille de ce jour : consultation, modification (journée non clôturée), impression PDF et journal des modifications.")}</p>
 
       <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
         <div className="space-y-1">
