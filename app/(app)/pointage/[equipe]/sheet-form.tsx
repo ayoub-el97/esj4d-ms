@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { cleaningGroups, displayNumbers } from "@/lib/sheet-order";
+import { cleaningGroups, collecteGroups, displayNumbers } from "@/lib/sheet-order";
 import { autoOvertime, expectedEnd, fmtHours, standardHours } from "@/lib/overtime";
 import { DEFAULT_TIME_IN, DEFAULT_TIME_OUT, suggestedTimeOut } from "@/lib/default-times";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ import { formatDateFr } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import type { TFunction } from "@/lib/i18n/config";
 import { formatDateTimeFr } from "@/lib/dates";
-import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type AttendanceStatus, type TeamType , POSITIONS, type Position, WEEKDAY_LABELS } from "@/lib/types";
+import { ATTENDANCE_STATUSES, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, type AttendanceStatus, type TeamType , POSITIONS, type Position, WEEKDAY_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -228,30 +228,17 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
               ? t("Repos non défini — {count} employé(s)", { count: g.employees })
               : t("Repos : {day} — {count} employé(s)", { day: t(WEEKDAY_LABELS[g.restDay]), count: g.employees }),
       })) as Group[];
-    const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
-    const used = new Set<number>();
-    const result: Group[] = [];
-    const staffGroup = (g: (typeof COLLECTE_STAFF_GROUPS)[number]) => {
-      const idx = rows.map((r, i) => (r.position === g.position ? i : -1)).filter((i) => i >= 0);
-      idx.forEach((i) => used.add(i));
-      if (idx.length) result.push({ key: g.position, title: t(g.title), chauffeurId: null, idx });
-    };
-    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "top").forEach(staffGroup);
-    result.push(...chauffeurs.map((c) => {
-      const idx = rows.map((r, i) => (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id ? i : -1)).filter((i) => i >= 0);
-      idx.forEach((i) => used.add(i));
-      const driver = idx.map((i) => rows[i]).find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && isWorked(r.status) && r.truck_id);
+    // Ordre commun à l'écran et au PDF (lib/sheet-order.ts)
+    return collecteGroups(rows).map((g): Group => {
+      if (g.kind === "staff") return { key: g.key, title: t(g.title), chauffeurId: null, idx: g.idx };
+      if (g.kind === "subs") return { key: g.key, title: t("Remplaçants sans remplacement ce jour"), chauffeurId: null, idx: g.idx };
+      if (g.kind === "none") return { key: g.key, title: t("Sans équipe affectée"), chauffeurId: null, idx: g.idx };
+      const c = rows[g.idx.find((i) => rows[i].employee_id === g.chauffeurId) ?? g.idx[0]];
+      const driver = g.idx.map((i) => rows[i]).find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && isWorked(r.status) && r.truck_id);
       const plate = (driver?.truck_id ? trucks.find((tr) => tr.id === driver.truck_id)?.matricule : null) ?? (c.truck_id ? trucks.find((tr) => tr.id === c.truck_id)?.matricule : null);
       const title = plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name });
-      return { key: c.employee_id, title, chauffeurId: c.employee_id, idx };
-    }));
-    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "after").forEach(staffGroup);
-    const rest = rows.map((_, i) => i).filter((i) => !used.has(i));
-    const freeSubstitutes = rest.filter((i) => isSubstitutePosition(rows[i].position));
-    const others = rest.filter((i) => !isSubstitutePosition(rows[i].position));
-    if (freeSubstitutes.length) result.push({ key: "subs", title: t("Remplaçants sans remplacement ce jour"), chauffeurId: null, idx: freeSubstitutes });
-    if (others.length) result.push({ key: "none", title: t("Sans équipe affectée"), chauffeurId: null, idx: others });
-    return result;
+      return { key: g.key, title, chauffeurId: g.chauffeurId, idx: g.idx };
+    });
   }, [rows, team, t, trucks]);
 
   // Numérotation 1, 2, 3… dans l'ordre affiché (jamais un identifiant)

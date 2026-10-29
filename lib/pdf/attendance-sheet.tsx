@@ -1,9 +1,9 @@
 import { Text, View } from "@react-pdf/renderer";
-import { cleaningGroups } from "@/lib/sheet-order";
+import { cleaningGroups, collecteGroups } from "@/lib/sheet-order";
 import { fmtHours } from "@/lib/overtime";
 import type { SheetRow } from "@/lib/attendance-types";
 import { formatDateFr, formatWorkMonth } from "@/lib/dates";
-import { COLLECTE_STAFF_GROUPS, ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, isSubstitutePosition, type TeamType , WEEKDAY_LABELS } from "@/lib/types";
+import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, WORKED_STATUSES, type TeamType , WEEKDAY_LABELS } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
@@ -70,41 +70,20 @@ export function AttendanceSheetPdf({
 
   const supervisors = rows.filter((r) => r.position === "superviseur");
   if (team === "collecte") {
-    const chauffeurs = rows.filter((r) => r.position === "chauffeur" && r.shift === 1);
-    const used = new Set<string>();
-    const staffGroup = (g: (typeof COLLECTE_STAFF_GROUPS)[number]) => {
-      const list = rows.filter((r) => r.position === g.position);
-      if (!list.length) return;
-      tableRows.push({ _group: t(g.title) });
-      for (const r of list) {
-        tableRows.push(toRow(r));
-        used.add(`${r.employee_id}:${r.shift}`);
+    // Ordre commun à l'écran et au PDF (lib/sheet-order.ts)
+    for (const g of collecteGroups(rows)) {
+      let title: string;
+      if (g.kind === "staff") title = t(g.title);
+      else if (g.kind === "subs") title = t("Remplaçants sans remplacement ce jour");
+      else if (g.kind === "none") title = t("Sans équipe affectée");
+      else {
+        const c = rows[g.idx.find((i) => rows[i].employee_id === g.chauffeurId) ?? g.idx[0]];
+        const driver = g.idx.map((i) => rows[i]).find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && WORKED_STATUSES.includes(r.status) && r.truck_id) ?? c;
+        const plate = trucks.find((tr) => tr.id === driver.truck_id)?.matricule;
+        title = plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name });
       }
-    };
-    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "top").forEach(staffGroup);
-    for (const c of chauffeurs) {
-      const teamRows = rows.filter((r) => r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id);
-      const driver = teamRows.find((r) => (r.employee_id === c.employee_id || r.position === "chauffeur_remplacant") && WORKED_STATUSES.includes(r.status) && r.truck_id) ?? c;
-      const plate = trucks.find((tr) => tr.id === driver.truck_id)?.matricule;
-      tableRows.push({ _group: plate ? t("Équipe {name} — camion {plate}", { name: c.name, plate }) : t("Équipe {name}", { name: c.name }) });
-      for (const r of rows) {
-        if (r.employee_id === c.employee_id || r.chauffeur_id === c.employee_id) {
-          tableRows.push(toRow(r));
-          used.add(`${r.employee_id}:${r.shift}`);
-        }
-      }
-    }
-    COLLECTE_STAFF_GROUPS.filter((g) => g.placement === "after").forEach(staffGroup);
-    const rest = rows.filter((r) => !used.has(`${r.employee_id}:${r.shift}`));
-    const freeSubs = rest.filter((r) => isSubstitutePosition(r.position));
-    const others = rest.filter((r) => !isSubstitutePosition(r.position));
-    if (freeSubs.length) {
-      tableRows.push({ _group: t("Remplaçants sans remplacement ce jour") });
-      freeSubs.forEach((r) => tableRows.push(toRow(r)));
-    }
-    if (others.length) {
-      tableRows.push({ _group: t("Sans équipe affectée") });
-      others.forEach((r) => tableRows.push(toRow(r)));
+      tableRows.push({ _group: title });
+      g.idx.forEach((i) => tableRows.push(toRow(rows[i])));
     }
   } else {
     // Balayeurs par jour de repos (dimanche → samedi), puis autres fonctions

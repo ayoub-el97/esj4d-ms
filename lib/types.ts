@@ -114,16 +114,20 @@ export const POSITION_LABELS: Record<Position, string> = {
   responsable: "Responsable",
   autre: "Autre fonction",
 };
-/** Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre */
-export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placement: "top" | "after" }[] = [
+/**
+ * Postes de la collecte pointés en groupes dédiés (hors équipes chauffeur + rippeurs), dans cet ordre :
+ * « top » en tête de la feuille (direction, responsable, secrétariat, encadrement), puis les équipes
+ * de camion et les équipiers ; « guard » : gardiens ; « after » : les autres fonctions.
+ */
+export const COLLECTE_STAFF_GROUPS: { position: Position; title: string; placement: "top" | "guard" | "after" }[] = [
+  { position: "directeur", title: "Direction", placement: "top" },
+  { position: "responsable", title: "Responsable", placement: "top" },
+  { position: "secretaire", title: "Secrétariat", placement: "top" },
   { position: "chef_equipe", title: "Chef d'équipe", placement: "top" },
   { position: "superviseur", title: "Superviseur", placement: "top" },
+  { position: "gardien", title: "Gardien", placement: "guard" },
   { position: "agent_securite", title: "Sécurité", placement: "after" },
   { position: "mecanicien", title: "Mécanicien", placement: "after" },
-  { position: "gardien", title: "Gardien", placement: "after" },
-  { position: "directeur", title: "Direction", placement: "after" },
-  { position: "responsable", title: "Responsable", placement: "after" },
-  { position: "secretaire", title: "Secrétariat", placement: "after" },
   { position: "autre", title: "Autres fonctions", placement: "after" },
 ];
 /** Tous les postes, y compris ceux retirés (historique, filtres, pointages passés). */
