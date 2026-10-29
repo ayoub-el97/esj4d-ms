@@ -13,6 +13,7 @@ import type { CollectionReportFull } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, type AttendanceStatus, type Position } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useUnsavedChanges } from "@/lib/use-unsaved";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,8 @@ export function CollectionForm({
   const { t } = useT();
   const router = useRouter();
   const [state, action] = useActionState(saveCollectionReport, null);
+  const unsaved = useUnsavedChanges();
+  const clearUnsaved = unsaved.clear;
   const [pending, start] = useTransition();
   const [crew, setCrew] = useState<Set<string>>(() => new Set(report.rippers.map((r) => r.id)));
   // Liste proposée : équipe actuelle + employés pointés à la Collecte ce jour (quelle que soit leur fonction habituelle)
@@ -51,10 +54,11 @@ export function CollectionForm({
 
   useEffect(() => {
     if (state?.ok) {
+      clearUnsaved();
       toast.success(state.message);
       router.refresh();
     }
-  }, [state, router]);
+  }, [state, router, clearUnsaved]);
 
   return (
     <div className="space-y-4">
@@ -70,7 +74,7 @@ export function CollectionForm({
         )}
       </div>
 
-      <form action={action} className="space-y-4">
+      <form action={action} onChange={unsaved.markDirty} className="space-y-4">
         <input type="hidden" name="id" value={report.id} />
         <fieldset disabled={!canEdit} className="grid gap-4 lg:grid-cols-2">
           <Card>
@@ -171,7 +175,7 @@ export function CollectionForm({
         {canEdit && (
           <div className="sticky bottom-20 z-10 flex flex-wrap items-center gap-2 rounded-xl border bg-card/95 p-3 shadow-md backdrop-blur lg:bottom-4">
             <SubmitButton>
-              <Save /> {t("Enregistrer")}
+              <Save /> {t("Enregistrer les modifications")}
             </SubmitButton>
             {report.manual_team && (
               <Button

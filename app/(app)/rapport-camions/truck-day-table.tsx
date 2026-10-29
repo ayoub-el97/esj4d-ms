@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Camera, Moon, Pencil, Plus, Sun } from "lucide-react";
+import { Camera, Eye, Moon, Pencil, Plus, Sun } from "lucide-react";
+import { ModifiedBadge } from "@/components/last-change";
 import type { TruckReportRow } from "@/lib/data/reports";
 import { formatDateFr } from "@/lib/dates";
 import type { TFunction } from "@/lib/i18n/config";
@@ -28,7 +29,7 @@ export function ShiftBadge({ shift, t }: { shift: "matin" | "soir"; t: TFunction
  * Rapport camions du jour : lignes regroupées par date et par camion, Matin puis Soir,
  * avec sous-totaux par poste et total de la journée du camion. Chaque ligne n'est comptée qu'une fois.
  */
-export function TruckDayTable({ rows, canEdit, t }: { rows: TruckReportRow[]; canEdit: boolean; t: TFunction }) {
+export function TruckDayTable({ rows, canEdit, t, modified }: { rows: TruckReportRow[]; canEdit: boolean; t: TFunction; /** Lignes corrigées après la première saisie */ modified?: Set<string> }) {
   // Groupes (date, camion) dans l'ordre des lignes (déjà triées)
   const groups: { key: string; date: string; rows: TruckReportRow[] }[] = [];
   for (const r of rows) {
@@ -38,7 +39,7 @@ export function TruckDayTable({ rows, canEdit, t }: { rows: TruckReportRow[]; ca
     else groups.push({ key, date: r.activity_date, rows: [r] });
   }
   const total = sumOf(rows);
-  const cols = canEdit ? 13 : 12;
+  const cols = 13;
 
   const subtotal = (label: string, s: Sum, strong = false) => (
     <TableRow className={cn(strong ? "bg-muted/70 font-semibold" : "bg-muted/30 text-muted-foreground")}>
@@ -70,7 +71,7 @@ export function TruckDayTable({ rows, canEdit, t }: { rows: TruckReportRow[]; ca
             <TableHead className="text-end">{t("Km fin")}</TableHead>
             <TableHead className="text-end">{t("Km parcourus")}</TableHead>
             <TableHead>{t("Observations")}</TableHead>
-            {canEdit && <TableHead />}
+            <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -127,13 +128,12 @@ export function TruckDayTable({ rows, canEdit, t }: { rows: TruckReportRow[]; ca
                       </span>
                     )}
                   </TableCell>
-                  {canEdit && (
-                    <TableCell>
-                      <Link href={`/rapport-camions/${r.id}`} aria-label={t("Modifier")}>
-                        <Pencil className="size-4 text-muted-foreground" />
-                      </Link>
-                    </TableCell>
-                  )}
+                  <TableCell className="whitespace-nowrap">
+                    <Link href={`/rapport-camions/${r.id}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      {canEdit ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />} {canEdit ? t("Modifier") : t("Voir")}
+                    </Link>
+                    {modified?.has(r.id) && <ModifiedBadge t={t} className="mt-1 flex w-fit" />}
+                  </TableCell>
                 </TableRow>
               )),
               // Sous-totaux : par poste s'il y a plusieurs lignes, puis total de la journée du camion

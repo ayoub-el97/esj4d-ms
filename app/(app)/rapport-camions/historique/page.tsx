@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { TruckTabs } from "../truck-tabs";
 import { TruckDayTable } from "../truck-day-table";
+import { ExcelExportButton } from "@/components/excel-export-button";
+import { getChangeSummary } from "@/lib/data/history";
 
 export const generateMetadata = pageTitle("Historique des rapports camions");
 
@@ -29,6 +31,8 @@ export default async function TruckHistoryPage({ searchParams }: { searchParams:
   const [rows, trucks] = await Promise.all([getTruckReports(filters, 2000), getTrucks()]);
   const sorted = [...rows].sort((a, b) => b.activity_date.localeCompare(a.activity_date));
   const canEdit = user.permissions.rapport_camions.can_edit;
+  const changes = await getChangeSummary("truck_daily_reports", sorted.map((r) => r.id));
+  const modified = new Set([...changes].filter(([, c]) => c.modified).map(([id]) => id));
   const pdfParams: Record<string, string> = {};
   for (const [k, v] of Object.entries(filters)) if (v) pdfParams[k] = v;
   const days = new Set(sorted.map((r) => r.activity_date)).size;
@@ -38,6 +42,7 @@ export default async function TruckHistoryPage({ searchParams }: { searchParams:
     <div>
       <ModuleHeader title={t("Historique des rapports camions")} subtitle={t("{count} ligne(s) sur {days} jour(s) — {period}", { count: sorted.length, days, period })}>
         <PdfExportButton kind="camions" params={pdfParams} label="Exporter la sélection en PDF" />
+        <ExcelExportButton kind="camions" params={pdfParams} />
       </ModuleHeader>
       <TruckTabs active="historique" />
       <p className="mb-3 text-xs text-muted-foreground">
@@ -76,7 +81,7 @@ export default async function TruckHistoryPage({ searchParams }: { searchParams:
           </LinkButton>
         </div>
       </form>
-      {sorted.length === 0 ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport camion pour ces critères.")}</p> : <TruckDayTable rows={sorted} canEdit={canEdit} t={t} />}
+      {sorted.length === 0 ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport camion pour ces critères.")}</p> : <TruckDayTable rows={sorted} canEdit={canEdit} t={t} modified={modified} />}
     </div>
   );
 }

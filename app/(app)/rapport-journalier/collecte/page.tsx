@@ -12,7 +12,9 @@ import { PhotoStatusBadge } from "@/components/photo-status-badge";
 import { COLLECTION_STATUS_LABELS, COLLECTION_STATUS_STYLES } from "@/lib/collection-status";
 import { cn } from "@/lib/utils";
 import { ModuleButtons } from "@/components/module-buttons";
+import { ExcelExportButton } from "@/components/excel-export-button";
 import { DateField } from "@/components/date-field";
+import { DayNav } from "@/components/day-nav";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +37,7 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
       <ModuleHeader title={t("Rapport journalier — Collecte")} subtitle={formatDateLongFr(date, locale)} backHref={`/rapport-journalier?date=${date}`}>
         <Suspense>
           <DateField value={date} />
+          <DayNav value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
         {canEdit && <SyncReportsButton date={date} team="collecte" />}
@@ -87,7 +90,17 @@ export default async function CollectePage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <ModuleButtons pdfSlot={reports.length ? <PdfExportButton kind="rapport-collecte" params={{ date }} /> : undefined} historyHref="/rapport-journalier/collecte/historique" />
+      <ModuleButtons
+        pdfSlot={
+          reports.length ? (
+            <>
+              <PdfExportButton kind="rapport-collecte" params={{ date }} />
+              <ExcelExportButton kind="rapport-collecte" params={{ date }} />
+            </>
+          ) : undefined
+        }
+        historyHref={`/rapport-journalier/historique?date=${date}`}
+      />
     </div>
   );
 }

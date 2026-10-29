@@ -16,6 +16,8 @@ import { NativeSelect } from "@/components/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TruckTabs } from "./truck-tabs";
 import { TruckDayTable } from "./truck-day-table";
+import { ExcelExportButton } from "@/components/excel-export-button";
+import { getChangeSummary } from "@/lib/data/history";
 
 export const generateMetadata = pageTitle("Rapport camions");
 
@@ -27,6 +29,8 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
   const filters = { date: isISODate(sp.date) ? sp.date : undefined, from: sp.from, to: sp.to, truck: sp.truck };
   const [rows, trucks] = await Promise.all([getTruckReports(filters), getTrucks()]);
   const canEdit = user.permissions.rapport_camions.can_edit;
+  const changes = await getChangeSummary("truck_daily_reports", rows.map((r) => r.id));
+  const modified = new Set([...changes].filter(([, c]) => c.modified).map(([id]) => id));
   const pdfParams: Record<string, string> = {};
   for (const [k, v] of Object.entries(filters)) if (v) pdfParams[k] = v;
 
@@ -84,9 +88,16 @@ export default async function RapportCamionsPage({ searchParams }: { searchParam
         </div>
       </form>
 
-      <TruckDayTable rows={rows} canEdit={canEdit} t={t} />
+      <TruckDayTable rows={rows} canEdit={canEdit} t={t} modified={modified} />
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="camions" params={pdfParams} />} historyHref="/rapport-camions?from=" monthlyHref="/rapport-camions/mensuel" />
+      <ModuleButtons
+        pdfSlot={
+          <>
+            <PdfExportButton kind="camions" params={pdfParams} />
+            <ExcelExportButton kind="camions" params={pdfParams} />
+          </>
+        }
+        historyHref="/rapport-camions/historique" monthlyHref="/rapport-camions/mensuel" />
     </div>
   );
 }

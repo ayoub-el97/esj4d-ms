@@ -10,6 +10,8 @@ import type { TruckDailyReport, TruckShift } from "@/lib/data/reports";
 import { useT } from "@/lib/i18n/client";
 import type { PhotoItem } from "@/lib/photo-types";
 import { cn } from "@/lib/utils";
+import { formatDateFr } from "@/lib/dates";
+import { useUnsavedChanges } from "@/lib/use-unsaved";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,10 +52,12 @@ export function TruckReportForm({
   const [kmStart, setKmStart] = useState(report?.km_start != null ? String(report.km_start) : "");
   const [kmEnd, setKmEnd] = useState(report?.km_end != null ? String(report.km_end) : "");
   const [newPhotos, setNewPhotos] = useState<PendingPhoto[]>([]);
+  const unsaved = useUnsavedChanges();
 
   const [state, action] = useActionState(async (prev: Awaited<ReturnType<typeof saveTruckReport>> | null, formData: FormData) => {
     const r = await saveTruckReport(prev, formData);
     if (!r.ok || !r.data) return r;
+    unsaved.clear();
     if (report) {
       toast.success(r.message);
       router.refresh();
@@ -68,7 +72,7 @@ export function TruckReportForm({
   }, null);
 
   return (
-    <form action={action}>
+    <form action={action} onChange={unsaved.markDirty}>
       <input type="hidden" name="id" value={report?.id ?? ""} />
       <input type="hidden" name="shift" value={shift} />
       <Card>
@@ -81,7 +85,15 @@ export function TruckReportForm({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
                 <Label htmlFor="activity_date">{t("Date d'activité")}</Label>
-                <Input id="activity_date" name="activity_date" type="date" defaultValue={report?.activity_date ?? defaultDate} required />
+                {report ? (
+                  // Rapport existant : la date d'origine est conservée (correction sur la même ligne)
+                  <>
+                    <input type="hidden" name="activity_date" value={report.activity_date} />
+                    <Input id="activity_date" value={formatDateFr(report.activity_date)} readOnly disabled />
+                  </>
+                ) : (
+                  <Input id="activity_date" name="activity_date" type="date" defaultValue={defaultDate} required />
+                )}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="truck_id">{t("Camion (matricule)")}</Label>
@@ -101,7 +113,10 @@ export function TruckReportForm({
                       key={s}
                       type="button"
                       aria-pressed={shift === s}
-                      onClick={() => setShift(s)}
+                      onClick={() => {
+                        setShift(s);
+                        if (s !== shift) unsaved.markDirty();
+                      }}
                       className={cn(
                         "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition sm:py-1.5",
                         shift === s
@@ -163,8 +178,14 @@ export function TruckReportForm({
 
           {canEdit && (
             <div className="flex flex-wrap gap-2">
-              <SubmitButton>{t("Enregistrer")}</SubmitButton>
-              <LinkButton href={`/rapport-camions${report ? `?date=${report.activity_date}` : ""}`} variant="outline">
+              <SubmitButton>{report ? t("Enregistrer les modifications") : t("Enregistrer")}</SubmitButton>
+              <LinkButton
+                href={`/rapport-camions${report ? `?date=${report.activity_date}` : ""}`}
+                variant="outline"
+                onClick={(e) => {
+                  if (unsaved.dirty && !window.confirm(t("Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?"))) e.preventDefault();
+                }}
+              >
                 {t("Annuler")}
               </LinkButton>
               {report && (

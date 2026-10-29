@@ -1,6 +1,6 @@
 import "server-only";
 import { getProjectStart } from "@/lib/data/settings";
-import { workMonthRange } from "@/lib/dates";
+import { todayISO, workMonthRange } from "@/lib/dates";
 import { parseISO, getDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
@@ -169,6 +169,11 @@ export async function buildSheet(date: string, team: TeamType) {
     elsewhere.push({ employee_id: id, name: e ? employeeName(e) : "—", team_type: a.team, position: a.position, shift: 1, assigned: true });
   }
   const alreadyIn = new Set([...rows.map((r) => r.employee_id), ...elsewhere.map((x) => x.employee_id)]);
+  // Feuille d'une date passée déjà enregistrée : elle n'est jamais complétée automatiquement à partir
+  // de la liste actuelle des employés. Les employés non pointés ce jour sont seulement proposés
+  // (« Employés sans pointage ce jour ») et ajoutés un par un si nécessaire.
+  const historical = date < todayISO() && (existing ?? []).length > 0;
+  const missing: SheetRow[] = [];
   for (const e of employees) {
     // Actif, ou parti après cette date (le pointage rétroactif reste possible jusqu'au dernier jour)
     // Équipe du jour : affectation temporaire, sinon équipe permanente
@@ -187,7 +192,7 @@ export async function buildSheet(date: string, team: TeamType) {
           : e.rest_day === dow
             ? "repos"
             : "present";
-    rows.push({
+    (historical && !asg ? missing : rows).push({
       id: null,
       employee_id: e.id,
       shift: 1,
@@ -232,7 +237,7 @@ export async function buildSheet(date: string, team: TeamType) {
   }
 
   // Congé approuvé : statut verrouillé sur « Congé », sauf modification autorisée
-  for (const r of rows) {
+  for (const r of [...rows, ...missing]) {
     const req = leaveByEmployee.get(r.employee_id);
     r.leave_lock = req ? { request_id: req } : null;
     r.leave_override = req ? (overrideByEmployee.get(r.employee_id) ?? null) : null;
@@ -243,7 +248,7 @@ export async function buildSheet(date: string, team: TeamType) {
 
   // Lignes non encore enregistrées d'un jour travaillé : horaires de la période de travail
   // (fonction du jour + fiche), modifiables. Les heures déjà enregistrées ne sont jamais remplacées.
-  for (const r of rows) {
+  for (const r of [...rows, ...missing]) {
     if (r.id === null && r.shift === 1 && (r.status === "present" || r.status === "repos_travaille") && !r.time_in && !r.time_out) {
       const d = defaultShiftTimes(r.position, r.work_period);
       r.time_in = d.timeIn;
@@ -258,6 +263,9 @@ export async function buildSheet(date: string, team: TeamType) {
     teamLead: meta?.team_lead ?? "",
     holidayLabel: holiday?.label ?? null,
     hasSaved: (existing ?? []).length > 0,
+    /** Date passée sans aucun pointage enregistré : feuille proposée, à vérifier avant d'enregistrer */
+    proposedPast: date < todayISO() && (existing ?? []).length === 0,
+    missing: missing.sort((a, b) => a.order_number - b.order_number),
     elsewhere,
     options: employees.filter((e) => availableOn(e, date)).map(toOption),
     trucks: trucks.map((tr) => ({ id: tr.id, matricule: tr.matricule, brand: tr.brand })),

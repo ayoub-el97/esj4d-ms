@@ -7,7 +7,7 @@ import { DayAuditCard } from "./day-audit";
 import { getSettings, getTeamLeads, logoUrl } from "@/lib/data/settings";
 import { isISODate, todayISO, formatDateLongFr } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
-import { TEAM_LABELS, TEAM_SLUGS } from "@/lib/types";
+import { TEAM_SLUGS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
@@ -15,7 +15,12 @@ import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LinkButton } from "@/components/link-button";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, History } from "lucide-react";
+import { DayNav } from "@/components/day-nav";
+import { ExcelExportButton } from "@/components/excel-export-button";
+import { LastChange } from "@/components/last-change";
+import { getAttendanceSheetsSummary } from "@/lib/data/history";
+import { sheetTitle } from "@/lib/sheet-title";
 import { SheetForm } from "./sheet-form";
 
 export const generateMetadata = pageTitle("Feuille de présence");
@@ -28,15 +33,17 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
 
   const sp = await searchParams;
   const date = isISODate(sp.date) ? sp.date : todayISO();
-  const [workDay, sheet, settings, leads, audit] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings(), getTeamLeads(true), getAttendanceDayAudit(date, team)]);
+  const [workDay, sheet, settings, leads, audit, sheetSummary] = await Promise.all([getWorkDay(date), buildSheet(date, team), getSettings(), getTeamLeads(true), getAttendanceDayAudit(date, team), getAttendanceSheetsSummary(date, date)]);
+  const summary = sheetSummary.find((x) => x.team_type === team);
   const closed = workDay?.status === "closed";
   const canEdit = user.permissions.pointage.can_edit && !closed;
 
   return (
     <div>
-      <ModuleHeader title={t("Feuille de présence — {team}", { team: t(TEAM_LABELS[team]) })} subtitle={formatDateLongFr(date, locale)} backHref={`/pointage?date=${date}`}>
+      <ModuleHeader title={sheetTitle(t, team, date)} subtitle={formatDateLongFr(date, locale)} backHref={`/pointage?date=${date}`}>
         <Suspense>
           <DateField value={date} />
+          <DayNav value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
         <LinkButton href="/pointage/repos" variant="outline" size="sm" className="ms-auto">
@@ -44,6 +51,17 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         </LinkButton>
       </ModuleHeader>
 
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        {summary && <LastChange t={t} at={summary.last_at} user={summary.last_user} modified={summary.modified} />}
+        <LinkButton href={`/pointage/historique?date=${date}`} variant="ghost" size="sm" className="ms-auto">
+          <History /> {t("Feuilles de cette date dans l'historique")}
+        </LinkButton>
+      </div>
+      {sheet.proposedPast && !closed && user.permissions.pointage.can_edit && (
+        <Alert className="mb-4">
+          <AlertDescription>{t("Aucun pointage n'a été enregistré pour cette date passée. La feuille ci-dessous est seulement une proposition (employés en service à cette date) : vérifiez chaque ligne avant d'enregistrer.")}</AlertDescription>
+        </Alert>
+      )}
       {closed && (
         <Alert className="mb-4">
           <AlertDescription>{t("Journée clôturée : la feuille est en consultation seule. Un administrateur peut la rouvrir depuis le module Clôturer la journée.")}</AlertDescription>
@@ -78,13 +96,19 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
         canAuthorize={user.permissions.conges.can_edit && user.permissions.pointage.can_edit}
         isHoliday={!!sheet.holidayLabel}
         elsewhere={sheet.elsewhere}
+        missing={sheet.missing}
       />
 
       <DayAuditCard t={t} entries={audit} names={new Map(sheet.options.map((o) => [o.id, o.name]))} />
 
       <ModuleButtons
-        pdfSlot={<PdfExportButton kind="pointage" params={{ date, equipe: team }} />}
-        historyHref={`/pointage/historique?team=${team}`}
+        pdfSlot={
+          <>
+            <PdfExportButton kind="pointage" params={{ date, equipe: team }} />
+            <ExcelExportButton kind="pointage" params={{ date, equipe: team }} />
+          </>
+        }
+        historyHref={`/pointage/historique?date=${date}`}
         monthlyHref={`/pointage/mensuel?equipe=${team}`}
       />
     </div>

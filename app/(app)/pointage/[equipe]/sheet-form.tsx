@@ -42,6 +42,8 @@ type Props = {
   isHoliday?: boolean;
   /** Employés déjà pointés ce jour dans l'autre équipe */
   elsewhere?: ElsewhereRow[];
+  /** Date passée déjà enregistrée : employés non pointés ce jour (proposés, jamais ajoutés d'office) */
+  missing?: SheetRow[];
 };
 
 /** Fonctions du jour rattachées à une équipe de camion (chauffeur). */
@@ -66,7 +68,7 @@ const isWorked = (s: AttendanceStatus) => WORKED_STATUSES.includes(s);
 /** Départ anticipé pour maladie (choisi explicitement) : heures saisies conservées, comptées en HS manuelles */
 const sickDeparture = (r: SheetRow) => r.status === "absent_maladie" && !!r.sick_departure;
 
-export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [] }: Props) {
+export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOptions, options, canEdit, agency, company, logo, trucks, canAuthorize = false, isHoliday = false, elsewhere = [], missing = [] }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [rows, setRows] = useState<SheetRow[]>(initialRows);
@@ -77,6 +79,14 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
   const [overrideFor, setOverrideFor] = useState<number | null>(null);
   const [assigning, setAssigning] = useState(false);
   // Agents de cette équipe affectés ce jour à l'autre équipe (exclus de cette feuille)
+  const [notPointed, setNotPointed] = useState<SheetRow[]>(missing);
+  /** Ajoute à la feuille passée un employé non pointé ce jour (ligne proposée, à vérifier puis enregistrer). */
+  const addMissing = (list: SheetRow[]) => {
+    const ids = new Set(list.map((m) => m.employee_id));
+    setRows((prev) => [...prev, ...list.filter((m) => !prev.some((r) => r.employee_id === m.employee_id && r.shift === 1))].sort((a, b) => a.order_number - b.order_number || a.shift - b.shift));
+    setNotPointed((prev) => prev.filter((m) => !ids.has(m.employee_id)));
+    setDirty(true);
+  };
   const [assignedAway, setAssignedAway] = useState<ElsewhereRow[]>(() => elsewhere.filter((x) => x.assigned && x.shift === 1));
 
   const optionsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
@@ -273,6 +283,26 @@ export function SheetForm({ date, team, initialRows, initialTeamLead, teamLeadOp
 
   return (
     <div className="space-y-4">
+      {canEdit && notPointed.length > 0 && (
+        <details className="rounded-xl border border-dashed bg-muted/30 p-3 text-sm">
+          <summary className="cursor-pointer font-medium">{t("Employés sans pointage enregistré ce jour ({count})", { count: notPointed.length })}</summary>
+          <p className="mt-2 text-xs text-muted-foreground">{t("Cette journée passée a déjà été enregistrée : elle n'est pas complétée automatiquement avec la liste actuelle des employés. Ajoutez uniquement les employés qui ont réellement été oubliés, vérifiez leur ligne puis enregistrez.")}</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {notPointed.map((m) => (
+              <li key={m.employee_id}>
+                <Button type="button" size="sm" variant="outline" onClick={() => addMissing([m])}>
+                  <UserPlus /> {m.name} <span className="text-muted-foreground">({t(POSITION_LABELS[m.position])})</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {notPointed.length > 1 && (
+            <Button type="button" size="sm" variant="ghost" className="mt-2" onClick={() => addMissing(notPointed)}>
+              <Plus /> {t("Tout ajouter")}
+            </Button>
+          )}
+        </details>
+      )}
       {/* En-tête de la feuille (logo, agence, chef d'équipe, date) */}
       <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center">
         {logo ? (

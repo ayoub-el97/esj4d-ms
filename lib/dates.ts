@@ -80,7 +80,8 @@ export function addMonthsISO(iso: string, n: number): string {
   return isoUTC(y, m - 1 + n, Math.min(d, lastDay));
 }
 
-function addDaysISO(iso: string, n: number): string {
+/** Date ISO décalée de n jours (jour précédent : -1, suivant : +1). */
+export function addDaysISO(iso: string, n: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 }
 

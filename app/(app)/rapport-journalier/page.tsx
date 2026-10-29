@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Brush, ClipboardList, Truck } from "lucide-react";
+import { Brush, ClipboardList, History, Truck } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
@@ -30,8 +30,9 @@ export default async function RapportJournalierPage({ searchParams }: { searchPa
         <ActionTile href={`/rapport-journalier/nettoiement?date=${date}`} label={t("Rapport journalier — Nettoiement")} description={t("Lieux de travail, photos avant / après par agent")} icon={<Brush />} />
         <ActionTile href={`/rapport-journalier/collecte?date=${date}`} label={t("Rapport journalier — Collecte")} description={t("Camion, équipe, secteurs, tonnages, photos")} icon={<Truck />} />
         <ActionTile href={`/rapport-journalier/global?date=${date}`} label={t("Rapport journalier global")} description={t("Récapitulatif camions et nettoiement")} icon={<ClipboardList />} />
+        <ActionTile href={`/rapport-journalier/historique?date=${date}`} label={t("Historique des rapports journaliers")} description={t("Ouvrir et corriger les rapports d'une date passée, PDF, Excel")} icon={<History />} />
       </TileGrid>
-      <ModuleButtons monthlyHref="/rapport-mensuel" />
+      <ModuleButtons historyHref={`/rapport-journalier/historique?date=${date}`} monthlyHref="/rapport-mensuel" />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
+import { DayNav } from "@/components/day-nav";
 import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { LinkButton } from "@/components/link-button";
@@ -32,6 +33,7 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
       <ModuleHeader title={t("Rapport journalier global")} subtitle={formatDateLongFr(date, locale)} backHref={`/rapport-journalier?date=${date}`}>
         <Suspense>
           <DateField value={date} />
+          <DayNav value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
@@ -106,7 +108,7 @@ export default async function GlobalPage({ searchParams }: { searchParams: Promi
 
       <CleaningSummaryUI date={date} rows={summary} canEdit={canEdit} />
 
-      <ModuleButtons pdfSlot={<PdfExportButton kind="rapport-global" params={{ date }} />} historyHref="/rapport-camions" monthlyHref="/rapport-mensuel" />
+      <ModuleButtons pdfSlot={<PdfExportButton kind="rapport-global" params={{ date }} />} historyHref={`/rapport-journalier/historique?date=${date}`} monthlyHref="/rapport-mensuel" />
     </div>
   );
 }

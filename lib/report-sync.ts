@@ -131,9 +131,15 @@ export async function syncCollectionReports(supabase: Supabase, date: string): P
       .select("id")
       .single();
     if (e1) throw new Error(e1.message);
-    await supabase.from("collection_report_rippers").delete().eq("report_id", report.id);
-    if (team.crew.length) {
-      const { error: e2 } = await supabase.from("collection_report_rippers").insert(team.crew.map((employee_id) => ({ report_id: report.id, employee_id })));
+    // Équipe : seuls les équipiers ajoutés / retirés sont écrits (journal des modifications sans doublon)
+    const { data: oldCrew } = await supabase.from("collection_report_rippers").select("employee_id").eq("report_id", report.id);
+    const before = new Set((oldCrew ?? []).map((x) => x.employee_id as string));
+    const after = new Set(team.crew);
+    const removed = [...before].filter((id) => !after.has(id));
+    const added = [...after].filter((id) => !before.has(id));
+    if (removed.length) await supabase.from("collection_report_rippers").delete().eq("report_id", report.id).in("employee_id", removed);
+    if (added.length) {
+      const { error: e2 } = await supabase.from("collection_report_rippers").insert(added.map((employee_id) => ({ report_id: report.id, employee_id })));
       if (e2) throw new Error(e2.message);
     }
     const { error: e3 } = await supabase

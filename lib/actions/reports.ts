@@ -232,9 +232,14 @@ export async function saveCollectionReport(_prev: ActionResult | null, formData:
   }
 
   if (!sameCrew) {
-    await supabase.from("collection_report_rippers").delete().eq("report_id", d.id);
-    if (d.rippers.length) {
-      const { error: e2 } = await supabase.from("collection_report_rippers").insert(Array.from(new Set(d.rippers)).map((employee_id) => ({ report_id: d.id, employee_id })));
+    // Seuls les équipiers ajoutés / retirés sont écrits (journal des modifications sans doublon)
+    const before = new Set((oldCrew ?? []).map((x) => x.employee_id as string));
+    const after = new Set(d.rippers);
+    const removed = [...before].filter((id) => !after.has(id));
+    const added = [...after].filter((id) => !before.has(id));
+    if (removed.length) await supabase.from("collection_report_rippers").delete().eq("report_id", d.id).in("employee_id", removed);
+    if (added.length) {
+      const { error: e2 } = await supabase.from("collection_report_rippers").insert(added.map((employee_id) => ({ report_id: d.id, employee_id })));
       if (e2) return { ok: false, error: t(friendlyError(e2.message)) };
     }
   }

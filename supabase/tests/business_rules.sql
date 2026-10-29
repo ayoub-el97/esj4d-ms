@@ -863,4 +863,41 @@ begin
   raise notice 'OK 25 congés : jour de repos applicable à chaque date (historique des changements)';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- 26. Historique modifiable : feuille passée corrigée, rapport camion corrigé, journal des modifications
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid; tr uuid; r uuid; s record;
+begin
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('H026', 'Histo', 'Feuille', 'balayeur', 'nettoiement', 0, '2025-01-01') returning id into e;
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, position, team_type)
+  values ('2026-09-17', e, 1, 'present', '06:00', '14:00', 'balayeur', 'nettoiement');
+  select * into s from public.attendance_sheets_summary('2026-09-17', '2026-09-17') where team_type = 'nettoiement';
+  assert s.rows_count >= 1 and not s.modified and s.last_at is not null, 'feuille passée enregistrée, pas encore modifiée';
+  -- réenregistrement identique : pas une modification
+  update public.attendance set observation = observation where employee_id = e and activity_date = '2026-09-17';
+  select * into s from public.attendance_sheets_summary('2026-09-17', '2026-09-17') where team_type = 'nettoiement';
+  assert not s.modified, 'réenregistrement sans changement : non compté comme modification';
+  -- 2 heures supplémentaires oubliées, ajoutées après coup
+  update public.attendance set overtime_manual = 2 where employee_id = e and activity_date = '2026-09-17';
+  select * into s from public.attendance_sheets_summary('2026-09-17', '2026-09-17') where team_type = 'nettoiement';
+  assert s.modified, 'heures supplémentaires ajoutées : feuille signalée « Modifié »';
+  assert (select count(*) from public.attendance where employee_id = e and activity_date = '2026-09-17') = 1, 'même ligne corrigée, aucun doublon';
+  assert exists (select 1 from public.record_changes('attendance', null, '2026-09-17') where action = 'UPDATE' and (old_data ->> 'overtime_manual')::numeric = 0 and (new_data ->> 'overtime_manual')::numeric = 2), 'journal : HS manuelles 0 → 2';
+
+  -- Rapport camion : 2 t oubliées ajoutées sur la même ligne
+  select id into tr from public.trucks order by matricule limit 1;
+  insert into public.truck_daily_reports (activity_date, truck_id, shift, line_no, loads)
+  values ('2026-09-17', tr, 'matin', 1, '[{"ticket": "A1", "tonnage": 8}]') returning id into r;
+  update public.truck_daily_reports set loads = '[{"ticket": "A1", "tonnage": 8}, {"ticket": "A2", "tonnage": 2}]' where id = r;
+  assert (select tonnage_total from public.truck_daily_reports where id = r) = 10, 'tonnage total recalculé : 10 t';
+  assert (select count(*) from public.truck_daily_reports where activity_date = '2026-09-17' and truck_id = tr) = 1, 'rapport camion : aucun doublon';
+  assert (select modified from public.record_change_summary('truck_daily_reports', array[r])), 'ligne camion signalée « Modifié »';
+  assert exists (select 1 from public.record_changes('truck_daily_reports', array[r]) where action = 'UPDATE' and (old_data ->> 'tonnage_total')::numeric = 8 and (new_data ->> 'tonnage_total')::numeric = 10), 'journal : 8 t → 10 t';
+  assert (select truck_lines from public.daily_reports_summary('2026-09-17', '2026-09-17')) = 1, 'historique des rapports : 1 ligne camion ce jour';
+  assert (select tonnage from public.daily_reports_summary('2026-09-17', '2026-09-17')) = 10, 'historique des rapports : 10 t ce jour';
+  raise notice 'OK 26 historique modifiable : corrections sur les mêmes enregistrements, journal et indicateur « Modifié »';
+end $$;
+
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='
