@@ -72,7 +72,8 @@ async function LeaveRequestSection({ canEdit }: { canEdit: boolean }) {
   const [t, employees, pending, recent] = await Promise.all([getT(), getEmployees({ onlyActive: true }), getLeaveRequests({ status: "en_attente" }), getLeaveRequests({}, 15)]);
   const recentDecided = recent.filter((r) => r.status !== "en_attente");
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div className="space-y-6">
+      {canEdit && <LeaveRequestForm employees={employees.map((e) => ({ id: e.id, label: e.matricule ? `${employeeName(e)} (${e.matricule})` : employeeName(e) }))} />}
       <div className="space-y-6">
         <div>
           <h2 className="mb-2 font-semibold">{t("Demandes de congé en attente ({count})", { count: pending.length })}</h2>
@@ -83,7 +84,6 @@ async function LeaveRequestSection({ canEdit }: { canEdit: boolean }) {
           <LeaveRequestsTable requests={recentDecided} canEdit={canEdit} />
         </div>
       </div>
-      {canEdit && <LeaveRequestForm employees={employees.map((e) => ({ id: e.id, label: `${employeeName(e)} (${e.matricule})` }))} />}
     </div>
   );
 }

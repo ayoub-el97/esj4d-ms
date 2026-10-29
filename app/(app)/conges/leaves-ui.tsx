@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Ban, Check, RotateCcw, X } from "lucide-react";
+import { Ban, CalendarPlus, Check, RotateCcw, X } from "lucide-react";
 import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest } from "@/lib/actions/leaves";
 import { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
 import { todayISO } from "@/lib/dates";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Option = { id: string; label: string };
 
@@ -44,20 +45,49 @@ function daysBetween(start: string, end: string): number {
 // ---------------------------------------------------------------------------
 export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Option[]; defaultEmployee?: string }) {
   const { t } = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" onClick={() => setOpen(true)} className="w-full sm:w-auto">
+        <CalendarPlus /> {t("Nouvelle demande de congé")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        {/* Fenêtre centrée : largeur ~576 px sur ordinateur, écran entier moins les marges sur téléphone ;
+            en-tête fixe, contenu défilant si la fenêtre est trop haute */}
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-4 py-3 pe-12">
+            <DialogTitle>{t("Nouvelle demande de congé")}</DialogTitle>
+            <DialogDescription>{t("Le solde n'est réduit que par les jours de congé effectivement pris (pointage « Congé », ou demande acceptée pour un jour passé non pointé).")}</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {/* Formulaire remonté à chaque ouverture : champs vides */}
+            {open && <LeaveRequestFields employees={employees} defaultEmployee={defaultEmployee} onSaved={() => setOpen(false)} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees: Option[]; defaultEmployee?: string; onSaved: () => void }) {
+  const { t } = useT();
+  const router = useRouter();
   const [state, action] = useActionState(createLeaveRequest, null);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [days, setDays] = useState("");
   const computed = daysBetween(start, end);
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success(state.message);
+      router.refresh();
+      onSaved();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("Nouvelle demande congé")}</CardTitle>
-        <CardDescription>{t("Le solde n'est réduit que par les jours de congé effectivement pris (pointage « Congé », ou demande acceptée pour un jour passé non pointé).")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={action} className="space-y-3">
+        <form action={action} className="space-y-4">
           <ActionMessage state={state} />
           <div className="space-y-1">
             <Label htmlFor="employee_id">{t("Employé")}</Label>
@@ -74,7 +104,7 @@ export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Op
             <Label htmlFor="request_date">{t("Date de la demande")}</Label>
             <Input id="request_date" name="request_date" type="date" defaultValue={todayISO()} required />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="start_date">{t("Date de début")}</Label>
               <Input id="start_date" name="start_date" type="date" required value={start} onChange={(e) => setStart(e.target.value)} />
@@ -84,7 +114,7 @@ export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Op
               <Input id="end_date" name="end_date" type="date" required value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="requested_days">{t("Nombre de jours demandés")}</Label>
               <Input id="requested_days" name="requested_days" type="number" step="0.5" min="0.5" required value={days || (computed ? String(computed) : "")} onChange={(e) => setDays(e.target.value)} />
@@ -98,10 +128,8 @@ export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Op
             <Label htmlFor="reason">{t("Commentaire (facultatif)")}</Label>
             <Textarea id="reason" name="reason" rows={2} />
           </div>
-          <SubmitButton className="w-full">{t("Enregistrer la demande")}</SubmitButton>
+          <SubmitButton className="h-11 w-full sm:h-9">{t("Enregistrer la demande")}</SubmitButton>
         </form>
-      </CardContent>
-    </Card>
   );
 }
 
