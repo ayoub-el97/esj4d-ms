@@ -2572,4 +2572,6 @@ export const ar: Messages = {
   "Refusée par :": "رفضها:",
   "Annulée par :": "ألغاها:",
   "Décidé par :": "قرر:",
+  "Jours fériés travaillés": "أيام العطل الرسمية المشتغلة",
+  "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "الأيام المؤداة: أيام العمل العادية دون العطل الرسمية المشتغلة",
 };

@@ -1,4 +1,4 @@
-import { CODE_DEF, GRID_CODES, WEEKDAY_INITIALS, weekdayOf, type GridCell, type GridCode, type GridData } from "@/lib/attendance-grid";
+import { CODE_DEF, GRID_CODES, WEEKDAY_INITIALS, weekdayOf, workedDayCounts, type GridCell, type GridCode, type GridData } from "@/lib/attendance-grid";
 import { formatDateFr } from "@/lib/dates";
 import type { TFunction } from "@/lib/i18n/config";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, WEEKDAY_LABELS, type AttendanceStatus } from "@/lib/types";
@@ -38,7 +38,9 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
     nb: "sticky start-0 z-10 w-10 min-w-10",
     nom: "sticky start-10 z-10 w-32 min-w-32",
     prenom: "md:sticky md:start-42 z-10 w-28 min-w-28",
-    fonction: "md:sticky md:start-70 z-10 w-28 min-w-28 border-e-2",
+    fonction: "md:sticky md:start-70 z-10 w-28 min-w-28",
+    jft: "md:sticky md:start-98 z-10 w-10 min-w-10 text-center",
+    jp: "md:sticky md:start-108 z-10 w-10 min-w-10 border-e-2 text-center",
   };
   return (
     <div className="max-h-[75vh] overflow-auto rounded-xl border bg-card">
@@ -50,6 +52,12 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
                 {t(h === "NB" ? "Nombre" : h)}
               </th>
             ))}
+            <th rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 font-semibold", col.jft, "z-30")} title={t("Jours fériés travaillés")}>
+              JFT
+            </th>
+            <th rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 font-semibold", col.jp, "z-30")} title={t("Jours payés : jours de travail ordinaires, hors jours fériés travaillés")}>
+              JP
+            </th>
             {grid.dates.map((d) => {
               const holiday = grid.holidays[d];
               return (
@@ -70,30 +78,35 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
         <tbody>
           {grid.rows.length === 0 && (
             <tr>
-              <td colSpan={4 + grid.dates.length} className="p-6 text-center text-muted-foreground">
+              <td colSpan={6 + grid.dates.length} className="p-6 text-center text-muted-foreground">
                 {t("Aucun employé pour cette période et ces filtres.")}
               </td>
             </tr>
           )}
-          {grid.rows.map((r, i) => (
+          {grid.rows.map((r, i) => {
+            const days = workedDayCounts(grid, r);
+            return (
             <tr key={r.id} className="hover:[&>td]:brightness-95">
               <td className={cn(col.nb, "border-e border-b bg-card px-2 text-center tabular-nums")} title={`${t("Matricule")} ${r.matricule}`}>
                 {i + 1}
               </td>
               <td className={cn(col.nom, "truncate border-e border-b bg-card px-2 font-medium")}>{r.last_name}</td>
               <td className={cn(col.prenom, "truncate border-e border-b bg-card px-2")}>{r.first_name}</td>
-              <td className={cn(col.fonction, "truncate border-b bg-card px-2 text-muted-foreground")}>{r.job_title || t(POSITION_LABELS[r.position] ?? r.position)}</td>
+              <td className={cn(col.fonction, "truncate border-e border-b bg-card px-2 text-muted-foreground")}>{r.job_title || t(POSITION_LABELS[r.position] ?? r.position)}</td>
+              <td className={cn(col.jft, "border-e border-b bg-card font-semibold tabular-nums")}>{days.jft}</td>
+              <td className={cn(col.jp, "border-b bg-card font-semibold tabular-nums")}>{days.jp}</td>
               {grid.dates.map((d) => (
                 <Cell key={d} cell={r.cells[d]} date={d} today={today} t={t} />
               ))}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
         {grid.rows.length > 0 && (
           <tfoot>
             {codes.map((c, i) => (
               <tr key={c} className={i === 0 ? "[&>td]:border-t-2" : ""}>
-                <td colSpan={4} className="sticky start-0 z-10 border-e-2 border-b bg-muted px-2 font-semibold" title={t("Total de la période : {count}", { count: grid.totals[c] ?? 0 })}>
+                <td colSpan={6} className="sticky start-0 z-10 border-e-2 border-b bg-muted px-2 font-semibold" title={t("Total de la période : {count}", { count: grid.totals[c] ?? 0 })}>
                   <span className="me-1 inline-block w-9 rounded px-1 text-center text-[10px] font-bold" style={{ backgroundColor: CODE_DEF[c].bg, color: CODE_DEF[c].fg }}>
                     {c}
                   </span>

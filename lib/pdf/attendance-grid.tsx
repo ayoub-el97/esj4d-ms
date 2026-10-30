@@ -1,6 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { FONT, FONT_BOLD } from "./fonts";
-import { CODE_DEF, GRID_CODES, WEEKDAY_INITIALS, weekdayOf, type GridCode, type GridData } from "@/lib/attendance-grid";
+import { CODE_DEF, GRID_CODES, WEEKDAY_INITIALS, weekdayOf, workedDayCounts, type GridCode, type GridData } from "@/lib/attendance-grid";
 import { formatDateFr } from "@/lib/dates";
 import { POSITION_LABELS } from "@/lib/types";
 import { usePdf } from "./context";
@@ -8,7 +8,7 @@ import { usePdf } from "./context";
 // A3 paysage : 1191 × 842 pt
 const PAGE_W = 1191;
 const PAD = 18;
-const ID_W = { nb: 20, nom: 74, prenom: 64, fonction: 62 };
+const ID_W = { nb: 30, nom: 74, prenom: 64, fonction: 62, jft: 18, jp: 18 };
 const BORDER = "#9ca3af";
 
 const s = StyleSheet.create({
@@ -51,12 +51,12 @@ export function AttendanceGridPdf({
 }) {
   const { t, locale, logoUrl, companyDetails } = usePdf();
   const codes: GridCode[] = GRID_CODES.filter((c) => !c.extra || grid.extraCodes.includes(c.code)).map((c) => c.code);
-  const idW = ID_W.nb + ID_W.nom + ID_W.prenom + ID_W.fonction;
+  const idW = ID_W.nb + ID_W.nom + ID_W.prenom + ID_W.fonction + ID_W.jft + ID_W.jp;
   const avail = PAGE_W - 2 * PAD - idW - 2;
   const dayW = Math.min(30, avail / Math.max(grid.dates.length, 1));
   const title = t("Rapport mensuel de pointage");
 
-  const idCells = (nb: string, nom: string, prenom: string, fonction: string, head = false) => (
+  const idCells = (nb: string, nom: string, prenom: string, fonction: string, jft: string, jp: string, head = false) => (
     <>
       <View style={[s.cell, { width: ID_W.nb, borderLeftWidth: 0.5 }, head ? s.head : {}]}>
         <Text style={s.txt}>{nb}</Text>
@@ -67,8 +67,14 @@ export function AttendanceGridPdf({
       <View style={[s.cell, { width: ID_W.prenom }, head ? s.head : {}]}>
         <Text style={s.txtLeft}>{prenom}</Text>
       </View>
-      <View style={[s.cell, { width: ID_W.fonction, borderRightWidth: 1 }, head ? s.head : {}]}>
+      <View style={[s.cell, { width: ID_W.fonction }, head ? s.head : {}]}>
         <Text style={s.txtLeft}>{fonction}</Text>
+      </View>
+      <View style={[s.cell, { width: ID_W.jft }, head ? s.head : {}]}>
+        <Text style={[s.txt, { fontFamily: FONT_BOLD }]}>{jft}</Text>
+      </View>
+      <View style={[s.cell, { width: ID_W.jp, borderRightWidth: 1 }, head ? s.head : {}]}>
+        <Text style={[s.txt, { fontFamily: FONT_BOLD }]}>{jp}</Text>
       </View>
     </>
   );
@@ -117,7 +123,7 @@ export function AttendanceGridPdf({
         {/* Ligne d'en-tête du tableau, répétée sur chaque page */}
         <View fixed>
           <View style={[s.row, { borderTopWidth: 0.5, borderColor: BORDER }]}>
-            {idCells(t("Nombre"), t("Nom"), t("Prénom"), t("Fonction"), true)}
+            {idCells(t("Nombre"), t("Nom"), t("Prénom"), t("Fonction"), "JFT", "JP", true)}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, s.head, { width: dayW }, grid.holidays[d] ? { backgroundColor: "#e9d5ff" } : {}]}>
                 <Text style={[s.txt, { fontSize: 6 }]}>
@@ -127,7 +133,7 @@ export function AttendanceGridPdf({
             ))}
           </View>
           <View style={s.row}>
-            {idCells("", "", "", "", true)}
+            {idCells("", "", "", "", "", "", true)}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, s.head, { width: dayW }, grid.holidays[d] ? { backgroundColor: "#e9d5ff" } : {}]}>
                 <Text style={s.txt}>{WEEKDAY_INITIALS[weekdayOf(d)]}</Text>
@@ -137,9 +143,11 @@ export function AttendanceGridPdf({
         </View>
 
         {grid.rows.length === 0 && <Text style={{ marginTop: 8, fontSize: 9, color: "#555" }}>{t("Aucun employé pour cette période et ces filtres.")}</Text>}
-        {grid.rows.map((r, i) => (
+        {grid.rows.map((r, i) => {
+          const days = workedDayCounts(grid, r);
+          return (
           <View key={r.id} style={s.row} wrap={false}>
-            {idCells(String(i + 1), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
+            {idCells(String(i + 1), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15), String(days.jft), String(days.jp))}
             {grid.dates.map((d) => {
               const c = r.cells[d];
               if (!c || !c.statuses.length)
@@ -165,7 +173,8 @@ export function AttendanceGridPdf({
               );
             })}
           </View>
-        ))}
+          );
+        })}
 
         {/* Totaux par date et par code */}
         {grid.rows.length > 0 && (
@@ -204,6 +213,8 @@ export function AttendanceGridPdf({
                 </Text>
               </View>
             ))}
+            <Text style={{ fontSize: 7.5, marginRight: 12 }}>JFT = {t("Jours fériés travaillés")}</Text>
+            <Text style={{ fontSize: 7.5, marginRight: 12 }}>JP = {t("Jours payés : jours de travail ordinaires, hors jours fériés travaillés")}</Text>
             <Text style={{ fontSize: 7.5, marginRight: 12 }}>· = {t("Non pointé")}</Text>
             <Text style={{ fontSize: 7.5, marginRight: 12 }}>! = {t("À vérifier")}</Text>
             <Text style={{ fontSize: 7.5 }}>×2 = {t("deux services le même jour")}</Text>

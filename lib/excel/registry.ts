@@ -10,6 +10,10 @@ import { getLocale, getMessages, pdfLocale } from "@/lib/i18n/server";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, TEAM_SLUGS, type AppModule, type TeamType } from "@/lib/types";
 import type { XlsxCell, XlsxSheet } from "@/lib/xlsx";
 import { sheetTitle } from "@/lib/sheet-title";
+import { attendancePeriod, CODE_DEF, filterGrid, GRID_CODES, workedDayCounts } from "@/lib/attendance-grid";
+import { getLiveGrid, getPeriodSnapshots, getPeriodStartDay } from "@/lib/data/attendance-grid";
+import { ALL_POSITIONS, type Position } from "@/lib/types";
+import { formatMonthFr, isMonth } from "@/lib/dates";
 
 export type BuiltXlsx = { module: AppModule; filename: string; sheets: XlsxSheet[] };
 
@@ -63,6 +67,53 @@ export async function buildExcel(kind: string, params: Record<string, string>): 
       const teams: TeamType[] = one ? [one] : ["collecte", "nettoiement"];
       const sheets = await Promise.all(teams.map((team) => attendanceSheet(t, range.date!, team, company)));
       return { module: "pointage", filename: `pointage-${one ?? "equipes"}-${range.date}.xlsx`, sheets };
+    }
+    case "pointage-grille": {
+      // Mêmes données et mêmes filtres que l'écran et le PDF du rapport mensuel
+      const month = params.mois;
+      if (!isMonth(month)) return null;
+      const startDay = await getPeriodStartDay();
+      const [live, snapshots] = await Promise.all([getLiveGrid(month, startDay), getPeriodSnapshots(month)]);
+      const latest = snapshots[0] ?? null;
+      const selected = params.version === "actuel" ? null : params.version ? (snapshots.find((x) => String(x.revision) === params.version) ?? latest) : latest;
+      const team = params.equipe ? TEAM_SLUGS[params.equipe] : undefined;
+      const position = ALL_POSITIONS.includes(params.poste as Position) ? (params.poste as Position) : undefined;
+      const grid = filterGrid(selected ? selected.data : live, { team, position, q: (params.q ?? "").slice(0, 60) });
+      const { from, to } = attendancePeriod(month, startDay);
+      const codes = GRID_CODES.filter((c) => !c.extra || grid.extraCodes.includes(c.code)).map((c) => c.code);
+      const blank = ["", "", "", "", "", ""];
+      const rows: XlsxCell[][] = grid.rows.map((r, i) => {
+        const days = workedDayCounts(grid, r);
+        return [
+          i + 1,
+          r.last_name,
+          r.first_name,
+          r.job_title || t(POSITION_LABELS[r.position] ?? r.position),
+          days.jft,
+          days.jp,
+          ...grid.dates.map((d) => {
+            const c = r.cells[d];
+            if (!c?.statuses.length) return "";
+            if (c.conflict || c.unknown) return c.conflict ? "!" : "?";
+            return c.double ? `${c.code}×${c.statuses.length}` : c.code;
+          }),
+        ];
+      });
+      // Totaux par date et par code (comme le bas du tableau à l'écran)
+      for (const c of codes) rows.push([c, t(CODE_DEF[c].label), ...blank.slice(2), ...grid.dates.map((d) => grid.dayTotals[d]?.[c] ?? 0)]);
+      return {
+        module: "pointage",
+        filename: `rapport-mensuel-pointage-${month}${team ? `-${team}` : ""}.xlsx`,
+        sheets: [
+          {
+            name: t("Rapport mensuel"),
+            title: [company, `${t("Rapport mensuel de pointage")} — ${formatMonthFr(month, pdfLocale(userLocale))}`, t("du {from} au {to}", { from: formatDateFr(from), to: formatDateFr(to) })],
+            header: [t("Nombre"), t("Nom"), t("Prénom"), t("Fonction"), "JFT", "JP", ...grid.dates.map((x) => `${x.slice(8, 10)}/${x.slice(5, 7)}`)],
+            rows,
+            widths: [8, 20, 18, 18, 6, 6, ...grid.dates.map(() => 6)],
+          },
+        ],
+      };
     }
     case "pointage-historique": {
       const f: HistoryFilters = { from: range.from, to: range.to, employee: params.employee || undefined, team: params.team || undefined, position: params.position || undefined, status: params.status || undefined };

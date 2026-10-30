@@ -9,6 +9,7 @@ import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_SLUGS, type AttendanceStatus, type Position, ALL_POSITIONS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
+import { ExcelExportButton } from "@/components/excel-export-button";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { LinkButton } from "@/components/link-button";
 import { NativeSelect } from "@/components/native-select";
@@ -275,7 +276,12 @@ export default async function MonthlyGridPage({ searchParams }: { searchParams: 
       </section>
 
       <ModuleButtons
-        pdfSlot={<PdfExportButton kind="pointage-grille" params={{ mois: month, ...filterParams, ...(sp.version ? { version: sp.version } : {}) }} />}
+        pdfSlot={
+          <>
+            <PdfExportButton kind="pointage-grille" params={{ mois: month, ...filterParams, ...(sp.version ? { version: sp.version } : {}) }} />
+            <ExcelExportButton kind="pointage-grille" params={{ mois: month, ...filterParams, ...(sp.version ? { version: sp.version } : {}) }} />
+          </>
+        }
         historyHref="/pointage/historique"
         extra={
           <LinkButton href={`/pointage/mensuel/synthese?mois=${month}`} variant="outline">

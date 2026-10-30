@@ -2572,4 +2572,6 @@ export const en: Messages = {
   "Refusée par :": "Refused by:",
   "Annulée par :": "Cancelled by:",
   "Décidé par :": "Decided by:",
+  "Jours fériés travaillés": "Public holidays worked",
+  "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "Paid days: ordinary working days, excluding public holidays worked",
 };

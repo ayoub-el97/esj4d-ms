@@ -223,6 +223,23 @@ export function buildGrid(input: {
   return computeTotals({ month: input.month, from: input.from, to: input.to, dates, holidays, rows, generatedAt: input.generatedAt ?? new Date().toISOString() });
 }
 
+/**
+ * JFT (jours fériés travaillés) et JP (jours ordinaires travaillés) d'un employé, d'après ses lignes
+ * de pointage : un jour travaillé = au moins un service Présent ou Repos travaillé ; compté une seule
+ * fois par date. Férié = calendrier officiel (Jours fériés), jamais déduit du code de la cellule.
+ * Repos, congé, récupération, absence, maladie et jour férié non travaillé ne comptent pas.
+ */
+export function workedDayCounts(grid: Pick<GridData, "dates" | "holidays">, row: Pick<GridRow, "cells">): { jft: number; jp: number } {
+  let jft = 0;
+  let jp = 0;
+  for (const d of grid.dates) {
+    if (!row.cells[d]?.statuses.some((st) => st === "present" || st === "repos_travaille")) continue;
+    if (d in grid.holidays) jft++;
+    else jp++;
+  }
+  return { jft, jp };
+}
+
 export type GridFilters = { team?: TeamType; position?: Position; q?: string };
 
 /** Filtre les employés (équipe, fonction, nom) et recalcule les totaux. */
