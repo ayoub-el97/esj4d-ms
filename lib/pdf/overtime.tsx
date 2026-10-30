@@ -112,9 +112,9 @@ export function OvertimePdf({ grid, company, generatedBy, today, monthName, filt
             ))}
           </View>
         </View>
-        {grid.rows.map((r) => (
+        {grid.rows.map((r, i) => (
           <View key={r.id} style={s.row} wrap={false}>
-            {ids(String(r.order_number), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
+            {ids(String(i + 1), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
             {grid.dates.map((d) => (
               <View key={d} style={[s.cell, { width: dayW }, r.hours[d] ? { backgroundColor: "#e0e7ff" } : {}]}>
                 <Text style={[s.txt, r.hours[d] ? { fontFamily: FONT_BOLD } : {}]}>{r.hours[d] ? fmt(r.hours[d].total) : ""}</Text>

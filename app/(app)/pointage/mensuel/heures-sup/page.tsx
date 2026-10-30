@@ -130,9 +130,9 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
                 </td>
               </tr>
             )}
-            {grid.rows.map((r) => (
+            {grid.rows.map((r, i) => (
               <tr key={r.id}>
-                <td className="sticky start-0 z-10 border-e border-b bg-card px-2 text-center">{r.order_number}</td>
+                <td className="sticky start-0 z-10 border-e border-b bg-card px-2 text-center">{i + 1}</td>
                 <td className="sticky start-10 z-10 truncate border-e border-b bg-card px-2 font-medium">{r.last_name}</td>
                 <td className="truncate border-e border-b px-2">{r.first_name}</td>
                 <td className="truncate border-e border-b px-2 text-muted-foreground">{r.job_title || t(POSITION_LABELS[r.position] ?? r.position)}</td>

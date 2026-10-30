@@ -78,6 +78,7 @@ function periodEmployees(employees: Awaited<ReturnType<typeof getEmployees>>, re
       position: lastSnapshot.get(e.id)?.position ?? e.position,
       job_title: e.job_title ?? "",
       team_type: lastSnapshot.get(e.id)?.team_type ?? e.team_type,
+      usual_position: e.position,
     }));
 }
 

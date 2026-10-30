@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { availableOn, employeeName, getEmployees, getTrucks, type Employee } from "@/lib/data/employees";
 import type { DayAssignment, EmployeeOption, SheetRow, ElsewhereRow } from "@/lib/attendance-types";
 import { defaultShiftTimes } from "@/lib/default-times";
+import { compareMonthly } from "@/lib/monthly-order";
 import type { AttendanceStatus, DayStatus, Position, TeamType } from "@/lib/types";
 
 export type WorkDay = {
@@ -345,6 +346,8 @@ export type SummaryRow = {
 
 export type SummaryWithEmployee = SummaryRow & {
   name: string;
+  last_name: string;
+  first_name: string;
   order_number: number;
   matricule: string;
   position: Position | null;
@@ -368,6 +371,8 @@ export async function getAttendanceSummary(from: string, to: string, team?: Team
         ...r,
         overtime_total: Number(r.overtime_total),
         name: e ? employeeName(e) : "?",
+        last_name: e?.last_name ?? "",
+        first_name: e?.first_name ?? "",
         order_number: e?.order_number ?? 0,
         matricule: e?.matricule ?? "",
         position: e?.position ?? null,
@@ -381,7 +386,7 @@ export async function getAttendanceSummary(from: string, to: string, team?: Team
 /** Synthèse mensuelle (mois au format yyyy-MM). */
 export async function getMonthlyAttendance(month: string, team?: TeamType) {
   const { from, to } = workMonthRange(month, await getProjectStart());
-  return getAttendanceSummary(from, to, team);
+  return (await getAttendanceSummary(from, to, team)).sort(compareMonthly);
 }
 
 /** Résumé d'une journée pour l'écran de clôture. */

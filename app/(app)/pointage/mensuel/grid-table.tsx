@@ -75,10 +75,10 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
               </td>
             </tr>
           )}
-          {grid.rows.map((r) => (
+          {grid.rows.map((r, i) => (
             <tr key={r.id} className="hover:[&>td]:brightness-95">
               <td className={cn(col.nb, "border-e border-b bg-card px-2 text-center tabular-nums")} title={`${t("Matricule")} ${r.matricule}`}>
-                {r.order_number}
+                {i + 1}
               </td>
               <td className={cn(col.nom, "truncate border-e border-b bg-card px-2 font-medium")}>{r.last_name}</td>
               <td className={cn(col.prenom, "truncate border-e border-b bg-card px-2")}>{r.first_name}</td>

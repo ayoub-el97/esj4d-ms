@@ -1,3 +1,4 @@
+import { compareMonthly } from "@/lib/monthly-order";
 // Grille mensuelle de pointage (modèle Excel EST-4D) : codes, couleurs, période du 8 au 7,
 // calcul des cellules et des totaux. Module pur, utilisable côté serveur, navigateur et PDF.
 import type { AttendanceStatus, Position, TeamType } from "@/lib/types";
@@ -114,6 +115,8 @@ export type GridEmployee = {
   /** Libellé libre de la fonction (« autre fonction ») */
   job_title: string;
   team_type: TeamType;
+  /** Fonction permanente (fiche) : ordre du rapport, sans effet sur la fonction affichée */
+  usual_position?: Position;
 };
 
 export type GridCell = {
@@ -208,7 +211,7 @@ export function buildGrid(input: {
     byEmpDate.set(k, [...(byEmpDate.get(k) ?? []), a.status]);
   }
   const rows: GridRow[] = [...input.employees]
-    .sort((a, b) => a.order_number - b.order_number || a.last_name.localeCompare(b.last_name))
+    .sort(compareMonthly)
     .map((e) => {
       const cells: Record<string, GridCell> = {};
       for (const d of dates) {
@@ -225,8 +228,10 @@ export type GridFilters = { team?: TeamType; position?: Position; q?: string };
 /** Filtre les employés (équipe, fonction, nom) et recalcule les totaux. */
 export function filterGrid(grid: GridData, f: GridFilters): GridData {
   const q = (f.q ?? "").trim().toLowerCase();
-  if (!f.team && !f.position && !q) return grid;
-  const rows = grid.rows
+  // Ordre appliqué aussi aux versions finalisées (leur contenu enregistré n'est pas modifié)
+  if (!f.team && !f.position && !q) return { ...grid, rows: [...grid.rows].sort(compareMonthly) };
+  const rows = [...grid.rows]
+    .sort(compareMonthly)
     .filter((r) => (!f.team || r.team_type === f.team) && (!f.position || r.position === f.position))
     .filter((r) => !q || `${r.last_name} ${r.first_name} ${r.matricule} ${r.job_title}`.toLowerCase().includes(q))
     .map((r) => ({ ...r, cells: r.cells, totals: {} }));

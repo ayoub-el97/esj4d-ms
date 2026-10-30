@@ -71,9 +71,9 @@ export default async function MensuelPage({ searchParams }: { searchParams: Prom
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <TableRow key={r.employee_id}>
-                <TableCell>{r.order_number}</TableCell>
+                <TableCell>{i + 1}</TableCell>
                 <TableCell className="font-medium">{r.name}</TableCell>
                 <TableCell>{r.position ? t(POSITION_LABELS[r.position]) : ""}</TableCell>
                 <TableCell>{r.team_type ? t(TEAM_LABELS[r.team_type]) : ""}</TableCell>

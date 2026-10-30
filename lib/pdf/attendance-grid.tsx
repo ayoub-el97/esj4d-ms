@@ -137,9 +137,9 @@ export function AttendanceGridPdf({
         </View>
 
         {grid.rows.length === 0 && <Text style={{ marginTop: 8, fontSize: 9, color: "#555" }}>{t("Aucun employé pour cette période et ces filtres.")}</Text>}
-        {grid.rows.map((r) => (
+        {grid.rows.map((r, i) => (
           <View key={r.id} style={s.row} wrap={false}>
-            {idCells(String(r.order_number), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
+            {idCells(String(i + 1), trunc(r.last_name, 18), trunc(r.first_name, 16), trunc(r.job_title || t(POSITION_LABELS[r.position] ?? r.position), 15))}
             {grid.dates.map((d) => {
               const c = r.cells[d];
               if (!c || !c.statuses.length)

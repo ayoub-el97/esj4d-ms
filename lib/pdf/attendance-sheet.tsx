@@ -163,8 +163,8 @@ export function MonthlyAttendancePdf({
       <PdfHeader company={company} title={title} subtitle={formatWorkMonth(month, projectStart, locale)} />
       <PdfTable
         columns={columns}
-        rows={rows.map((r) => ({
-          nb: String(r.order_number),
+        rows={rows.map((r, i) => ({
+          nb: String(i + 1),
           nom: r.name,
           poste: r.position ? t(POSITION_LABELS[r.position as keyof typeof POSITION_LABELS]) : "",
           trav: String(r.worked_days),
