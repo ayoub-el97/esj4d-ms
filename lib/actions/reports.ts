@@ -60,6 +60,35 @@ export async function updateCleaningAgent(id: string, patch: { location?: string
   return { ok: true };
 }
 
+const workLocationsSchema = z.object({
+  date: dateSchema,
+  agents: z.array(z.object({ id: uuid, location: z.string().max(200) })),
+  trucks: z.array(z.object({ id: uuid, sectors: z.string().max(1000) })),
+});
+
+/** أماكن اشتغال العمال : lieux corrigés dans les rapports d'origine de cette date (aucune copie, aucun doublon). */
+export async function saveWorkLocations(date: string, changes: { agents: { id: string; location: string }[]; trucks: { id: string; sectors: string }[] }): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("rapport_journalier", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const parsed = workLocationsSchema.safeParse({ date, ...changes });
+  if (!parsed.success) return { ok: false, error: t("Saisie invalide.") };
+  const supabase = await createClient();
+  for (const a of parsed.data.agents) {
+    const { data, error } = await supabase.from("cleaning_report_agents").update({ location: a.location }).eq("id", a.id).eq("activity_date", date).select("id");
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    if (!data?.length) return { ok: false, error: t("Rapport introuvable.") };
+  }
+  for (const r of parsed.data.trucks) {
+    const { data, error } = await supabase.from("collection_reports").update({ sectors: r.sectors }).eq("id", r.id).eq("activity_date", date).select("id");
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+    if (!data?.length) return { ok: false, error: t("Rapport introuvable.") };
+  }
+  revalidatePath("/rapport-journalier", "layout");
+  revalidatePath("/lieux-de-travail", "layout");
+  return { ok: true, message: t("Lieux de travail enregistrés.") };
+}
+
 /**
  * Ajoute n'importe quel employé actif au rapport de nettoiement d'une date (rapport créé s'il n'existe
  * pas). Sa fiche et le pointage ne changent pas ; une seule ligne par employé et par rapport.

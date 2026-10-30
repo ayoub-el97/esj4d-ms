@@ -32,6 +32,7 @@ import { PurchaseListPdf, PurchasePdf, PurchaseReportPdf } from "./purchases";
 import { AbsencesPeriodPdf, EngagementAbsencesPdf } from "./absences";
 import { ContractReportPdf } from "./contracts";
 import { CombinedReportPdf } from "./combined";
+import { WORK_LOCATIONS_TITLE } from "@/lib/modules";
 import { getCombinedReport } from "@/lib/data/combined-report";
 import { getContract, getContractSummary } from "@/lib/data/contracts";
 import { getAbsenceSummary } from "@/lib/data/absences";
@@ -175,9 +176,9 @@ export async function buildPdf(kind: string, params: Record<string, string>): Pr
       if (!reports.length) return null;
       return done("rapport_journalier", `${t("Rapport journalier — Collecte")} ${formatDateFr(date)}`, `rapport-collecte-${date}.pdf`, createElement(CollectionReportPdf, { ...common, date, reports }));
     }
-    case "rapport-collecte-nettoiement": {
+    case "lieux-de-travail": {
       if (!isISODate(date)) return null;
-      return done("rapport_journalier", `${t("Rapport Collecte / Nettoiement")} ${formatDateFr(date)}`, `rapport-collecte-nettoiement-${date}.pdf`, createElement(CombinedReportPdf, { company: settings.company_name, data: await getCombinedReport(date) }));
+      return done("rapport_journalier", `${WORK_LOCATIONS_TITLE} ${formatDateFr(date)}`, `lieux-de-travail-${date}.pdf`, createElement(CombinedReportPdf, { ...common, data: await getCombinedReport(date) }));
     }
     case "rapport-global": {
       if (!isISODate(date)) return null;

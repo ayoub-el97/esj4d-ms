@@ -1,10 +1,7 @@
 import { Suspense } from "react";
 import { getEmployees } from "@/lib/data/employees";
 import { categoryOf } from "@/lib/sheet-order";
-import { Brush, Printer, Truck, UserPlus, UserX, History } from "lucide-react";
-import { getCombinedReport } from "@/lib/data/combined-report";
-import { CombinedReportView } from "@/components/combined-report";
-import { LinkButton } from "@/components/link-button";
+import { Brush, Truck, UserPlus, UserX, History } from "lucide-react";
 import { requireModule } from "@/lib/auth";
 import { getSheetCounts, getWorkDay } from "@/lib/data/attendance";
 import { isISODate, todayISO, formatDateLongFr } from "@/lib/dates";
@@ -25,7 +22,6 @@ export default async function PointagePage({ searchParams }: { searchParams: Pro
   const [workDay, counts, active] = await Promise.all([getWorkDay(date), getSheetCounts(date), getEmployees({ onlyActive: true })]);
   const byCat = { collecte: 0, balayeurs: 0, autres: 0 };
   for (const e of active) byCat[categoryOf(e.position)]++;
-  const combined = user.permissions.rapport_journalier.can_view ? await getCombinedReport(date) : null;
   const status = (n: number) => (n ? t("{count} ligne(s) pointée(s)", { count: n }) : t("Non pointée"));
 
   return (
@@ -51,18 +47,6 @@ export default async function PointagePage({ searchParams }: { searchParams: Pro
         <ActionTile href="/pointage/historique" label={t("Historique du pointage")} description={t("Toutes les journées passées : recherche, modification, PDF")} icon={<History />} />
         <ActionTile href="/pointage/absences" label={t("Rapport des absents")} description={t("Absences par employé, certificats médicaux, alertes")} icon={<UserX />} />
       </TileGrid>
-
-      {combined && (
-        <div className="mt-6 space-y-2">
-          <div className="flex flex-wrap justify-end gap-2">
-            <PdfExportButton kind="rapport-collecte-nettoiement" params={{ date }} />
-            <LinkButton href={`/pointage/rapport-collecte-nettoiement?date=${date}`} variant="outline">
-              <Printer /> {t("Imprimer")}
-            </LinkButton>
-          </div>
-          <CombinedReportView t={t} data={combined} />
-        </div>
-      )}
 
       <ModuleButtons
         pdfSlot={
