@@ -55,7 +55,7 @@ export function GridTable({ grid, t, today, locale }: { grid: GridData; t: TFunc
             <th rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 font-semibold", col.jft, "z-30")} title={t("Jours fériés travaillés")}>
               JFT
             </th>
-            <th rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 font-semibold", col.jp, "z-30")} title={t("Jours payés : jours de travail ordinaires, hors jours fériés travaillés")}>
+            <th rowSpan={2} className={cn(stickyHead, "border-e border-b px-1 font-semibold", col.jp, "z-30")} title={t("Jours travaillés : jours ordinaires et jours fériés travaillés (JFT inclus), hors jours de repos travaillés")}>
               JP
             </th>
             {grid.dates.map((d) => {

@@ -214,7 +214,7 @@ export function AttendanceGridPdf({
               </View>
             ))}
             <Text style={{ fontSize: 7.5, marginRight: 12 }}>JFT = {t("Jours fériés travaillés")}</Text>
-            <Text style={{ fontSize: 7.5, marginRight: 12 }}>JP = {t("Jours payés : jours de travail ordinaires, hors jours fériés travaillés")}</Text>
+            <Text style={{ fontSize: 7.5, marginRight: 12 }}>JP = {t("Jours travaillés : jours ordinaires et jours fériés travaillés (JFT inclus), hors jours de repos travaillés")}</Text>
             <Text style={{ fontSize: 7.5, marginRight: 12 }}>· = {t("Non pointé")}</Text>
             <Text style={{ fontSize: 7.5, marginRight: 12 }}>! = {t("À vérifier")}</Text>
             <Text style={{ fontSize: 7.5 }}>×2 = {t("deux services le même jour")}</Text>

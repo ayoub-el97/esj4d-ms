@@ -66,7 +66,7 @@ const workLocationsSchema = z.object({
   trucks: z.array(z.object({ id: uuid, sectors: z.string().max(1000) })),
 });
 
-/** أماكن اشتغال العمال : lieux corrigés dans les rapports d'origine de cette date (aucune copie, aucun doublon). */
+/** Lieux de travail des agents : lieux corrigés dans les rapports d'origine de cette date (aucune copie, aucun doublon). */
 export async function saveWorkLocations(date: string, changes: { agents: { id: string; location: string }[]; trucks: { id: string; sectors: string }[] }): Promise<ActionResult> {
   const t = await getT();
   const auth = await assertModule("rapport_journalier", "edit");
@@ -85,7 +85,7 @@ export async function saveWorkLocations(date: string, changes: { agents: { id: s
     if (!data?.length) return { ok: false, error: t("Rapport introuvable.") };
   }
   revalidatePath("/rapport-journalier", "layout");
-  revalidatePath("/lieux-de-travail", "layout");
+  revalidatePath("/pointage", "layout");
   return { ok: true, message: t("Lieux de travail enregistrés.") };
 }
 

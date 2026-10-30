@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { CombinedReport } from "@/lib/data/combined-report";
 import { formatDateFr } from "@/lib/dates";
 import type { TFunction } from "@/lib/i18n/config";
-import { WORK_LOCATIONS_TITLE } from "@/lib/modules";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -27,16 +26,19 @@ function Lines({ items }: { items: string[] }) {
 }
 
 /**
- * أماكن اشتغال العمال : feuille verticale (A4 portrait à l'impression) qui continue sur les pages
+ * Lieux de travail des agents : feuille verticale (A4 portrait à l'impression) qui continue sur les pages
  * suivantes sans réduire le texte. Nettoiement puis Collecte, un camion par bloc.
+ * `heading` : titre et date (retirés sur la page Pointage, qui les affiche déjà).
  */
-export function CombinedReportView({ t, data }: { t: TFunction; data: CombinedReport }) {
+export function CombinedReportView({ t, data, heading = true }: { t: TFunction; data: CombinedReport; heading?: boolean }) {
   return (
     <section className="rounded-xl border bg-card p-4 text-sm print:border-0 print:p-0">
-      <h2 dir="rtl" className="text-center text-lg font-bold">
-        {WORK_LOCATIONS_TITLE}
-      </h2>
-      <p className="mb-3 text-center font-medium">{t("Date : {date}", { date: formatDateFr(data.date) })}</p>
+      {heading && (
+        <>
+          <h2 className="text-center text-lg font-bold">{t("Lieux de travail des agents")}</h2>
+          <p className="mb-3 text-center font-medium">{t("Date : {date}", { date: formatDateFr(data.date) })}</p>
+        </>
+      )}
 
       <h3 className="mb-1 border-b-2 border-foreground/40 pb-0.5 text-base font-semibold">{t("Nettoiement")}</h3>
       {data.cleaning === null ? (

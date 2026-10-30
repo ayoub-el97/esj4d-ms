@@ -10,16 +10,11 @@ export type ModuleDef = {
   accent: string;
 };
 
-/** Titre exact de la section, en arabe quelle que soit la langue de l'interface. */
-export const WORK_LOCATIONS_TITLE = "أماكن اشتغال العمال";
-
 /** Les 10 modules du tableau de bord (ordre du cahier des charges). */
 export const DASHBOARD_MODULES: ModuleDef[] = [
   { key: "pointage", label: "Pointage", href: "/pointage", description: "Feuilles de présence des équipes", accent: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" },
   { key: "pointage", label: "Rapport mensuel de pointage", href: "/pointage/mensuel", description: "Grille du mois (P, R, CP…) générée depuis le Pointage", accent: "bg-lime-100 text-lime-800 dark:bg-lime-950 dark:text-lime-300" },
   { key: "rapport_journalier", label: "Rapport journalier", href: "/rapport-journalier", description: "Nettoiement, collecte et récapitulatif global", accent: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300" },
-  // Même permission que le rapport journalier, dont il reprend les données
-  { key: "rapport_journalier", label: WORK_LOCATIONS_TITLE, href: "/lieux-de-travail", description: "Employés, camions et lieux de travail par date", accent: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300" },
   { key: "rapport_mensuel", label: "Rapport mensuel", href: "/rapport-mensuel", description: "Synthèse mensuelle", accent: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" },
   { key: "rapport_camions", label: "Rapport camions", href: "/rapport-camions", description: "Suivi journalier des véhicules", accent: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
   // Même permission que le rapport camions (lecture / modification)

@@ -4,16 +4,15 @@ import { requireModule } from "@/lib/auth";
 import { getWorkLocationDates } from "@/lib/data/combined-report";
 import { formatDateFr, formatDateLongFr, isISODate } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
-import { WORK_LOCATIONS_TITLE } from "@/lib/modules";
 import { ModuleHeader } from "@/components/module-header";
 import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export const generateMetadata = pageTitle(WORK_LOCATIONS_TITLE);
+export const generateMetadata = pageTitle("Lieux de travail des agents");
 
-/** Archive propre à cette section : une ligne par date ayant un rapport, du plus récent au plus ancien. */
+/** Historique propre à cette section du Pointage : une ligne par date ayant un rapport, du plus récent au plus ancien. */
 export default async function WorkLocationsHistoryPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   const [, { t, locale }] = await Promise.all([requireModule("rapport_journalier"), getI18n()]);
   const sp = await searchParams;
@@ -24,7 +23,7 @@ export default async function WorkLocationsHistoryPage({ searchParams }: { searc
 
   return (
     <div>
-      <ModuleHeader title={WORK_LOCATIONS_TITLE} subtitle={`${t("Historique")} — ${t("{count} jour(s) — {period}", { count: days.length, period })}`} backHref="/lieux-de-travail" />
+      <ModuleHeader title={t("Lieux de travail des agents")} subtitle={`${t("Historique")} — ${t("{count} jour(s) — {period}", { count: days.length, period })}`} backHref="/pointage" />
       <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
         <div className="space-y-1">
           <Label htmlFor="from">{t("Du")}</Label>
@@ -38,7 +37,7 @@ export default async function WorkLocationsHistoryPage({ searchParams }: { searc
           <Search /> {t("Rechercher")}
         </Button>
         {(from || to) && (
-          <LinkButton href="/lieux-de-travail/historique" variant="outline">
+          <LinkButton href="/pointage/lieux-de-travail/historique" variant="outline">
             {t("Tout")}
           </LinkButton>
         )}
@@ -50,7 +49,7 @@ export default async function WorkLocationsHistoryPage({ searchParams }: { searc
         <ul className="divide-y rounded-xl border bg-card">
           {days.map((d) => (
             <li key={d.activity_date}>
-              <Link href={`/lieux-de-travail/historique/${d.activity_date}`} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 px-4 py-3 text-sm transition-colors hover:bg-muted">
+              <Link href={`/pointage/lieux-de-travail/historique/${d.activity_date}`} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 px-4 py-3 text-sm transition-colors hover:bg-muted">
                 <span className="w-24 font-semibold tabular-nums">{formatDateFr(d.activity_date)}</span>
                 <span className="min-w-40 text-muted-foreground first-letter:uppercase">{formatDateLongFr(d.activity_date, locale)}</span>
                 <span className="text-muted-foreground">

@@ -2573,7 +2573,7 @@ export const ar: Messages = {
   "Annulée par :": "ألغاها:",
   "Décidé par :": "قرر:",
   "Jours fériés travaillés": "أيام العطل الرسمية المشتغلة",
-  "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "الأيام المؤداة: أيام العمل العادية دون العطل الرسمية المشتغلة",
+  "Jours travaillés : jours ordinaires et jours fériés travaillés (JFT inclus), hors jours de repos travaillés": "أيام العمل: الأيام العادية وأيام العطل الرسمية المعمول بها (بما فيها JFT)، دون أيام الراحة المعمول بها",
   "Rapport camions du {date}": "تقرير الشاحنات ليوم {date}",
   "Retour à l'historique": "العودة إلى السجل",
   "Exporter PDF": "تصدير PDF",
@@ -2581,8 +2581,6 @@ export const ar: Messages = {
   "{count} jour(s) — {period}": "{count} يوم/أيام — {period}",
   "{count} camion(s)": "{count} شاحنة/شاحنات",
   "{tonnage} t": "{tonnage} طن",
-  "أماكن اشتغال العمال": "أماكن اشتغال العمال",
-  "Employés, camions et lieux de travail par date": "الموظفون والشاحنات وأماكن العمل حسب التاريخ",
   "Journée clôturée : rouvrez-la pour modifier ce rapport.": "اليوم مغلق: أعد فتحه لتعديل هذا التقرير.",
   "Ajouter ou retirer un employé": "إضافة أو إزالة موظف",
   "Ouvrir les rapports de collecte": "فتح تقارير الجمع",
@@ -2591,4 +2589,5 @@ export const ar: Messages = {
   "un lieu par ligne": "مكان واحد في كل سطر",
   "Aucun rapport de collecte pour ce camion : pas de lieu enregistré.": "لا يوجد تقرير جمع لهذه الشاحنة: لا يوجد مكان مسجل.",
   "Lieux de travail enregistrés.": "تم حفظ أماكن العمل.",
+  "Lieux de travail des agents": "أماكن اشتغال العمال",
 };

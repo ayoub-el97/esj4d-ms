@@ -2573,7 +2573,7 @@ export const en: Messages = {
   "Annulée par :": "Cancelled by:",
   "Décidé par :": "Decided by:",
   "Jours fériés travaillés": "Public holidays worked",
-  "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "Paid days: ordinary working days, excluding public holidays worked",
+  "Jours travaillés : jours ordinaires et jours fériés travaillés (JFT inclus), hors jours de repos travaillés": "Days worked: ordinary days and public holidays worked (JFT included), excluding rest days worked",
   "Rapport camions du {date}": "Truck report of {date}",
   "Retour à l'historique": "Back to history",
   "Exporter PDF": "Export PDF",
@@ -2581,8 +2581,6 @@ export const en: Messages = {
   "{count} jour(s) — {period}": "{count} day(s) — {period}",
   "{count} camion(s)": "{count} truck(s)",
   "{tonnage} t": "{tonnage} t",
-  "أماكن اشتغال العمال": "أماكن اشتغال العمال",
-  "Employés, camions et lieux de travail par date": "Employees, trucks and workplaces by date",
   "Journée clôturée : rouvrez-la pour modifier ce rapport.": "Day closed: reopen it to edit this report.",
   "Ajouter ou retirer un employé": "Add or remove an employee",
   "Ouvrir les rapports de collecte": "Open collection reports",
@@ -2591,4 +2589,5 @@ export const en: Messages = {
   "un lieu par ligne": "one place per line",
   "Aucun rapport de collecte pour ce camion : pas de lieu enregistré.": "No collection report for this truck: no workplace recorded.",
   "Lieux de travail enregistrés.": "Workplaces saved.",
+  "Lieux de travail des agents": "Agents' workplaces",
 };

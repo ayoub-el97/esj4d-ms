@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { getEmployees } from "@/lib/data/employees";
+import { WorkLocationsSection } from "./lieux-de-travail/day-report";
 import { categoryOf } from "@/lib/sheet-order";
 import { Brush, Truck, UserPlus, UserX, History } from "lucide-react";
 import { requireModule } from "@/lib/auth";
@@ -47,6 +48,8 @@ export default async function PointagePage({ searchParams }: { searchParams: Pro
         <ActionTile href="/pointage/historique" label={t("Historique du pointage")} description={t("Toutes les journées passées : recherche, modification, PDF")} icon={<History />} />
         <ActionTile href="/pointage/absences" label={t("Rapport des absents")} description={t("Absences par employé, certificats médicaux, alertes")} icon={<UserX />} />
       </TileGrid>
+
+      {user.permissions.rapport_journalier.can_view && <WorkLocationsSection user={user} date={date} />}
 
       <ModuleButtons
         pdfSlot={

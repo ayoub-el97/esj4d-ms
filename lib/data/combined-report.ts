@@ -33,7 +33,7 @@ const splitLocations = (text: string) =>
     .filter(Boolean);
 
 /**
- * أماكن اشتغال العمال : lecture des rapports enregistrés pour cette date (rapport journalier
+ * Lieux de travail des agents : lecture des rapports enregistrés pour cette date (rapport journalier
  * Nettoiement, rapport de Collecte, équipes des lignes camion). Aucune donnée propre, aucune reprise
  * de la fiche actuelle des employés : un rapport absent reste absent, une correction de la source
  * apparaît aussitôt ici.

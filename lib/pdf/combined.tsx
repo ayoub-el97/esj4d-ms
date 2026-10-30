@@ -1,7 +1,6 @@
 import { Text, View } from "@react-pdf/renderer";
 import type { CombinedReport } from "@/lib/data/combined-report";
 import { formatDateFr } from "@/lib/dates";
-import { WORK_LOCATIONS_TITLE } from "@/lib/modules";
 import { PdfDocument, PdfHeader } from "./components";
 import { usePdf } from "./context";
 import { FONT_BOLD, isRtlText } from "./fonts";
@@ -24,12 +23,13 @@ function Field({ label, values }: { label: string; values: string[] }) {
   );
 }
 
-/** أماكن اشتغال العمال : A4 portrait, texte de taille fixe, suite sur les pages suivantes si besoin. */
+/** Lieux de travail des agents : A4 portrait, texte de taille fixe, suite sur les pages suivantes si besoin. */
 export function CombinedReportPdf({ company, generatedBy, data }: { company: string; generatedBy: string; data: CombinedReport }) {
   const { t } = usePdf();
+  const title = t("Lieux de travail des agents");
   return (
-    <PdfDocument title={`${WORK_LOCATIONS_TITLE} ${data.date}`} company={company} generatedBy={generatedBy}>
-      <PdfHeader company={company} title={WORK_LOCATIONS_TITLE} subtitle={t("Date : {date}", { date: formatDateFr(data.date) })} />
+    <PdfDocument title={`${title} ${data.date}`} company={company} generatedBy={generatedBy}>
+      <PdfHeader company={company} title={title} subtitle={t("Date : {date}", { date: formatDateFr(data.date) })} />
       <View style={{ fontSize: 10 }}>
         <Text style={section} minPresenceAhead={40}>
           {t("Nettoiement")}

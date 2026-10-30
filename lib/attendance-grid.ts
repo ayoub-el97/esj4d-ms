@@ -224,22 +224,18 @@ export function buildGrid(input: {
 }
 
 /**
- * JFT (jours fériés travaillés) et JP (jours ordinaires travaillés) d'un employé, d'après ses lignes
- * de pointage ; une date compte une seule fois. JFT : au moins un service Présent ou Repos travaillé
- * un jour férié (calendrier officiel, jamais déduit du code de la cellule). JP : au moins un service
- * Présent un jour non férié ; un repos travaillé seul n'y compte pas.
- * Repos, congé, récupération, absence, maladie et jour férié non travaillé ne comptent pas.
+ * JP (jours travaillés) et JFT (jours fériés travaillés) d'un employé, d'après ses lignes de pointage.
+ * JP : dates avec au moins un service Présent, une seule fois par date, jours fériés compris.
+ * JFT : parmi ces dates, celles du calendrier officiel (Jours fériés) ; déjà incluses dans JP.
+ * Repos travaillé, repos, congé, récupération, absence, maladie et férié non travaillé ne comptent pas.
  */
 export function workedDayCounts(grid: Pick<GridData, "dates" | "holidays">, row: Pick<GridRow, "cells">): { jft: number; jp: number } {
   let jft = 0;
   let jp = 0;
   for (const d of grid.dates) {
-    const statuses = row.cells[d]?.statuses ?? [];
-    if (d in grid.holidays) {
-      if (statuses.some((st) => st === "present" || st === "repos_travaille")) jft++;
-    } else if (statuses.includes("present")) {
-      jp++;
-    }
+    if (!row.cells[d]?.statuses.includes("present")) continue;
+    jp++;
+    if (d in grid.holidays) jft++;
   }
   return { jft, jp };
 }
