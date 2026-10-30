@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
-import { getAbsenceSummary, syncAbsenceAlerts } from "@/lib/data/absences";
+import { getAbsenceSummary, getCertificateRows, syncAbsenceAlerts } from "@/lib/data/absences";
+import { CertificateDocuments } from "@/components/certificate-documents";
+import { CertificateStateSelect, CreateCertificateButton } from "./absences-ui";
 import { getProjectStart } from "@/lib/data/settings";
 import { formatDateFr, isISODate, todayISO, workMonthOf, workMonthRange } from "@/lib/dates";
 import { getT, pageTitle } from "@/lib/i18n/server";
-import { ABSENCE_ALERT_SHORT, ABSENCE_ALERT_STYLES } from "@/lib/absence-types";
+import { ABSENCE_ALERT_SHORT, ABSENCE_ALERT_STYLES, CERTIFICATE_STATE_LABELS, CERTIFICATE_STATE_STYLES, certificateState } from "@/lib/absence-types";
 import { ALL_POSITIONS, POSITION_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ModuleHeader } from "@/components/module-header";
@@ -38,6 +40,10 @@ export default async function AbsencesPage({ searchParams }: { searchParams: Pro
     .filter((r) => !sp.poste || r.employee.position === sp.poste)
     .filter((r) => !term || r.name.toLowerCase().includes(term) || (r.employee.matricule ?? "").toLowerCase().includes(term))
     .filter((r) => (sp.type === "non_justifiee" ? r.non_justifiee > 0 : sp.type === "maladie" ? r.maladie > 0 : sp.type === "absents" ? r.total > 0 : true));
+  const canEdit = user.permissions.pointage.can_edit;
+  // Certificats directement sur cette page : mêmes filtres (employé, poste), même période
+  const visible = new Set(rows.map((r) => r.employee.id));
+  const certRows = canEdit ? (await getCertificateRows(from, to)).filter((c) => visible.has(c.employee_id)) : [];
   const sum = (k: "total" | "non_justifiee" | "maladie" | "certificates") => rows.reduce((s, r) => s + r[k], 0);
 
   const kpis = [
@@ -110,6 +116,38 @@ export default async function AbsencesPage({ searchParams }: { searchParams: Pro
           </label>
         </div>
       </form>
+
+      {canEdit && (
+        <section id="certificats" className="mb-4 scroll-mt-20 space-y-3 rounded-xl border bg-card p-4">
+          <h2 className="font-semibold">{t("Absences maladie — certificats médicaux")}</h2>
+          {certRows.length === 0 && <p className="text-sm text-muted-foreground">{t("Aucune absence maladie sur cette période. Un employé mis « Absent maladie » au pointage apparaît ici automatiquement.")}</p>}
+          {certRows.map((c) => {
+            const state = c.certificate ? certificateState(c.certificate.status, c.certificate.verification) : "en_attente";
+            return (
+              <div key={c.certificate?.id ?? `${c.employee_id}-${c.from}`} className="space-y-2 rounded-lg border p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/pointage/absences/${c.employee_id}`} className="font-semibold hover:underline">
+                    {c.name}
+                  </Link>
+                  <span>{c.from === c.to ? formatDateFr(c.from) : t("du {from} au {to}", { from: formatDateFr(c.from), to: formatDateFr(c.to) })}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", CERTIFICATE_STATE_STYLES[state])}>{t(CERTIFICATE_STATE_LABELS[state])}</span>
+                  {c.certificate?.submitted_on && <span className="text-xs text-muted-foreground">{t("remis le {date}", { date: formatDateFr(c.certificate.submitted_on) })}</span>}
+                  {c.certificate && (
+                    <span className="ms-auto">
+                      <CertificateStateSelect certificate={c.certificate} />
+                    </span>
+                  )}
+                </div>
+                {c.certificate ? (
+                  <CertificateDocuments certificateId={c.certificate.id} employeeId={c.employee_id} files={c.certificate.photos} canEdit fileLabel={`certificat-${c.name.replace(/[^\p{L}\d]+/gu, "-")}-${c.from}`} />
+                ) : (
+                  <CreateCertificateButton employeeId={c.employee_id} from={c.from} to={c.to} />
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>

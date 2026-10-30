@@ -168,7 +168,7 @@ export default async function EmployeeAbsencesPage({ params, searchParams }: { p
                   {c.comment && <p className="text-xs">{c.comment}</p>}
                   {canEdit ? (
                     <>
-                      <CertificateDocuments certificateId={c.id} employeeId={employeeId} startDate={c.start_date} files={c.photos} canEdit={canEdit} fileLabel={`certificat-${employeeName(employee).replace(/[^\p{L}\d]+/gu, "-")}-${c.start_date}`} />
+                      <CertificateDocuments certificateId={c.id} employeeId={employeeId} files={c.photos} canEdit={canEdit} fileLabel={`certificat-${employeeName(employee).replace(/[^\p{L}\d]+/gu, "-")}-${c.start_date}`} />
                       <CertificateActions certificate={c} employeeId={employeeId} />
                     </>
                   ) : (

@@ -6796,3 +6796,322 @@ as $$
   end;
 $$;
 
+-- ===== supabase/migrations/047_conge_depuis_pointage.sql =====
+-- =============================================================================
+-- 047 — Congé saisi directement au pointage : demande créée automatiquement
+--
+--  Un employé mis en « Congé » au pointage sans demande préalable reçoit une demande
+--  « Approuvée automatiquement – depuis Pointage » (une date, source = pointage, liée à la ligne
+--  de pointage d'origine). Le jour n'est déduit qu'une fois : le solde compte les jours par employé
+--  et par date (days_taken), que le jour vienne du pointage, de la demande, ou des deux.
+--   * Une demande acceptée ou en attente couvre déjà la date : aucune demande créée.
+--   * Pointage changé (« Congé » → autre statut) ou ligne retirée : la demande automatique passe
+--     « Annulée » (conservée dans l'historique) ; remise en « Congé » : la même demande est réactivée.
+--   * Une demande saisie à la main n'est jamais modifiée par le pointage et garde sa protection
+--     (CONGE_APPROUVE). La demande automatique ne verrouille pas le pointage : c'est lui qui la pilote.
+--   * Demande saisie à la main acceptée sur la même date : elle remplace la demande automatique.
+--  Reprise : les jours déjà pointés « Congé » sans demande reçoivent leur demande. Le pointage
+--  existant n'est pas modifié (ni statut, ni date de saisie) et le solde ne change pas.
+-- =============================================================================
+
+alter table public.leave_requests add column if not exists source text not null default 'manuel';
+alter table public.leave_requests drop constraint if exists leave_requests_source_chk;
+alter table public.leave_requests add constraint leave_requests_source_chk check (source in ('manuel', 'pointage'));
+-- Ligne de pointage d'origine (la demande reste si la ligne est retirée)
+alter table public.leave_requests add column if not exists source_attendance_id uuid references public.attendance (id) on delete set null;
+create index if not exists leave_requests_source_idx on public.leave_requests (employee_id, start_date) where source = 'pointage';
+
+-- Ces colonnes de liaison ne sont pas des modifications de la feuille (indicateur « Modifié », migration 044)
+create or replace function public.audit_real_change(p_action text, p_old jsonb, p_new jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select p_action = 'DELETE'
+      or (p_action = 'UPDATE'
+          and (coalesce(p_old, '{}'::jsonb) - array['updated_at', 'updated_by', 'created_at', 'created_by', 'leave_request_id', 'pre_leave_status'])
+              is distinct from
+              (coalesce(p_new, '{}'::jsonb) - array['updated_at', 'updated_by', 'created_at', 'created_by', 'leave_request_id', 'pre_leave_status']));
+$$;
+
+-- ---------- Seule une demande saisie à la main verrouille le pointage ------------------------
+create or replace function public.enforce_leave_attendance()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.attendance;
+  v_name text;
+begin
+  if coalesce(current_setting('esj.suppression_contrat', true), '') = 'on' then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  v_row := case when tg_op = 'DELETE' then old else new end;
+  if tg_op <> 'DELETE' and new.status::text = 'conge' then
+    if new.leave_request_id is null then
+      new.leave_request_id := public.approved_leave_for(new.employee_id, new.activity_date);
+    end if;
+    return new;
+  end if;
+  if exists (select 1 from public.leave_requests lr
+              where lr.employee_id = v_row.employee_id and lr.status::text = 'acceptee' and lr.source = 'manuel'
+                and v_row.activity_date between lr.start_date and lr.end_date
+                and not public.is_rest_day(v_row.employee_id, v_row.activity_date))
+     and not public.has_leave_override(v_row.employee_id, v_row.activity_date) then
+    select last_name || ' ' || first_name into v_name from public.employees where id = v_row.employee_id;
+    raise exception 'CONGE_APPROUVE|%|%', coalesce(v_name, '?'), to_char(v_row.activity_date, 'DD/MM/YYYY');
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+-- ---------- Demande → pointage : sauf quand c'est le pointage qui pilote la demande ------------
+create or replace function public.leave_requests_sync_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(current_setting('esj.conge_depuis_pointage', true), '') = 'on' then
+    return new;
+  end if;
+  if new.status::text = 'acceptee' and new.source = 'manuel' then
+    -- Demande saisie à la main acceptée : elle remplace les demandes automatiques des mêmes dates
+    perform set_config('esj.conge_depuis_pointage', 'on', true);
+    update public.leave_requests a
+       set status = 'annulee', decision_note = 'Remplacée par une demande saisie', decided_at = now()
+     where a.source = 'pointage' and a.status::text = 'acceptee' and a.employee_id = new.employee_id
+       and a.start_date between new.start_date and new.end_date;
+    perform set_config('esj.conge_depuis_pointage', '', true);
+  elsif new.source = 'pointage' and new.status::text <> 'acceptee' then
+    -- Demande automatique refusée ou annulée depuis Congés : ses lignes de pointage la suivent
+    update public.attendance a
+       set leave_request_id = new.id
+     where a.employee_id = new.employee_id and a.activity_date between new.start_date and new.end_date
+       and a.status::text = 'conge' and a.leave_request_id is null and not public.is_day_closed(a.activity_date);
+  end if;
+  perform public.sync_leave_attendance(new.id);
+  return new;
+end;
+$$;
+
+-- ---------- Pointage → demande automatique ------------------------------------------------------
+create or replace function public.attendance_auto_leave()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  -- Suppression définitive d'un contrat : pas de suivi des demandes
+  if coalesce(current_setting('esj.suppression_contrat', true), '') = 'on' then
+    return null;
+  end if;
+  -- Le statut quitte « Congé », ou la ligne est retirée : demande automatique annulée (jamais une demande manuelle)
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.status::text = 'conge' and new.status::text <> 'conge') then
+    if not exists (select 1 from public.attendance a where a.employee_id = old.employee_id and a.activity_date = old.activity_date and a.status::text = 'conge') then
+      perform set_config('esj.conge_depuis_pointage', 'on', true);
+      update public.leave_requests lr
+         set status = 'annulee', decision_note = 'Statut du pointage modifié', decided_at = now(), decided_by = auth.uid()
+       where lr.source = 'pointage' and lr.status::text = 'acceptee' and lr.employee_id = old.employee_id
+         and lr.start_date = old.activity_date and lr.end_date = old.activity_date;
+      perform set_config('esj.conge_depuis_pointage', '', true);
+    end if;
+    return null;
+  end if;
+
+  if new.status::text <> 'conge' or (tg_op = 'UPDATE' and old.status::text = 'conge') then
+    return null;
+  end if;
+  -- Une demande acceptée ou en attente couvre déjà cette date : pas de doublon
+  if exists (select 1 from public.leave_requests lr
+              where lr.employee_id = new.employee_id and new.activity_date between lr.start_date and lr.end_date
+                and lr.status::text in ('acceptee', 'en_attente')) then
+    return null;
+  end if;
+  perform set_config('esj.conge_depuis_pointage', 'on', true);
+  -- Déjà créée puis annulée pour cette date : la même demande est réactivée
+  select lr.id into v_id from public.leave_requests lr
+   where lr.source = 'pointage' and lr.employee_id = new.employee_id
+     and lr.start_date = new.activity_date and lr.end_date = new.activity_date
+   order by lr.created_at limit 1;
+  if v_id is not null then
+    update public.leave_requests
+       set status = 'acceptee', decision_note = '', decided_at = now(), decided_by = auth.uid(), source_attendance_id = new.id
+     where id = v_id;
+  else
+    insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, reason, status, source, source_attendance_id, decided_by, decided_at)
+    values (new.employee_id, new.activity_date, new.activity_date, new.activity_date, 1, '', 'acceptee', 'pointage', new.id, auth.uid(), now());
+  end if;
+  perform set_config('esj.conge_depuis_pointage', '', true);
+  return null;
+end;
+$$;
+drop trigger if exists attendance_auto_leave on public.attendance;
+create trigger attendance_auto_leave after insert or update of status or delete on public.attendance
+  for each row execute function public.attendance_auto_leave();
+
+-- ---------- Reprise : jours déjà pointés « Congé » sans demande ----------------------------------
+do $$
+declare
+  r record;
+begin
+  perform set_config('esj.conge_depuis_pointage', 'on', true);
+  for r in
+    select distinct on (a.employee_id, a.activity_date) a.id, a.employee_id, a.activity_date
+      from public.attendance a
+     where a.status::text = 'conge' and a.leave_request_id is null
+       and not exists (select 1 from public.leave_requests lr
+                        where lr.employee_id = a.employee_id and a.activity_date between lr.start_date and lr.end_date
+                          and lr.status::text in ('acceptee', 'en_attente'))
+     order by a.employee_id, a.activity_date, a.shift
+  loop
+    insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, reason, status, source, source_attendance_id, decided_at)
+    values (r.employee_id, r.activity_date, r.activity_date, r.activity_date, 1, '', 'acceptee', 'pointage', r.id, now());
+  end loop;
+  perform set_config('esj.conge_depuis_pointage', '', true);
+end $$;
+
+-- ===== supabase/migrations/048_suppression_demande_conge.sql =====
+-- =============================================================================
+-- 048 — Suppression d'une demande de congé (archivage)
+--
+--  Les demandes n'ont jamais été effacées physiquement (aucun droit DELETE) : une demande
+--  « supprimée » est archivée (deleted_at, deleted_by, deletion_reason) et passe « Annulée », ce qui
+--  la retire du solde et des calculs. Elle disparaît des écrans, reste dans la base et dans le journal
+--  d'audit (qui, quand, motif, valeurs). L'employé et les autres demandes ne sont pas touchés.
+--   * Demande saisie, acceptée : le congé est retiré du pointage (comme une annulation : statut
+--     d'origine restauré, lignes créées par la demande retirées) ; solde recalculé.
+--   * En attente, refusée, annulée : aucun effet sur le solde ni le pointage.
+--   * Demande automatique (depuis le pointage) : l'utilisateur choisit le sort de la ligne de pointage :
+--     garder « Congé » (le jour reste déduit, car le pointage fait foi) ou un autre statut (jour rendu).
+--     La ligne n'est jamais supprimée, et la demande n'est pas recréée tant que l'employé n'est pas
+--     de nouveau mis en « Congé » au pointage (dans ce cas, c'est une nouvelle demande).
+--   * Journée clôturée : pointage non modifié, signalé à l'utilisateur.
+-- =============================================================================
+
+alter table public.leave_requests add column if not exists deleted_at timestamptz;
+alter table public.leave_requests add column if not exists deleted_by uuid references auth.users (id);
+alter table public.leave_requests add column if not exists deletion_reason text not null default '';
+
+-- Une demande automatique archivée n'est jamais réactivée par le pointage
+create or replace function public.attendance_auto_leave()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  -- Suppression définitive d'un contrat : pas de suivi des demandes
+  if coalesce(current_setting('esj.suppression_contrat', true), '') = 'on' then
+    return null;
+  end if;
+  -- Le statut quitte « Congé », ou la ligne est retirée : demande automatique annulée (jamais une demande manuelle)
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.status::text = 'conge' and new.status::text <> 'conge') then
+    if not exists (select 1 from public.attendance a where a.employee_id = old.employee_id and a.activity_date = old.activity_date and a.status::text = 'conge') then
+      perform set_config('esj.conge_depuis_pointage', 'on', true);
+      update public.leave_requests lr
+         set status = 'annulee', decision_note = 'Statut du pointage modifié', decided_at = now(), decided_by = auth.uid()
+       where lr.source = 'pointage' and lr.status::text = 'acceptee' and lr.employee_id = old.employee_id
+         and lr.start_date = old.activity_date and lr.end_date = old.activity_date;
+      perform set_config('esj.conge_depuis_pointage', '', true);
+    end if;
+    return null;
+  end if;
+
+  if new.status::text <> 'conge' or (tg_op = 'UPDATE' and old.status::text = 'conge') then
+    return null;
+  end if;
+  -- Une demande acceptée ou en attente couvre déjà cette date : pas de doublon
+  if exists (select 1 from public.leave_requests lr
+              where lr.employee_id = new.employee_id and new.activity_date between lr.start_date and lr.end_date
+                and lr.status::text in ('acceptee', 'en_attente')) then
+    return null;
+  end if;
+  perform set_config('esj.conge_depuis_pointage', 'on', true);
+  -- Déjà créée puis annulée pour cette date (non supprimée) : la même demande est réactivée
+  select lr.id into v_id from public.leave_requests lr
+   where lr.source = 'pointage' and lr.deleted_at is null and lr.employee_id = new.employee_id
+     and lr.start_date = new.activity_date and lr.end_date = new.activity_date
+   order by lr.created_at limit 1;
+  if v_id is not null then
+    update public.leave_requests
+       set status = 'acceptee', decision_note = '', decided_at = now(), decided_by = auth.uid(), source_attendance_id = new.id
+     where id = v_id;
+  else
+    insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, reason, status, source, source_attendance_id, decided_by, decided_at)
+    values (new.employee_id, new.activity_date, new.activity_date, new.activity_date, 1, '', 'acceptee', 'pointage', new.id, auth.uid(), now());
+  end if;
+  perform set_config('esj.conge_depuis_pointage', '', true);
+  return null;
+end;
+$$;
+
+-- p_attendance_status (demande automatique) : null = garder « Congé » au pointage ; sinon nouveau statut
+create or replace function public.delete_leave_request(p_id uuid, p_reason text default '', p_attendance_status text default null)
+returns table (kept_conge integer, changed integer, closed integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r public.leave_requests;
+  a record;
+  v_kept int := 0;
+  v_changed int := 0;
+  v_closed int := 0;
+begin
+  if not public.can_edit('conges') then
+    raise exception 'ACCES_REFUSE: suppression non autorisée.';
+  end if;
+  select * into r from public.leave_requests where id = p_id and deleted_at is null for update;
+  if not found then
+    raise exception 'DEMANDE_INTROUVABLE: demande introuvable ou déjà supprimée.';
+  end if;
+  if p_attendance_status is not null and p_attendance_status not in ('present', 'absent', 'repos') then
+    raise exception 'STATUT_INVALIDE: %', p_attendance_status;
+  end if;
+
+  if r.source = 'pointage' then
+    -- Le pointage ne suit pas automatiquement : c'est le choix de l'utilisateur qui s'applique
+    perform set_config('esj.conge_depuis_pointage', 'on', true);
+    update public.leave_requests
+       set status = 'annulee', deleted_at = now(), deleted_by = auth.uid(), deletion_reason = left(coalesce(p_reason, ''), 500), decision_note = 'Demande supprimée'
+     where id = p_id;
+    perform set_config('esj.conge_depuis_pointage', '', true);
+    for a in
+      select at.id, at.activity_date from public.attendance at
+       where at.employee_id = r.employee_id and at.activity_date between r.start_date and r.end_date and at.status::text = 'conge'
+    loop
+      if public.is_day_closed(a.activity_date) then
+        v_closed := v_closed + 1;
+      elsif p_attendance_status is null then
+        update public.attendance set leave_request_id = null where id = a.id;
+        v_kept := v_kept + 1;
+      else
+        update public.attendance
+           set status = p_attendance_status::public.attendance_status, leave_request_id = null, pre_leave_status = null
+         where id = a.id;
+        v_changed := v_changed + 1;
+      end if;
+    end loop;
+  else
+    -- Même effet qu'une annulation (déclencheur leave_requests_sync) ; sans effet si elle n'était pas acceptée
+    update public.leave_requests
+       set status = 'annulee', deleted_at = now(), deleted_by = auth.uid(), deletion_reason = left(coalesce(p_reason, ''), 500), decision_note = 'Demande supprimée'
+     where id = p_id;
+    select count(*)::int into v_closed from public.attendance at where at.leave_request_id = p_id and public.is_day_closed(at.activity_date);
+  end if;
+  return query select v_kept, v_changed, v_closed;
+end;
+$$;
+revoke all on function public.delete_leave_request(uuid, text, text) from public;
+grant execute on function public.delete_leave_request(uuid, text, text) to authenticated;
+

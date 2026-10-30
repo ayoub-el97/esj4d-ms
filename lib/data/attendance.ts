@@ -42,6 +42,8 @@ export async function getRecentWorkDays(limit = 30): Promise<WorkDay[]> {
 
 export type AttendanceRecord = {
   id: string;
+  /** Demande de congé à l'origine de la ligne (migration 020) */
+  leave_request_id?: string | null;
   activity_date: string;
   employee_id: string;
   shift: number;
@@ -92,7 +94,7 @@ export async function buildSheet(date: string, team: TeamType) {
     supabase.from("attendance_sheet_meta").select("team_lead").eq("activity_date", date).eq("team_type", team).maybeSingle<{ team_lead: string }>(),
     supabase.from("holidays").select("label").eq("date", date).maybeSingle<{ label: string }>(),
     // Congés et récupérations acceptés pour cette date : proposés par défaut
-    supabase.from("leave_requests").select("id, employee_id").eq("status", "acceptee").lte("start_date", date).gte("end_date", date),
+    supabase.from("leave_requests").select("id, employee_id").eq("status", "acceptee").eq("source", "manuel").lte("start_date", date).gte("end_date", date),
     supabase.from("recovery_requests").select("employee_id").eq("status", "acceptee").eq("recovery_date", date),
   ]);
   const onLeave = new Set((leaves ?? []).map((l) => l.employee_id as string));
@@ -172,7 +174,9 @@ export async function buildSheet(date: string, team: TeamType) {
   // Feuille d'une date passée déjà enregistrée : elle n'est jamais complétée automatiquement à partir
   // de la liste actuelle des employés. Les employés non pointés ce jour sont seulement proposés
   // (« Employés sans pointage ce jour ») et ajoutés un par un si nécessaire.
-  const historical = date < todayISO() && (existing ?? []).length > 0;
+  // (les lignes créées par une demande de congé acceptée ne comptent pas comme une feuille remplie)
+  const filled = (existing ?? []).some((a) => !a.leave_request_id);
+  const historical = date < todayISO() && filled;
   const missing: SheetRow[] = [];
   for (const e of employees) {
     // Actif, ou parti après cette date (le pointage rétroactif reste possible jusqu'au dernier jour)
@@ -264,7 +268,7 @@ export async function buildSheet(date: string, team: TeamType) {
     holidayLabel: holiday?.label ?? null,
     hasSaved: (existing ?? []).length > 0,
     /** Date passée sans aucun pointage enregistré : feuille proposée, à vérifier avant d'enregistrer */
-    proposedPast: date < todayISO() && (existing ?? []).length === 0,
+    proposedPast: date < todayISO() && !filled,
     missing: missing.sort((a, b) => a.order_number - b.order_number),
     elsewhere,
     options: employees.filter((e) => availableOn(e, date)).map(toOption),

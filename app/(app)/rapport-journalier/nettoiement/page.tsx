@@ -2,12 +2,12 @@ import { Suspense } from "react";
 import { requireModule } from "@/lib/auth";
 import { getWorkDay } from "@/lib/data/attendance";
 import { getEmployees, employeeName } from "@/lib/data/employees";
-import { getCleaningReport, getReportEligibility } from "@/lib/data/reports";
+import { getCleaningReport } from "@/lib/data/reports";
 import { syncCleaningReport } from "@/lib/report-sync";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateLongFr, isISODate, todayISO } from "@/lib/dates";
 import { getI18n, pageTitle } from "@/lib/i18n/server";
-import { TEAM_LABELS } from "@/lib/types";
+import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { ModuleHeader } from "@/components/module-header";
 import { ModuleButtons } from "@/components/module-buttons";
 import { DateField } from "@/components/date-field";
@@ -36,7 +36,7 @@ export default async function NettoiementPage({ searchParams }: { searchParams: 
       // affichage du rapport tel qu'enregistré
     }
   }
-  const [{ report, agents }, employees, eligible, allEmployees, [daySummary]] = await Promise.all([getCleaningReport(date), getEmployees({ onlyActive: true }), getReportEligibility(date), getEmployees(), getDailyReportsSummary(date, date)]);
+  const [{ report, agents }, employees, allEmployees, [daySummary]] = await Promise.all([getCleaningReport(date), getEmployees({ onlyActive: true }), getEmployees(), getDailyReportsSummary(date, date)]);
   const [reportChanges, agentChanges] = report ? await Promise.all([getRecordChanges("cleaning_reports", { ids: [report.id] }), getRecordChanges("cleaning_report_agents", { ids: [report.id] })]) : [[], []];
   const names = new Map(allEmployees.map((e) => [e.id, employeeName(e)]));
   const fields: ChangeField[] = [
@@ -64,7 +64,7 @@ export default async function NettoiementPage({ searchParams }: { searchParams: 
         report={report}
         agents={agents}
         canEdit={canEdit}
-        employeeOptions={employees.filter((e) => eligible.nettoiement.has(e.id)).map((e) => ({ id: e.id, label: `${employeeName(e)} (${t(TEAM_LABELS[e.team_type])})` }))}
+        employeeOptions={employees.map((e) => ({ id: e.id, label: `${employeeName(e)} (${t(POSITION_LABELS[e.position])} · ${t(TEAM_LABELS[e.team_type])})` }))}
       />
 
       <ChangeLog

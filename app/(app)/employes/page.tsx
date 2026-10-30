@@ -22,6 +22,7 @@ export default async function EmployesPage({
   return (
     <div>
       <ModuleHeader title={t("Employés")} subtitle={t("{active} actifs · {total} au total", { active, total })}>
+        <LinkButton href="/pointage/repos" variant="outline">{t("Jours de repos et remplaçants")}</LinkButton>
         {user.permissions.employes.can_edit && (
           <LinkButton href="/employes/nouveau">
             <Plus /> {t("Nouvel équipier")}

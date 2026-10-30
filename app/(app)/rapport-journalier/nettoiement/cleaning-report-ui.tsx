@@ -35,8 +35,6 @@ export function CleaningReportUI({
   const { t } = useT();
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [adding, setAdding] = useState(false);
-  const [newAgent, setNewAgent] = useState("");
   const [observations, setObservations] = useState(report?.observations ?? "");
   const [onlyMissing, setOnlyMissing] = useState(false);
   const missingAfter = agents.filter((a) => needsAfterPhotos(a.photosAvant.length, a.photosApres.length)).length;
@@ -55,6 +53,7 @@ export function CleaningReportUI({
               <FilePlus2 /> {t("Ouvrir la feuille de présence")}
             </LinkButton>
             <SyncReportsButton date={date} team="nettoiement" label="Remplir depuis le pointage déjà enregistré" />
+            <AddEmployeeButton reportId={null} date={date} options={employeeOptions} />
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">{t("Vous ne pouvez pas créer de rapport (journée clôturée ou droits insuffisants).")}</p>
@@ -117,46 +116,69 @@ export function CleaningReportUI({
 
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setNewAgent(available[0]?.id ?? "");
-              setAdding(true);
-            }}
-          >
-            <UserPlus /> {t("Ajouter un agent au rapport")}
-          </Button>
+          <AddEmployeeButton reportId={report.id} date={date} options={available} />
           <SyncReportsButton date={date} team="nettoiement" />
           <span className="text-xs text-muted-foreground">{t("Le rapport suit le pointage ; les lieux et photos déjà saisis sont conservés.")}</span>
         </div>
       )}
 
-      <Dialog open={adding} onOpenChange={setAdding}>
+    </div>
+  );
+}
+
+/** « Ajouter un employé » : tout employé actif, quelle que soit sa fonction, avec son lieu de travail du jour. */
+function AddEmployeeButton({ reportId, date, options }: { reportId: string | null; date: string; options: { id: string; label: string }[] }) {
+  const { t } = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [employee, setEmployee] = useState("");
+  const [location, setLocation] = useState("");
+  const list = options.filter((o) => !q.trim() || o.label.toLowerCase().includes(q.trim().toLowerCase()));
+  const close = () => {
+    setOpen(false);
+    setQ("");
+    setEmployee("");
+    setLocation("");
+  };
+  return (
+    <>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        <UserPlus /> {t("Ajouter un employé")}
+      </Button>
+      <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("Ajouter un agent")}</DialogTitle>
+            <DialogTitle>{t("Ajouter un employé au rapport")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">{t("L'ajout concerne uniquement ce rapport ; la feuille de présence n'est pas modifiée.")}</p>
-          <NativeSelect value={newAgent} onChange={(e) => setNewAgent(e.target.value)}>
-            {available.length === 0 && <option value="">{t("Tous les employés sont déjà dans le rapport")}</option>}
-            {available.map((o) => (
+          <p className="text-sm text-muted-foreground">{t("Tous les employés actifs sont proposés, y compris ceux de la Collecte. L'ajout concerne uniquement ce rapport : la fiche de l'employé et la feuille de présence ne sont pas modifiées.")}</p>
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Rechercher un employé")} aria-label={t("Rechercher un employé")} />
+          <NativeSelect value={employee} onChange={(e) => setEmployee(e.target.value)} aria-label={t("Employé")}>
+            <option value="">{t("— Choisir —")}</option>
+            {list.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
             ))}
           </NativeSelect>
+          <div className="space-y-1">
+            <Label htmlFor="new-agent-location">{t("Lieu de travail")}</Label>
+            <Input id="new-agent-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("Ex. Secteur 2, avenue …")} />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdding(false)}>
+            <Button type="button" variant="outline" onClick={close}>
               {t("Annuler")}
             </Button>
             <Button
-              disabled={!newAgent || pending}
+              type="button"
+              disabled={!employee || pending}
               onClick={() =>
                 start(async () => {
-                  const r = await addCleaningAgent(report.id, date, newAgent);
+                  const r = await addCleaningAgent(reportId, date, employee, location);
                   if (r.ok) {
                     toast.success(r.message);
-                    setAdding(false);
+                    close();
                     router.refresh();
                   } else toast.error(r.error);
                 })
@@ -167,7 +189,7 @@ export function CleaningReportUI({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
@@ -190,6 +212,7 @@ function AgentCard({ agent, date, canEdit }: { agent: CleaningAgent; date: strin
         <CardTitle>
           <span className="me-2 text-muted-foreground">#{agent.order_number}</span>
           {agent.name}
+          {agent.manual && <span className="ms-2 rounded-full bg-indigo-100 px-2 py-0.5 align-middle text-xs font-medium text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">{t("Ajouté à la main")}</span>}
           <PhotoStatusBadge before={agent.photosAvant.length} after={agent.photosApres.length} className="ms-2 align-middle" />
         </CardTitle>
         {canEdit && (

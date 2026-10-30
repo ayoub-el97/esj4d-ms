@@ -705,7 +705,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 delete from public.leave_requests where employee_id = (select b2 from ids);
 do $$ begin
-  assert (select count(*) from public.leave_requests where employee_id = (select b2 from ids)) = 3, 'une demande a été supprimée';
+  assert (select count(*) from public.leave_requests where employee_id = (select b2 from ids) and source = 'manuel') = 3, 'une demande a été supprimée';
   raise notice 'OK 11 les demandes ne peuvent pas être supprimées';
 end $$;
 
@@ -944,6 +944,155 @@ begin
   assert (select count(*) from public.medical_certificates where employee_id = e and start_date <= '2026-08-26' and end_date >= '2026-08-24') = 2, 'certificat 25–26 + entrée automatique du 24';
   assert exists (select 1 from public.medical_certificates where employee_id = e and auto_created and start_date = '2026-08-24' and end_date = '2026-08-24'), 'le 24 garde son entrée automatique';
   raise notice 'OK 27 certificats médicaux : entrée liée à l''absence, créée / prolongée depuis le pointage, sans doublon';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 28. Congé saisi au pointage : demande automatique, une seule déduction, demandes manuelles protégées
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid; m uuid; r public.leave_requests; base numeric; bal numeric;
+begin
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('C028', 'Ahmed', 'Conge', 'balayeur', 'nettoiement', 0, '2025-01-01') returning id into e;
+  select b.taken into base from public.leave_balances('2026-12-31') b where b.employee_id = e;
+
+  -- Congé mis directement au pointage (lundi 7 septembre)
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-09-07', e, 1, 'conge', 'balayeur', 'nettoiement');
+  select * into r from public.leave_requests where employee_id = e;
+  assert r.source = 'pointage' and r.status = 'acceptee' and r.start_date = '2026-09-07' and r.end_date = '2026-09-07' and r.request_date = '2026-09-07' and r.requested_days = 1, 'demande automatique créée';
+  assert r.source_attendance_id = (select id from public.attendance where employee_id = e and activity_date = '2026-09-07'), 'liée à la ligne de pointage';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'un seul jour déduit';
+
+  -- Réenregistrement (même statut) et 2e service : ni doublon, ni double déduction
+  update public.attendance set observation = 'x', status = 'conge' where employee_id = e and activity_date = '2026-09-07';
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-09-07', e, 2, 'conge', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.leave_requests where employee_id = e) = 1, 'réenregistrement : pas de doublon';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'deux services : toujours un seul jour';
+  delete from public.attendance where employee_id = e and activity_date = '2026-09-07' and shift = 2;
+  assert (select status from public.leave_requests where id = r.id) = 'acceptee', '1 service encore en congé : demande conservée';
+
+  -- Pointage changé : pas verrouillé, demande annulée (conservée), jour rendu au solde
+  update public.attendance set status = 'present', time_in = '06:00', time_out = '14:00' where employee_id = e and activity_date = '2026-09-07';
+  assert (select status from public.leave_requests where id = r.id) = 'annulee', 'statut changé : demande annulée, conservée';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base, 'jour rendu au solde';
+  -- Remise en congé : la même demande revient
+  update public.attendance set status = 'conge', time_in = null, time_out = null where employee_id = e and activity_date = '2026-09-07';
+  assert (select count(*) from public.leave_requests where employee_id = e) = 1 and (select status from public.leave_requests where id = r.id) = 'acceptee', 'même demande réactivée';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'toujours un seul jour déduit';
+
+  -- Date à venir : une seule déduction également (pris + prévu)
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-11-10', e, 1, 'conge', 'balayeur', 'nettoiement');
+  assert (select count(*) from public.leave_requests where employee_id = e and start_date = '2026-11-10') = 1, 'date à venir : une demande';
+  delete from public.attendance where employee_id = e and activity_date = '2026-11-10';
+  assert (select status from public.leave_requests where employee_id = e and start_date = '2026-11-10') = 'annulee', 'ligne retirée : demande annulée';
+
+  -- Demande saisie à la main : aucune demande automatique, verrou conservé, jamais modifiée
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-09-01', '2026-09-14', '2026-09-15', 2, 'acceptee') returning id into m;
+  assert (select count(*) from public.leave_requests where employee_id = e and start_date between '2026-09-14' and '2026-09-15') = 1, 'demande manuelle : pas de demande automatique';
+  begin
+    update public.attendance set status = 'present' where employee_id = e and activity_date = '2026-09-14';
+    raise exception 'VERROU_ABSENT';
+  exception when others then
+    assert sqlerrm like 'CONGE_APPROUVE%', 'demande manuelle : pointage toujours protégé (' || sqlerrm || ')';
+  end;
+  assert (select status from public.leave_requests where id = m) = 'acceptee', 'demande manuelle inchangée';
+
+  -- Demande manuelle acceptée sur une date déjà en congé au pointage : elle remplace l'automatique
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-09-01', '2026-09-07', '2026-09-08', 2, 'acceptee') returning id into m;
+  assert (select status from public.leave_requests where id = r.id) = 'annulee', 'automatique remplacée par la demande saisie';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 4, '7, 8, 14, 15 septembre : 4 jours, chacun une fois';
+  -- Modification de la demande : même identifiant, solde recalculé
+  update public.leave_requests set end_date = '2026-09-07', requested_days = 1 where id = m;
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 3, 'demande raccourcie : solde recalculé';
+  assert not exists (select 1 from public.attendance where employee_id = e and activity_date = '2026-09-08'), 'jour retiré du pointage';
+  raise notice 'OK 28 congé au pointage : demande automatique liée, une seule déduction, demandes manuelles protégées';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 29. Suppression d'une demande : archivage, solde recalculé, pointage cohérent, pas de recréation
+-- ---------------------------------------------------------------------------
+do $$
+declare e uuid; o uuid; p uuid; a uuid; x uuid; base numeric; bal numeric; s record;
+begin
+  perform set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  insert into public.employees (matricule, last_name, first_name, position, team_type, rest_day, hire_date)
+  values ('D029', 'Supprime', 'Demande', 'balayeur', 'nettoiement', 0, '2025-01-01') returning id into e;
+  select b.taken into base from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  -- Autre demande du même employé : jamais touchée
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-08-01', '2026-08-10', '2026-08-10', 1, 'acceptee') returning id into o;
+
+  -- 1. En attente : aucun effet sur le solde
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-08-01', '2026-08-17', '2026-08-18', 2, 'en_attente') returning id into p;
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'seule la demande acceptée compte';
+  perform public.delete_leave_request(p, 'Erreur de saisie');
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'en attente supprimée : solde inchangé';
+  assert (select deleted_at is not null and deleted_by is not null and deletion_reason = 'Erreur de saisie' from public.leave_requests where id = p), 'qui, quand, motif conservés';
+  assert exists (select 1 from public.audit_log l where l.table_name = 'leave_requests' and l.record_id = p::text and l.action = 'UPDATE' and l.new_data ->> 'deletion_reason' = 'Erreur de saisie'), 'journal d''audit';
+
+  -- 2. Acceptée : jours rendus, pointage restauré, ligne préexistante conservée
+  insert into public.attendance (activity_date, employee_id, shift, status, time_in, time_out, position, team_type) values ('2026-08-24', e, 1, 'present', '06:00', '14:00', 'balayeur', 'nettoiement');
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-08-01', '2026-08-24', '2026-08-25', 2, 'acceptee') returning id into a;
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 3, 'acceptée : 2 jours de plus';
+  perform public.delete_leave_request(a, '');
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'acceptée supprimée : jours rendus';
+  assert (select status::text from public.attendance where employee_id = e and activity_date = '2026-08-24') = 'present', 'pointage d''origine restauré';
+  assert not exists (select 1 from public.attendance where employee_id = e and activity_date = '2026-08-25'), 'ligne créée par la demande retirée';
+  assert (select status::text from public.leave_requests where id = o) = 'acceptee' and (select deleted_at from public.leave_requests where id = o) is null, 'autre demande intacte';
+  assert exists (select 1 from public.employees where id = e), 'employé intact';
+  begin
+    perform public.delete_leave_request(a, '');
+    raise exception 'DOUBLE_SUPPRESSION';
+  exception when others then
+    assert sqlerrm like 'DEMANDE_INTROUVABLE%', 'pas de double suppression (' || sqlerrm || ')';
+  end;
+
+  -- 3. Automatique, statut du pointage corrigé : ligne conservée, jour rendu
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-09-01', e, 1, 'conge', 'balayeur', 'nettoiement');
+  select id into x from public.leave_requests where employee_id = e and start_date = '2026-09-01' and source = 'pointage';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 2, 'congé au pointage compté';
+  select * into s from public.delete_leave_request(x, '', 'absent');
+  assert s.changed = 1 and (select status::text from public.attendance where employee_id = e and activity_date = '2026-09-01') = 'absent', 'statut corrigé, ligne conservée';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 1, 'jour rendu';
+
+  -- 3 bis. Automatique, « Congé » gardé au pointage : jour toujours déduit, une fois
+  insert into public.attendance (activity_date, employee_id, shift, status, position, team_type) values ('2026-09-02', e, 1, 'conge', 'balayeur', 'nettoiement');
+  select id into x from public.leave_requests where employee_id = e and start_date = '2026-09-02' and source = 'pointage';
+  select * into s from public.delete_leave_request(x, 'Doublon');
+  assert s.kept_conge = 1 and (select status::text from public.attendance where employee_id = e and activity_date = '2026-09-02') = 'conge', 'Congé gardé';
+  select b.taken into bal from public.leave_balances('2026-12-31') b where b.employee_id = e;
+  assert bal = base + 2, 'le pointage fait foi : un jour déduit';
+
+  -- 4. Ne réapparaît pas : réenregistrement du pointage sans changement de statut
+  update public.attendance set observation = 'x', status = 'conge' where employee_id = e and activity_date = '2026-09-02';
+  assert (select count(*) from public.leave_requests where employee_id = e and start_date = '2026-09-02' and deleted_at is null) = 0, 'pas de recréation au réenregistrement';
+  -- Remis en congé volontairement : nouvelle demande (l'archivée ne revient pas)
+  update public.attendance set status = 'present', time_in = '06:00', time_out = '14:00' where employee_id = e and activity_date = '2026-09-02';
+  update public.attendance set status = 'conge', time_in = null, time_out = null where employee_id = e and activity_date = '2026-09-02';
+  assert (select count(*) from public.leave_requests where employee_id = e and start_date = '2026-09-02' and deleted_at is null and status::text = 'acceptee') = 1, 'nouvelle demande quand l''employé est remis en congé';
+  assert (select deleted_at from public.leave_requests where id = x) is not null, 'la demande archivée le reste';
+
+  -- 5. Nouvelle demande correcte sur les dates d'une demande supprimée
+  insert into public.leave_requests (employee_id, request_date, start_date, end_date, requested_days, status)
+  values (e, '2026-08-20', '2026-08-25', '2026-08-25', 1, 'acceptee') returning id into p;
+  assert (select status::text from public.attendance where employee_id = e and activity_date = '2026-08-25') = 'conge', 'nouvelle demande appliquée';
+  raise notice 'OK 29 suppression d''une demande : archivée, solde recalculé, pointage cohérent, pas de recréation';
 end $$;
 
 \echo '=== TOUS LES TESTS SONT PASSÉS ==='

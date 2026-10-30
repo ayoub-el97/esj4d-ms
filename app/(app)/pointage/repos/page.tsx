@@ -34,7 +34,7 @@ export default async function JoursReposPage() {
 
   return (
     <div>
-      <ModuleHeader title={t("Jours de repos et remplaçants")} subtitle={t("{count} employé(s) actif(s)", { count: rows.length })} backHref="/pointage" />
+      <ModuleHeader title={t("Jours de repos et remplaçants")} subtitle={t("{count} employé(s) actif(s)", { count: rows.length })} backHref="/employes" />
       {!canEdit && (
         <Alert className="mb-4">
           <AlertDescription>{t("Consultation seule : la modification demande le droit « Employés » en modification.")}</AlertDescription>

@@ -8,8 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
 import { leaveSegments, type LeaveDay, type LeaveSegment } from "@/lib/leave-segments";
 
-// Les demandes de congé et de récupération ne sont jamais supprimées :
-// elles changent de statut (en attente / acceptée / refusée) et chaque changement est journalisé.
+// Les demandes ne sont jamais effacées physiquement : elles changent de statut (chaque changement est
+// journalisé) ; une demande de congé « supprimée » est archivée (migration 048).
 
 const statusSchema = z.enum(["en_attente", "acceptee", "refusee"]);
 /** Décision sur une demande de congé : « annulee » en plus (demande conservée, pointage recalculé). */
@@ -56,6 +56,73 @@ export async function createLeaveRequest(_prev: ActionResult | null, formData: F
   if (error) return { ok: false, error: t(friendlyError(error.message)) };
   revalidatePath("/conges");
   return { ok: true, message: t("Demande de congé enregistrée.") };
+}
+
+/**
+ * Modifie une demande existante (même identifiant, jamais de doublon). La base recalcule aussitôt
+ * le pointage (demande acceptée) et le solde. Le statut se change avec les boutons de décision.
+ * Demande automatique dont l'employé ou les dates changent : elle devient une demande saisie.
+ */
+export async function updateLeaveRequest(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("conges", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  const id = String(formData.get("id") ?? "");
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Demande introuvable.") };
+  const parsed = leaveSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, error: t(parsed.error.issues[0].message) };
+  // Le statut n'est pas modifié ici (boutons de décision)
+  const { employee_id, request_date, start_date, end_date, requested_days, reason } = parsed.data;
+  const d = { employee_id, request_date, start_date, end_date, requested_days, reason };
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("leave_requests").select("employee_id, start_date, end_date, source").eq("id", id).maybeSingle();
+  if (!cur) return { ok: false, error: t("Demande introuvable.") };
+  const { data: days } = await supabase.rpc("leave_period_breakdown", { p_employee: d.employee_id, p_start: d.start_date, p_end: d.end_date });
+  const b = leaveSegments((days ?? []) as LeaveDay[]);
+  if (b.restUnknown && formData.get("confirm_rest_unknown") !== "on") {
+    return { ok: false, error: t("Le jour de repos de cet employé n'est pas défini : aucun jour ne peut être exclu. Cochez la confirmation ou renseignez son jour de repos.") };
+  }
+  const moved = cur.employee_id !== d.employee_id || cur.start_date !== d.start_date || cur.end_date !== d.end_date;
+  // Une demande automatique sur un jour de repos pointé « Congé » garde son jour ; sinon, même contrôle qu'à la création
+  if (moved || cur.source !== "pointage") {
+    if (b.total === 0) return { ok: false, error: t("La période ne contient que des jours de repos : aucun jour de congé à déduire.") };
+    if (d.requested_days > b.total) return { ok: false, error: t("Nombre de jours demandés supérieur aux jours de congé de la période ({count} jour(s) hors repos).", { count: b.total }) };
+  }
+  const { error } = await supabase
+    .from("leave_requests")
+    .update({ ...d, ...(moved && cur.source === "pointage" ? { source: "manuel" } : {}) })
+    .eq("id", id);
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  revalidatePath("/conges", "layout");
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: t("Demande de congé modifiée : solde et pointage recalculés.") };
+}
+
+/**
+ * Supprime (archive) une demande de congé : retirée des écrans et du solde, conservée au journal
+ * avec l'auteur, la date et le motif. Demande automatique : `attendanceStatus` = sort de la ligne de
+ * pointage (« garder » = reste en « Congé », sinon present / absent / repos).
+ */
+export async function deleteLeaveRequest(id: string, reason: string, attendanceStatus?: string): Promise<ActionResult> {
+  const t = await getT();
+  const auth = await assertModule("conges", "edit");
+  if ("error" in auth) return { ok: false, error: t(auth.error) };
+  if (!z.string().uuid().safeParse(id).success) return { ok: false, error: t("Demande introuvable.") };
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("leave_requests").select("source, status").eq("id", id).is("deleted_at", null).maybeSingle();
+  if (!cur) return { ok: false, error: t("Demande introuvable.") };
+  if (cur.source === "pointage" && !attendanceStatus) return { ok: false, error: t("Choisissez ce que devient le pointage de cette date.") };
+  const { data, error } = await supabase.rpc("delete_leave_request", { p_id: id, p_reason: reason.trim().slice(0, 500), p_attendance_status: attendanceStatus && attendanceStatus !== "garder" ? attendanceStatus : null });
+  if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  const r = ((data ?? []) as { kept_conge: number; changed: number; closed: number }[])[0];
+  revalidatePath("/conges", "layout");
+  revalidatePath("/pointage", "layout");
+  const parts = [t("Demande de congé supprimée.")];
+  if (cur.status === "acceptee") parts.push(t("Solde recalculé."));
+  if (r?.kept_conge) parts.push(t("Le pointage reste en « Congé » : ce jour reste déduit du solde."));
+  if (r?.changed) parts.push(t("Pointage corrigé."));
+  if (r?.closed) parts.push(t("{count} journée(s) clôturée(s) non modifiée(s) : rouvrez-les pour corriger le pointage.", { count: r.closed }));
+  return { ok: true, message: parts.join(" ") };
 }
 
 /**

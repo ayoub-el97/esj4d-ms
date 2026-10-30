@@ -56,14 +56,14 @@ export function TruckDayTable({ rows, canEdit, t, modified }: { rows: TruckRepor
 
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <Table>
+      <Table className="[&_td]:text-xs [&_th]:text-xs [&_td]:px-1 [&_td]:py-1 [&_th]:h-auto [&_th]:px-1 [&_th]:py-1 [&_th]:leading-tight [&_th]:whitespace-normal">
         <TableHeader>
           <TableRow>
             <TableHead>{t("Date")}</TableHead>
             <TableHead>{t("Matricule")}</TableHead>
             <TableHead>{t("Poste")}</TableHead>
             <TableHead>{t("Chauffeur")}</TableHead>
-            <TableHead>{t("Vidages (ticket — tonnage)")}</TableHead>
+            <TableHead>{t("N Ticket")}</TableHead>
             <TableHead className="text-end">{t("Tonnage total")}</TableHead>
             <TableHead className="text-end">{t("Vidages")}</TableHead>
             <TableHead>{t("Équipe (rippeurs)")}</TableHead>
@@ -101,8 +101,8 @@ export function TruckDayTable({ rows, canEdit, t, modified }: { rows: TruckRepor
                   <TableCell>
                     <ShiftBadge shift={r.shift} t={t} />
                   </TableCell>
-                  <TableCell>{r.chauffeur_name || "—"}</TableCell>
-                  <TableCell className="min-w-44 text-xs">
+                  <TableCell className="min-w-20 whitespace-normal!">{r.chauffeur_name || "—"}</TableCell>
+                  <TableCell className="text-xs">
                     {r.loads.length === 0
                       ? "—"
                       : r.loads.map((l, k) => (
@@ -116,11 +116,14 @@ export function TruckDayTable({ rows, canEdit, t, modified }: { rows: TruckRepor
                     {r.dumps_count}
                     {r.dumps_override && <span className="block text-[10px] font-medium text-orange-700">{t("manuel")}</span>}
                   </TableCell>
-                  <TableCell className="min-w-36 text-xs">{r.crew.length ? r.crew.join(", ") : r.rippers_count ? t("{count} rippeur(s)", { count: r.rippers_count }) : "—"}</TableCell>
+                  <TableCell className="text-xs leading-tight">
+                    {/* Un nom par ligne, jamais tronqué : la ligne s'agrandit si besoin */}
+                    {r.crew.length ? r.crew.map((name, k) => <div key={k}>{name}</div>) : r.rippers_count ? t("{count} rippeur(s)", { count: r.rippers_count }) : "—"}
+                  </TableCell>
                   <TableCell className="text-end">{r.km_start ?? ""}</TableCell>
                   <TableCell className="text-end">{r.km_end ?? ""}</TableCell>
                   <TableCell className="text-end">{r.km ?? ""}</TableCell>
-                  <TableCell className="max-w-48 text-xs">
+                  <TableCell className="w-28 max-w-40 min-w-20 text-xs whitespace-normal!">
                     <span className="line-clamp-2">{r.observations}</span>
                     {r.photos.length > 0 && (
                       <span className="mt-0.5 inline-flex items-center gap-1 text-muted-foreground">
@@ -129,10 +132,10 @@ export function TruckDayTable({ rows, canEdit, t, modified }: { rows: TruckRepor
                     )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Link href={`/rapport-camions/${r.id}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                      {canEdit ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />} {canEdit ? t("Modifier") : t("Voir")}
+                    <Link href={`/rapport-camions/${r.id}`} title={canEdit ? t("Modifier") : t("Voir")} aria-label={canEdit ? t("Modifier") : t("Voir")} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      {canEdit ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />} <span className="hidden 2xl:inline">{canEdit ? t("Modifier") : t("Voir")}</span>
                     </Link>
-                    {modified?.has(r.id) && <ModifiedBadge t={t} className="mt-1 flex w-fit" />}
+                    {modified?.has(r.id) && <ModifiedBadge t={t} iconOnly className="mt-1 flex w-fit" />}
                   </TableCell>
                 </TableRow>
               )),

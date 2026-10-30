@@ -21,19 +21,20 @@ const isPdf = (p: PhotoItem) => p.mime_type === "application/pdf" || /\.pdf$/i.t
  * Documents d'un certificat médical (une ou plusieurs pages / fichiers) : photo prise avec la
  * caméra ou document importé (JPG, PNG, PDF). Stockage privé ; liens signés temporaires demandés
  * au moment de voir ou télécharger (jamais d'URL publique). Tous les fichiers restent rattachés
- * au même certificat, donc à la même absence.
+ * au même certificat, donc à la même absence. Le document n'a pas de date d'activité : il peut être
+ * remis après la clôture de la journée d'absence (la journée elle-même n'est pas modifiée).
  */
-export function CertificateDocuments({ certificateId, employeeId, startDate, files, canEdit, fileLabel }: { certificateId: string; employeeId: string; startDate: string; files: PhotoItem[]; canEdit: boolean; fileLabel: string }) {
+export function CertificateDocuments({ certificateId, employeeId, files, canEdit, fileLabel }: { certificateId: string; employeeId: string; files: PhotoItem[]; canEdit: boolean; fileLabel: string }) {
   const { t } = useT();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState<PhotoItem | null>(null);
   const [busy, setBusy] = useState(0);
-  const [viewer, setViewer] = useState<{ id: string; url: string } | null>(null);
+  const [viewer, setViewer] = useState<{ id: string; url: string; pdf: boolean } | null>(null);
 
   const message = (e: unknown) => (e instanceof PhotoUploadError ? t(e.key, e.vars) : (e as Error)?.message || t("Échec de l'envoi"));
-  const target = { entityType: "medical_certificate" as const, entityId: certificateId, phase: "justificatif" as const, activityDate: startDate, employeeId, allowPdf: true };
+  const target = { entityType: "medical_certificate" as const, entityId: certificateId, phase: "justificatif" as const, activityDate: null, employeeId, allowPdf: true };
 
   /** Envoi un par un (fiable sur réseau mobile), puis actualisation. */
   const upload = async (list: File[]): Promise<number> => {
@@ -73,8 +74,10 @@ export function CertificateDocuments({ certificateId, employeeId, startDate, fil
   const freshUrl = async (p: PhotoItem) => (await refreshPhotoUrls([p.id]))[p.id] ?? p.url;
 
   const view = async (p: PhotoItem) => {
-    // PDF : onglet ouvert immédiatement (bloqueur de fenêtres), lien signé récent chargé ensuite
-    const tab = isPdf(p) ? window.open("", "_blank") : null;
+    // PDF sur téléphone : onglet ouvert immédiatement (bloqueur de fenêtres), lien signé récent chargé ensuite.
+    // Sur ordinateur : aperçu dans la fenêtre.
+    const small = window.matchMedia("(max-width: 767px)").matches;
+    const tab = isPdf(p) && small ? window.open("", "_blank") : null;
     if (tab) tab.opener = null;
     const url = await freshUrl(p);
     if (!url) {
@@ -82,8 +85,8 @@ export function CertificateDocuments({ certificateId, employeeId, startDate, fil
       return toast.error(t("Document introuvable."));
     }
     if (tab) tab.location.href = url;
-    else if (isPdf(p)) window.location.assign(url);
-    else setViewer({ id: p.id, url });
+    else if (isPdf(p) && small) window.location.assign(url);
+    else setViewer({ id: p.id, url, pdf: isPdf(p) });
   };
 
   const download = async (p: PhotoItem, i: number) => {
@@ -154,7 +157,7 @@ export function CertificateDocuments({ certificateId, employeeId, startDate, fil
       {files.length === 0 ? (
         <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{t("Aucun document : le certificat est en attente.")}</div>
       ) : (
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {files.map((p, i) => (
             <li key={p.id} className="overflow-hidden rounded-lg border bg-card">
               <button type="button" className="block aspect-[4/3] w-full bg-muted" onClick={() => view(p)} title={t("Voir le certificat")}>
@@ -170,7 +173,7 @@ export function CertificateDocuments({ certificateId, employeeId, startDate, fil
               <div className="px-2 pt-1 text-[11px] text-muted-foreground">
                 {t("Page {n}", { n: i + 1 })} · {formatDateTimeFr(p.created_at)}
               </div>
-              <div className="flex flex-wrap gap-0.5 p-1">
+              <div className="grid gap-0.5 p-1 [&_button]:justify-start">
                 <Button type="button" variant="ghost" size="xs" onClick={() => view(p)}>
                   <Eye /> {t("Voir le certificat")}
                 </Button>
@@ -206,7 +209,7 @@ export function CertificateDocuments({ certificateId, employeeId, startDate, fil
         <Dialog open onOpenChange={(o) => !o && setViewer(null)}>
           <DialogContent className="max-h-[95vh] p-2 sm:max-w-4xl">
             <DialogTitle className="sr-only">{t("Certificat médical")}</DialogTitle>
-            <SafePhoto id={viewer.id} url={viewer.url} className="max-h-[85vh] w-full rounded object-contain" />
+            {viewer.pdf ? <iframe src={viewer.url} title={t("Certificat médical")} className="h-[85vh] w-full rounded border-0" /> : <SafePhoto id={viewer.id} url={viewer.url} className="max-h-[85vh] w-full rounded object-contain" />}
           </DialogContent>
         </Dialog>
       )}

@@ -21,6 +21,8 @@ export type CleaningAgent = {
   location: string;
   comment: string;
   sort_order: number;
+  /** Ajouté à la main au rapport (la fiche et le pointage de l'employé ne changent pas) */
+  manual?: boolean;
   name: string;
   order_number: number;
   photosAvant: PhotoItem[];
@@ -119,7 +121,8 @@ export async function getCleaningReport(date: string): Promise<{ report: Cleanin
   // Les lignes d'un agent qui n'est plus présent restent en base (lieu, commentaire, photos) et
   // réapparaissent si le pointage est corrigé. Journée clôturée : rapport conservé tel quel.
   const closed = day?.status === "closed";
-  const list = (agents ?? []).filter((a) => (closed ? !isGardien(byId.get(a.employee_id)?.position) : eligible.nettoiement.has(a.employee_id)));
+  // Employé ajouté à la main (ex. agent de la Collecte affecté au nettoiement ce jour) : toujours conservé.
+  const list = (agents ?? []).filter((a) => a.manual || (closed ? !isGardien(byId.get(a.employee_id)?.position) : eligible.nettoiement.has(a.employee_id)));
   const photos = await getPhotosFor("cleaning_report_agent", list.map((a) => a.id));
 
   return {

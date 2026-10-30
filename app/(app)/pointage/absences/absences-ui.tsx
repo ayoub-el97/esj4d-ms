@@ -171,6 +171,33 @@ export function CertificateStateSelect({ certificate }: { certificate: MedicalCe
   );
 }
 
+/** Absence maladie sans entrée de certificat : création de l'entrée, pour y joindre le document. */
+export function CreateCertificateButton({ employeeId, from, to }: { employeeId: string; from: string; to: string }) {
+  const { t } = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      type="button"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const fd = new FormData();
+          fd.set("employee_id", employeeId);
+          fd.set("start_date", from);
+          fd.set("end_date", to);
+          const r = await saveMedicalCertificate(null, fd);
+          if (r.ok) router.refresh();
+          else toast.error(r.error);
+        })
+      }
+    >
+      {t("Ajouter le certificat")}
+    </Button>
+  );
+}
+
 export function CertificateActions({ certificate, employeeId }: { certificate: MedicalCertificate; employeeId: string }) {
   const { t } = useT();
   const router = useRouter();

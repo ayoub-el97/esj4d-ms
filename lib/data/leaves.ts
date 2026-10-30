@@ -52,6 +52,9 @@ export type LeaveRequest = EmpInfo & {
   decided_by_name: string;
   decision_note: string;
   created_at: string;
+  /** Origine : « manuel » (saisie) ou « pointage » (créée automatiquement depuis le pointage) */
+  source?: string;
+  source_attendance_id?: string | null;
   /** Périodes de congé (jours de repos hebdomadaires exclus) et nombre de jours de repos exclus */
   segments?: { from: string; to: string; days: number }[];
   rest_days_excluded?: number;
@@ -67,7 +70,8 @@ function matchesQuery(r: { name: string; matricule: string }, q?: string) {
 
 export async function getLeaveRequests(f: RequestFilters = {}, limit = 1000): Promise<LeaveRequest[]> {
   const supabase = await createClient();
-  let q = supabase.from("leave_requests").select("*").order("start_date", { ascending: false }).limit(limit);
+  // Demandes supprimées (archivées) : conservées en base et au journal, jamais affichées
+  let q = supabase.from("leave_requests").select("*").is("deleted_at", null).order("start_date", { ascending: false }).limit(limit);
   if (f.employee) q = q.eq("employee_id", f.employee);
   if (f.status) q = q.eq("status", f.status);
   if (f.from) q = q.gte("end_date", f.from);

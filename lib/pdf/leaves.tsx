@@ -4,7 +4,7 @@ import type { AccrualLine, Adjustment, LeaveBalance, LeaveRequest, RecoveryBalan
 import type { Employee } from "@/lib/data/employees";
 import { employeeName } from "@/lib/data/employees";
 import type { WorkerPeriodRow } from "@/lib/data/worker";
-import { LEAVE_STATUS_LABELS } from "@/lib/module-types";
+import { LEAVE_STATUS_LABELS, leaveStatusLabel } from "@/lib/module-types";
 import { formatDateFr } from "@/lib/dates";
 import { POSITION_LABELS, TEAM_LABELS } from "@/lib/types";
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
@@ -103,7 +103,7 @@ export function LeaveHistoryPdf({ company, subtitle, rows, generatedBy }: { comp
           du: formatDateFr(r.start_date),
           au: formatDateFr(r.end_date),
           j: String(r.requested_days),
-          st: t(LEAVE_STATUS_LABELS[r.status]),
+          st: t(leaveStatusLabel(r.status, r.source)),
           motif: r.reason,
           dec: r.decided_at ? `${formatDateFr(r.decided_at.slice(0, 10))} ${r.decided_by_name}${r.decision_note ? ` — ${r.decision_note}` : ""}` : "",
         }))}

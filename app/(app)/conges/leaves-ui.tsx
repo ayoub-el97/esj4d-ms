@@ -3,11 +3,11 @@
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Ban, CalendarPlus, Check, RotateCcw, X } from "lucide-react";
-import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest, previewLeaveRequest } from "@/lib/actions/leaves";
+import { Ban, CalendarPlus, Check, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import { addLeaveAdjustment, createLeaveRequest, createRecoveryRequest, decideLeaveRequest, decideRecoveryRequest, deleteLeaveRequest, previewLeaveRequest, updateLeaveRequest } from "@/lib/actions/leaves";
 import type { LeaveSegment } from "@/lib/leave-segments";
 import { formatDateFr } from "@/lib/dates";
-import { LEAVE_STATUS_LABELS, type LeaveStatus } from "@/lib/module-types";
+import { LEAVE_STATUS_LABELS, leaveStatusLabel, type LeaveStatus } from "@/lib/module-types";
 import { todayISO } from "@/lib/dates";
 import { useT } from "@/lib/i18n/client";
 import { creditLabel, type AvailableCredit } from "@/lib/recovery-credit";
@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/native-select";
 import { ActionMessage, SubmitButton } from "@/components/form-feedback";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Option = { id: string; label: string };
 
@@ -71,14 +71,116 @@ export function LeaveRequestForm({ employees, defaultEmployee }: { employees: Op
   );
 }
 
-function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees: Option[]; defaultEmployee?: string; onSaved: () => void }) {
+/** Valeurs d'une demande existante (modification). */
+export type EditableLeave = { id: string; employee_id: string; request_date: string; start_date: string; end_date: string; requested_days: number; reason: string };
+
+/** « Modifier » : même formulaire que la création, enregistré sur la même demande. */
+export function EditLeaveRequestButton({ request, employees }: { request: EditableLeave; employees: Option[] }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Pencil /> {t("Modifier")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 text-start whitespace-normal sm:max-w-xl">
+          <DialogHeader className="border-b px-4 py-3 pe-12">
+            <DialogTitle>{t("Modifier la demande de congé")}</DialogTitle>
+            <DialogDescription>{t("La demande existante est mise à jour (aucun doublon) ; le solde et le pointage sont recalculés.")}</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{open && <LeaveRequestFields employees={employees} request={request} onSaved={() => setOpen(false)} />}</div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** « Supprimer » : confirmation avec l'employé et les dates ; demande automatique : sort du pointage à choisir. */
+export function DeleteLeaveRequestButton({ request }: { request: { id: string; name: string; start_date: string; end_date: string; status: LeaveStatus; source?: string | null } }) {
   const { t } = useT();
   const router = useRouter();
-  const [state, action] = useActionState(createLeaveRequest, null);
-  const [employee, setEmployee] = useState(defaultEmployee ?? "");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [days, setDays] = useState("");
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [fate, setFate] = useState("");
+  const [pending, start] = useTransition();
+  const fromPointage = request.source === "pointage" && request.status === "acceptee";
+  const dates = request.start_date === request.end_date ? formatDateFr(request.start_date) : t("du {from} au {to}", { from: formatDateFr(request.start_date), to: formatDateFr(request.end_date) });
+  const fates: [string, string][] = [
+    ["absent", "Corriger le pointage : Absent (le jour est rendu au solde)"],
+    ["present", "Corriger le pointage : Présent, heures à compléter (le jour est rendu au solde)"],
+    ["repos", "Corriger le pointage : Repos (le jour est rendu au solde)"],
+    ["garder", "Garder « Congé » au pointage (le jour reste déduit du solde)"],
+  ];
+  return (
+    <>
+      <Button type="button" size="sm" variant="outline" className="text-destructive" onClick={() => setOpen(true)}>
+        <Trash2 /> {t("Supprimer")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="text-start whitespace-normal">
+          <DialogHeader>
+            <DialogTitle>{t("Supprimer la demande de congé")}</DialogTitle>
+            <DialogDescription>{t("Voulez-vous vraiment supprimer cette demande de congé ? Cette action supprimera la demande sélectionnée.")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="rounded-lg border bg-muted/40 p-3">
+              <span className="font-semibold">{request.name}</span> — {dates}
+              <span className="mt-0.5 block text-xs text-muted-foreground">{t(leaveStatusLabel(request.status, request.source))}</span>
+            </p>
+            {request.status === "acceptee" && !fromPointage && <p className="text-xs text-muted-foreground">{t("Le congé sera retiré du pointage (statut d'origine restauré) et les jours seront rendus au solde.")}</p>}
+            {fromPointage && (
+              <fieldset className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
+                <legend className="px-1 text-xs font-semibold">{t("Attention : le pointage de cette date contient toujours le statut « Congé ».")}</legend>
+                {fates.map(([value, label]) => (
+                  <label key={value} className="flex items-start gap-2 text-xs">
+                    <input type="radio" name="fate" value={value} checked={fate === value} onChange={() => setFate(value)} className="mt-0.5 size-4" />
+                    <span>{t(label)}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor={`del-reason-${request.id}`}>{t("Motif (facultatif)")}</Label>
+              <Input id={`del-reason-${request.id}`} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              {t("Annuler")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending || (fromPointage && !fate)}
+              onClick={() =>
+                start(async () => {
+                  const r = await deleteLeaveRequest(request.id, reason, fromPointage ? fate : undefined);
+                  if (r.ok) {
+                    toast.success(r.message, { duration: 7000 });
+                    setOpen(false);
+                    router.refresh();
+                  } else toast.error(r.error);
+                })
+              }
+            >
+              {t("Confirmer la suppression")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function LeaveRequestFields({ employees, defaultEmployee, request, onSaved }: { employees: Option[]; defaultEmployee?: string; request?: EditableLeave; onSaved: () => void }) {
+  const { t } = useT();
+  const router = useRouter();
+  const [state, action] = useActionState(request ? updateLeaveRequest : createLeaveRequest, null);
+  const [employee, setEmployee] = useState(request?.employee_id ?? defaultEmployee ?? "");
+  const [start, setStart] = useState(request?.start_date ?? "");
+  const [end, setEnd] = useState(request?.end_date ?? "");
+  const [days, setDays] = useState(request ? String(request.requested_days) : "");
   // Aperçu : jours de repos exclus, périodes de congé, total déduit
   const [preview, setPreview] = useState<{ key: string; segments: LeaveSegment[]; restDays: string[]; total: number; restUnknown: boolean; calendarDays: number } | null>(null);
   const previewKey = employee && start && end && end >= start ? `${employee}|${start}|${end}` : "";
@@ -106,6 +208,7 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
 
   return (
         <form action={action} className="space-y-4">
+          {request && <input type="hidden" name="id" value={request.id} />}
           <ActionMessage state={state} />
           <div className="space-y-1">
             <Label htmlFor="employee_id">{t("Employé")}</Label>
@@ -120,7 +223,7 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
           </div>
           <div className="space-y-1">
             <Label htmlFor="request_date">{t("Date de la demande")}</Label>
-            <Input id="request_date" name="request_date" type="date" defaultValue={todayISO()} required />
+            <Input id="request_date" name="request_date" type="date" defaultValue={request?.request_date ?? todayISO()} required />
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
@@ -162,16 +265,27 @@ function LeaveRequestFields({ employees, defaultEmployee, onSaved }: { employees
               <Label htmlFor="requested_days">{t("Nombre de jours demandés")}</Label>
               <Input id="requested_days" name="requested_days" type="number" step="0.5" min="0.5" required value={days || (computed ? String(computed) : "")} onChange={(e) => setDays(e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="status">{t("Statut")}</Label>
-              <StatusSelect />
-            </div>
+            {!request && (
+              <div className="space-y-1">
+                <Label htmlFor="status">{t("Statut")}</Label>
+                <StatusSelect />
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="reason">{t("Commentaire (facultatif)")}</Label>
-            <Textarea id="reason" name="reason" rows={2} />
+            <Textarea id="reason" name="reason" rows={2} defaultValue={request?.reason ?? ""} />
           </div>
-          <SubmitButton className="h-11 w-full sm:h-9">{t("Enregistrer la demande")}</SubmitButton>
+          {request ? (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" className="h-11 sm:h-9" onClick={onSaved}>
+                {t("Annuler")}
+              </Button>
+              <SubmitButton className="h-11 sm:h-9">{t("Enregistrer")}</SubmitButton>
+            </div>
+          ) : (
+            <SubmitButton className="h-11 w-full sm:h-9">{t("Enregistrer la demande")}</SubmitButton>
+          )}
         </form>
   );
 }
@@ -262,10 +376,10 @@ export function RecoveryRequestForm({ employees, credits, defaultEmployee }: { e
 // ---------------------------------------------------------------------------
 // Statut et décision (aucune suppression : historique durable)
 // ---------------------------------------------------------------------------
-export function StatusBadge({ status }: { status: LeaveStatus }) {
+export function StatusBadge({ status, source }: { status: LeaveStatus; source?: string | null }) {
   const { t } = useT();
   const variant = status === "acceptee" ? "default" : status === "refusee" ? "destructive" : status === "annulee" ? "outline" : "secondary";
-  return <Badge variant={variant}>{t(LEAVE_STATUS_LABELS[status])}</Badge>;
+  return <Badge variant={variant} className="h-auto whitespace-normal">{t(leaveStatusLabel(status, source))}</Badge>;
 }
 
 export function DecisionButtons({ id, status, kind, canEdit }: { id: string; status: LeaveStatus; kind: "conge" | "recuperation"; canEdit: boolean }) {

@@ -15,7 +15,7 @@ import { DayStatusBadge } from "@/components/day-status-badge";
 import { PdfExportButton } from "@/components/pdf-export-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LinkButton } from "@/components/link-button";
-import { CalendarClock, History } from "lucide-react";
+import { History } from "lucide-react";
 import { DayNav } from "@/components/day-nav";
 import { ExcelExportButton } from "@/components/excel-export-button";
 import { LastChange } from "@/components/last-change";
@@ -46,9 +46,6 @@ export default async function SheetPage({ params, searchParams }: { params: Prom
           <DayNav value={date} />
         </Suspense>
         <DayStatusBadge workDay={workDay} />
-        <LinkButton href="/pointage/repos" variant="outline" size="sm" className="ms-auto">
-          <CalendarClock /> {t("Jours de repos et remplaçants")}
-        </LinkButton>
       </ModuleHeader>
 
       <div className="mb-3 flex flex-wrap items-center gap-3">

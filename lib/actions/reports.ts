@@ -60,28 +60,39 @@ export async function updateCleaningAgent(id: string, patch: { location?: string
   return { ok: true };
 }
 
-export async function addCleaningAgent(reportId: string, date: string, employeeId: string): Promise<ActionResult> {
+/**
+ * Ajoute n'importe quel employé actif au rapport de nettoiement d'une date (rapport créé s'il n'existe
+ * pas). Sa fiche et le pointage ne changent pas ; une seule ligne par employé et par rapport.
+ */
+export async function addCleaningAgent(reportId: string | null, date: string, employeeId: string, location = ""): Promise<ActionResult> {
   const t = await getT();
   const auth = await assertModule("rapport_journalier", "edit");
   if ("error" in auth) return { ok: false, error: t(auth.error) };
-  if (!uuid.safeParse(reportId).success || !uuid.safeParse(employeeId).success) return { ok: false, error: t("Identifiant invalide.") };
+  if ((reportId && !uuid.safeParse(reportId).success) || !uuid.safeParse(employeeId).success) return { ok: false, error: t("Identifiant invalide.") };
   const supabase = await createClient();
-  // Seuls les agents présents au Nettoiement ce jour d'après le pointage (Gardiens exclus)
-  const { nettoiement } = await getReportEligibility(date);
-  if (!nettoiement.has(employeeId)) return { ok: false, error: t("Cet agent n'est pas pointé présent au Nettoiement ce jour : corrigez d'abord le pointage.") };
-  // Agent précédemment retiré à la main : on le réintègre
-  const { data: hidden } = await supabase.from("cleaning_report_agents").select("id").eq("report_id", reportId).eq("employee_id", employeeId).eq("excluded", true).maybeSingle();
-  if (hidden) {
-    const { error } = await supabase.from("cleaning_report_agents").update({ excluded: false }).eq("id", hidden.id);
+  let id = reportId;
+  if (!id) {
+    const { data, error } = await supabase.from("cleaning_reports").upsert({ activity_date: date }, { onConflict: "activity_date" }).select("id").single();
     if (error) return { ok: false, error: t(friendlyError(error.message)) };
-    revalidatePath("/rapport-journalier/nettoiement");
-    return { ok: true, message: t("Agent ajouté au rapport (le pointage n'est pas modifié).") };
+    id = data.id as string;
   }
-  const { data: e } = await supabase.from("employees").select("order_number").eq("id", employeeId).maybeSingle();
-  const { error } = await supabase.from("cleaning_report_agents").insert({ report_id: reportId, activity_date: date, employee_id: employeeId, sort_order: e?.order_number ?? 999, manual: true });
-  if (error) return { ok: false, error: error.message.includes("duplicate") ? t("Cet agent est déjà dans le rapport.") : t(friendlyError(error.message)) };
-  revalidatePath("/rapport-journalier/nettoiement");
-  return { ok: true, message: t("Agent ajouté au rapport (le pointage n'est pas modifié).") };
+  const place = location.trim().slice(0, 200);
+  const { data: line } = await supabase.from("cleaning_report_agents").select("id, manual, excluded, location").eq("report_id", id).eq("employee_id", employeeId).maybeSingle();
+  if (line) {
+    // Déjà visible dans le rapport : pas de doublon
+    const { nettoiement } = await getReportEligibility(date);
+    if (!line.excluded && (line.manual || nettoiement.has(employeeId))) return { ok: false, error: t("Cet employé est déjà dans le rapport.") };
+    // Ligne retirée ou masquée : réintégrée (lieu, commentaire et photos conservés)
+    const { error } = await supabase.from("cleaning_report_agents").update({ excluded: false, manual: true, location: place || line.location }).eq("id", line.id);
+    if (error) return { ok: false, error: t(friendlyError(error.message)) };
+  } else {
+    const { data: e } = await supabase.from("employees").select("order_number").eq("id", employeeId).maybeSingle();
+    const { error } = await supabase.from("cleaning_report_agents").insert({ report_id: id, activity_date: date, employee_id: employeeId, sort_order: e?.order_number ?? 999, manual: true, location: place });
+    if (error) return { ok: false, error: error.message.includes("duplicate") ? t("Cet employé est déjà dans le rapport.") : t(friendlyError(error.message)) };
+  }
+  revalidatePath("/rapport-journalier", "layout");
+  revalidatePath("/pointage", "layout");
+  return { ok: true, message: t("Employé ajouté au rapport (sa fiche et le pointage ne changent pas).") };
 }
 
 export async function removeCleaningAgent(id: string): Promise<ActionResult> {

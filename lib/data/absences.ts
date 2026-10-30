@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { employeeName, getEmployees, type Employee } from "@/lib/data/employees";
 import { getPhotosFor } from "@/lib/data/photos";
-import type { AbsenceAlert, AbsenceDay, CertificateStatus, CertificateVerification, EngagementStatus } from "@/lib/absence-types";
+import { absenceEpisodes, type AbsenceAlert, type AbsenceDay, type CertificateStatus, type CertificateVerification, type EngagementStatus } from "@/lib/absence-types";
 import type { PhotoItem } from "@/lib/photo-types";
 
 export type AbsenceSummaryRow = {
@@ -90,6 +90,28 @@ export async function getEmployeeAbsences(employeeId: string, canSeeDocuments: b
     actions: actionList.map((a) => ({ ...a, photos: actionPhotos.get(a.id) ?? [] })),
     audit: (audit ?? []) as AbsenceAuditEntry[],
   };
+}
+
+/** Une absence maladie (ou un certificat) de la période, avec ses documents : à traiter depuis la liste. */
+export type CertificateRow = { employee_id: string; name: string; from: string; to: string; certificate: MedicalCertificate | null };
+
+/** Certificats de la période et absences maladie sans certificat (documents : utilisateurs autorisés). */
+export async function getCertificateRows(from?: string, to?: string): Promise<CertificateRow[]> {
+  const supabase = await createClient();
+  let q = supabase.from("medical_certificates").select("*").order("start_date", { ascending: false });
+  if (to) q = q.lte("start_date", to);
+  if (from) q = q.gte("end_date", from);
+  const [{ data: certs }, { data: days }, employees] = await Promise.all([q, supabase.rpc("absence_days", { p_from: from ?? null, p_to: to ?? null, p_employee: null }), getEmployees()]);
+  const list = (certs ?? []) as Omit<MedicalCertificate, "photos">[];
+  const photos = await getPhotosFor("medical_certificate", list.map((c) => c.id));
+  const nameOf = new Map(employees.map((e) => [e.id, employeeName(e)]));
+  const rows: CertificateRow[] = list.map((c) => ({ employee_id: c.employee_id, name: nameOf.get(c.employee_id) ?? "—", from: c.start_date, to: c.end_date, certificate: { ...c, photos: photos.get(c.id) ?? [] } }));
+  // Jours « Absent maladie » sans certificat (entrée retirée, ou migration 045 non exécutée)
+  const uncovered = ((days ?? []) as AbsenceDay[]).filter((d) => d.attendance_status === "absent_maladie" && !d.certificate_id);
+  const byEmployee = new Map<string, AbsenceDay[]>();
+  for (const d of uncovered) byEmployee.set(d.employee_id, [...(byEmployee.get(d.employee_id) ?? []), d]);
+  for (const [id, list2] of byEmployee) for (const ep of absenceEpisodes(list2)) rows.push({ employee_id: id, name: nameOf.get(id) ?? "—", from: ep.from, to: ep.to, certificate: null });
+  return rows.sort((a, b) => b.from.localeCompare(a.from) || a.name.localeCompare(b.name));
 }
 
 /** Rappels « Rappels et alertes » mis à jour d'après les absences (sans doublon). */
