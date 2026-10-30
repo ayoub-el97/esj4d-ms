@@ -2574,4 +2574,11 @@ export const ar: Messages = {
   "Décidé par :": "قرر:",
   "Jours fériés travaillés": "أيام العطل الرسمية المشتغلة",
   "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "الأيام المؤداة: أيام العمل العادية دون العطل الرسمية المشتغلة",
+  "Rapport camions du {date}": "تقرير الشاحنات ليوم {date}",
+  "Retour à l'historique": "العودة إلى السجل",
+  "Exporter PDF": "تصدير PDF",
+  "Aucun rapport camion pour cette date.": "لا يوجد تقرير شاحنات لهذا التاريخ.",
+  "{count} jour(s) — {period}": "{count} يوم/أيام — {period}",
+  "{count} camion(s)": "{count} شاحنة/شاحنات",
+  "{tonnage} t": "{tonnage} طن",
 };

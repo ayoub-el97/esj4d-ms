@@ -205,7 +205,7 @@ export function TruckReportForm({
             <div className="flex flex-wrap gap-2">
               <SubmitButton>{report ? t("Enregistrer les modifications") : t("Enregistrer")}</SubmitButton>
               <LinkButton
-                href={`/rapport-camions${report ? `?date=${report.activity_date}` : ""}`}
+                href={report ? `/rapport-camions/historique/${report.activity_date}` : "/rapport-camions"}
                 variant="outline"
                 onClick={(e) => {
                   if (unsaved.dirty && !window.confirm(t("Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?"))) e.preventDefault();

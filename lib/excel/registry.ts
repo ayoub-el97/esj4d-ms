@@ -172,7 +172,7 @@ export async function buildExcel(kind: string, params: Record<string, string>): 
           {
             name: t("Rapport camions"),
             title: [company, `${t("Rapport camions")} — ${periodLabel(t, range)}`],
-            header: [t("Date"), t("Matricule"), t("Poste"), t("Chauffeur"), t("Vidages (ticket — tonnage)"), t("Tonnage total"), t("Vidages"), t("Équipe (rippeurs)"), t("Km départ"), t("Km fin"), t("Km parcourus"), t("Carburant"), t("Observations")],
+            header: [t("Date"), t("Matricule"), t("Poste"), t("Chauffeur"), t("N Ticket"), t("Tonnage total"), t("Vidages"), t("Équipe (rippeurs)"), t("Km départ"), t("Km fin"), t("Km parcourus"), t("Carburant"), t("Observations")],
             rows: rows.map((r) => [
               formatDateFr(r.activity_date),
               r.truck?.matricule ?? "",

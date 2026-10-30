@@ -68,7 +68,7 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
       <ModuleHeader
         title={t("Ligne camion — {shift}", { shift: t(SHIFT_LABELS[report.shift] ?? "Matin") })}
         subtitle={formatDateLongFr(report.activity_date, locale)}
-        backHref={`/rapport-camions/historique?date=${report.activity_date}`}
+        backHref={`/rapport-camions/historique/${report.activity_date}`}
       >
         <DayStatusBadge workDay={workDay} />
       </ModuleHeader>
@@ -87,7 +87,7 @@ export default async function CamionReportPage({ params }: { params: Promise<{ i
             <ExcelExportButton kind="camions" params={{ date: report.activity_date, truck: report.truck_id }} />
           </>
         }
-        historyHref="/rapport-camions/historique"
+        historyHref={`/rapport-camions/historique/${report.activity_date}`}
         monthlyHref="/rapport-camions/mensuel"
       />
     </div>

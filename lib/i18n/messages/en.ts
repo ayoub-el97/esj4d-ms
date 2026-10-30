@@ -2574,4 +2574,11 @@ export const en: Messages = {
   "Décidé par :": "Decided by:",
   "Jours fériés travaillés": "Public holidays worked",
   "Jours payés : jours de travail ordinaires, hors jours fériés travaillés": "Paid days: ordinary working days, excluding public holidays worked",
+  "Rapport camions du {date}": "Truck report of {date}",
+  "Retour à l'historique": "Back to history",
+  "Exporter PDF": "Export PDF",
+  "Aucun rapport camion pour cette date.": "No truck report for this date.",
+  "{count} jour(s) — {period}": "{count} day(s) — {period}",
+  "{count} camion(s)": "{count} truck(s)",
+  "{tonnage} t": "{tonnage} t",
 };

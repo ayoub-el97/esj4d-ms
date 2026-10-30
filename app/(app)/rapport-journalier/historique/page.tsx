@@ -59,7 +59,7 @@ export default async function DailyReportsHistoryPage({ searchParams }: { search
       icon: <Truck />,
       title: t("Rapport camions"),
       text: day?.truck_lines ? t("{count} ligne(s), {tonnage} t au total.", { count: day.truck_lines, tonnage: day.tonnage.toFixed(2) }) : t("Aucune ligne camion pour cette date."),
-      href: `/rapport-camions/historique?date=${date}`,
+      href: `/rapport-camions/historique/${date}`,
       pdf: day?.truck_lines ? <PdfExportButton kind="camions" params={{ date }} /> : null,
       excel: day?.truck_lines ? <ExcelExportButton kind="camions" params={{ date }} /> : null,
     },

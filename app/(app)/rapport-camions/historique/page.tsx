@@ -1,69 +1,69 @@
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ChevronRight, Search } from "lucide-react";
 import { requireModule } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { getTrucks } from "@/lib/data/employees";
-import { getTruckReports } from "@/lib/data/reports";
-import { formatDateFr, isISODate } from "@/lib/dates";
-import { getT, pageTitle } from "@/lib/i18n/server";
+import { formatDateFr, formatDateLongFr, isISODate } from "@/lib/dates";
+import { getI18n, pageTitle } from "@/lib/i18n/server";
 import { ModuleHeader } from "@/components/module-header";
 import { PdfExportButton } from "@/components/pdf-export-button";
+import { ExcelExportButton } from "@/components/excel-export-button";
 import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/native-select";
 import { TruckTabs } from "../truck-tabs";
-import { TruckDayTable } from "../truck-day-table";
-import { ExcelExportButton } from "@/components/excel-export-button";
-import { getChangeSummary } from "@/lib/data/history";
 
 export const generateMetadata = pageTitle("Historique des rapports camions");
 
 type SP = { date?: string; from?: string; to?: string; truck?: string };
+type DayRow = { activity_date: string; trucks: number; lines: number; tonnage: number };
 
 /**
- * Historique des rapports camions : chaque rapport est un enregistrement distinct (date, camion,
- * Matin / Soir, ligne), jamais remplacé par celui d'un autre jour. Du plus récent au plus ancien.
+ * Historique des rapports camions : une ligne par date ayant un rapport, du plus récent au plus
+ * ancien. Chaque date ouvre son rapport complet (historique/[date]) et son PDF.
  */
 export default async function TruckHistoryPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const [user, t] = await Promise.all([requireModule("rapport_camions"), getT()]);
+  const [, { t, locale }] = await Promise.all([requireModule("rapport_camions"), getI18n()]);
   const sp = await searchParams;
-  const filters = { date: isISODate(sp.date) ? sp.date : undefined, from: isISODate(sp.from) ? sp.from : undefined, to: isISODate(sp.to) ? sp.to : undefined, truck: sp.truck || undefined };
-  const [rows, trucks] = await Promise.all([getTruckReports(filters, 2000), getTrucks()]);
-  const sorted = [...rows].sort((a, b) => b.activity_date.localeCompare(a.activity_date));
-  const canEdit = user.permissions.rapport_camions.can_edit;
-  const changes = await getChangeSummary("truck_daily_reports", sorted.map((r) => r.id));
-  const modified = new Set([...changes].filter(([, c]) => c.modified).map(([id]) => id));
-  const pdfParams: Record<string, string> = {};
-  for (const [k, v] of Object.entries(filters)) if (v) pdfParams[k] = v;
-  const days = new Set(sorted.map((r) => r.activity_date)).size;
-  const period = filters.date ? formatDateFr(filters.date) : filters.from || filters.to ? t("du {from} au {to}", { from: filters.from ? formatDateFr(filters.from) : "…", to: filters.to ? formatDateFr(filters.to) : "…" }) : t("toutes dates");
+  // Ancienne adresse (?date=…) : le rapport de cette date
+  if (isISODate(sp.date)) redirect(`/rapport-camions/historique/${sp.date}`);
+  const from = isISODate(sp.from) ? sp.from : undefined;
+  const to = isISODate(sp.to) ? sp.to : undefined;
+  const truck = sp.truck || undefined;
+  const supabase = await createClient();
+  const [{ data }, trucks] = await Promise.all([supabase.rpc("truck_report_dates", { p_from: from ?? null, p_to: to ?? null, p_truck: truck ?? null }), getTrucks()]);
+  const days = (data ?? []) as DayRow[];
+  const filtered = !!(from || to || truck);
+  const params: Record<string, string> = { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(truck ? { truck } : {}) };
+  const period = from || to ? t("du {from} au {to}", { from: from ? formatDateFr(from) : "…", to: to ? formatDateFr(to) : "…" }) : t("toutes dates");
 
   return (
     <div>
-      <ModuleHeader title={t("Historique des rapports camions")} subtitle={t("{count} ligne(s) sur {days} jour(s) — {period}", { count: sorted.length, days, period })}>
-        <PdfExportButton kind="camions" params={pdfParams} label="Exporter la sélection en PDF" />
-        <ExcelExportButton kind="camions" params={pdfParams} />
+      <ModuleHeader title={t("Historique des rapports camions")} subtitle={t("{count} jour(s) — {period}", { count: days.length, period })}>
+        {/* Export d'une période : seulement après une recherche (sinon, PDF de chaque date) */}
+        {filtered && days.length > 0 && (
+          <>
+            <PdfExportButton kind="camions" params={params} label="Exporter la sélection en PDF" />
+            <ExcelExportButton kind="camions" params={params} />
+          </>
+        )}
       </ModuleHeader>
       <TruckTabs active="historique" />
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t("Chaque rapport garde les valeurs saisies le jour même (tonnage, vidages, Matin / Soir, observations, photos). Ouvrez une ligne pour la consulter ou la corriger : la modification remplace la même ligne, sans doublon de tonnage ni de vidages.")}
-      </p>
-      <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-5">
-        <div className="space-y-1">
-          <Label htmlFor="date">{t("Date exacte")}</Label>
-          <Input id="date" name="date" type="date" defaultValue={sp.date} />
-        </div>
+      <form className="mb-4 grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4">
         <div className="space-y-1">
           <Label htmlFor="from">{t("Du")}</Label>
-          <Input id="from" name="from" type="date" defaultValue={sp.from} />
+          <Input id="from" name="from" type="date" defaultValue={from} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="to">{t("Au")}</Label>
-          <Input id="to" name="to" type="date" defaultValue={sp.to} />
+          <Input id="to" name="to" type="date" defaultValue={to} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="truck">{t("Matricule")}</Label>
-          <NativeSelect id="truck" name="truck" defaultValue={sp.truck ?? ""}>
+          <NativeSelect id="truck" name="truck" defaultValue={truck ?? ""}>
             <option value="">{t("Tous")}</option>
             {trucks.map((tr) => (
               <option key={tr.id} value={tr.id}>
@@ -76,12 +76,32 @@ export default async function TruckHistoryPage({ searchParams }: { searchParams:
           <Button type="submit">
             <Search /> {t("Rechercher")}
           </Button>
-          <LinkButton href="/rapport-camions/historique" variant="outline">
-            {t("Tout")}
-          </LinkButton>
+          {filtered && (
+            <LinkButton href="/rapport-camions/historique" variant="outline">
+              {t("Tout")}
+            </LinkButton>
+          )}
         </div>
       </form>
-      {sorted.length === 0 ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport camion pour ces critères.")}</p> : <TruckDayTable rows={sorted} canEdit={canEdit} t={t} modified={modified} />}
+
+      {days.length === 0 ? (
+        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">{t("Aucun rapport camion pour ces critères.")}</p>
+      ) : (
+        <ul className="divide-y rounded-xl border bg-card">
+          {days.map((d) => (
+            <li key={d.activity_date}>
+              <Link href={`/rapport-camions/historique/${d.activity_date}`} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 px-4 py-3 text-sm transition-colors hover:bg-muted">
+                <span className="w-24 font-semibold tabular-nums">{formatDateFr(d.activity_date)}</span>
+                <span className="min-w-40 text-muted-foreground first-letter:uppercase">{formatDateLongFr(d.activity_date, locale)}</span>
+                <span className="text-muted-foreground">
+                  {t("{count} camion(s)", { count: d.trucks })} · {t("{tonnage} t", { tonnage: Number(d.tonnage).toFixed(2) })}
+                </span>
+                <ChevronRight className="ms-auto size-4 text-muted-foreground rtl:rotate-180" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
