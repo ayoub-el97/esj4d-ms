@@ -3,9 +3,9 @@
 export type LeaveStatus = "en_attente" | "acceptee" | "refusee" | "annulee";
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = { en_attente: "En attente", acceptee: "Acceptée", refusee: "Refusée", annulee: "Annulée" };
 
-/** Libellé affiché d'une demande : « Approuvée automatiquement – depuis Pointage » si créée par le pointage. */
+/** Libellé affiché d'une demande : « Approuvée » si créée par le pointage (« Source : Pointage » affiché à part). */
 export function leaveStatusLabel(status: LeaveStatus, source?: string | null): string {
-  return status === "acceptee" && source === "pointage" ? "Approuvée automatiquement – depuis Pointage" : LEAVE_STATUS_LABELS[status];
+  return status === "acceptee" && source === "pointage" ? "Approuvée" : LEAVE_STATUS_LABELS[status];
 }
 
 export type WarningStatus = "ouvert" | "en_cours" | "clos";

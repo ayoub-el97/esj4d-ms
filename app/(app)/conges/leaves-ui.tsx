@@ -225,16 +225,17 @@ function LeaveRequestFields({ employees, defaultEmployee, request, onSaved }: { 
             <Label htmlFor="request_date">{t("Date de la demande")}</Label>
             <Input id="request_date" name="request_date" type="date" defaultValue={request?.request_date ?? todayISO()} required />
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <fieldset className="space-y-2 rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">{t("Période")}</legend>
             <div className="space-y-1">
-              <Label htmlFor="start_date">{t("Date de début")}</Label>
+              <Label htmlFor="start_date">{t("Du")}</Label>
               <Input id="start_date" name="start_date" type="date" required value={start} onChange={(e) => setStart(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="end_date">{t("Date de fin")}</Label>
+              <Label htmlFor="end_date">{t("Au")}</Label>
               <Input id="end_date" name="end_date" type="date" required value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
             </div>
-          </div>
+          </fieldset>
           {shown && (
             <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-xs">
               <p>

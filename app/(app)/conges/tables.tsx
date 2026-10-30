@@ -1,21 +1,36 @@
 import Link from "next/link";
 import type { LeaveRequest, RecoveryRequest } from "@/lib/data/leaves";
-import { formatDateFr, formatDateTimeFr } from "@/lib/dates";
+import { formatDateFr } from "@/lib/dates";
+import type { TFunction } from "@/lib/i18n/config";
 import { getT } from "@/lib/i18n/server";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DecisionButtons, DeleteLeaveRequestButton, EditLeaveRequestButton, StatusBadge } from "./leaves-ui";
 import { employeeName, getEmployees } from "@/lib/data/employees";
 
-function Decision({ at, by, note }: { at: string | null; by: string; note: string }) {
+/** Décision : date, puis « Acceptée par : » et le nom, l'un sous l'autre. */
+function Decision({ at, by, note, status, t }: { at: string | null; by: string; note: string; status: string; t: TFunction }) {
   if (!at) return <span className="text-muted-foreground">—</span>;
+  const label = status === "acceptee" ? t("Acceptée par :") : status === "refusee" ? t("Refusée par :") : status === "annulee" ? t("Annulée par :") : t("Décidé par :");
   return (
-    <span className="text-xs text-muted-foreground">
-      {formatDateTimeFr(at)}
-      {by && ` · ${by}`}
-      {note && <div className="italic">« {note} »</div>}
-    </span>
+    <div className="max-w-40 leading-tight whitespace-normal">
+      <div className="tabular-nums">{formatDateFr(at.slice(0, 10))}</div>
+      {by && (
+        <>
+          <div className="text-[11px] text-muted-foreground">{label}</div>
+          <div>{by}</div>
+        </>
+      )}
+      {note && (
+        <div className="line-clamp-2 text-[11px] text-muted-foreground italic" title={note}>
+          « {note} »
+        </div>
+      )}
+    </div>
   );
 }
+
+/** Tableau compact : texte 12 px, petites marges, en-têtes sur deux lignes si besoin. */
+const COMPACT = "[&_td]:px-1.5 [&_td]:py-1.5 [&_td]:align-top [&_td]:text-xs [&_th]:h-auto [&_th]:px-1.5 [&_th]:py-1 [&_th]:text-xs [&_th]:leading-tight [&_th]:whitespace-normal";
 
 export async function LeaveRequestsTable({ requests, canEdit, showEmployee = true }: { requests: LeaveRequest[]; canEdit: boolean; showEmployee?: boolean }) {
   const t = await getT();
@@ -24,16 +39,14 @@ export async function LeaveRequestsTable({ requests, canEdit, showEmployee = tru
   const employeeOptions = canEdit && requests.length ? (await getEmployees()).filter((e) => e.is_active || concerned.has(e.id)).map((e) => ({ id: e.id, label: employeeName(e) })) : [];
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <Table>
+      <Table className={COMPACT}>
         <TableHeader>
           <TableRow>
             {showEmployee && <TableHead>{t("Employé")}</TableHead>}
             <TableHead>{t("Date de la demande")}</TableHead>
-            <TableHead>{t("Du")}</TableHead>
-            <TableHead>{t("Au")}</TableHead>
+            <TableHead>{t("Période")}</TableHead>
             <TableHead className="text-end">{t("Jours demandés")}</TableHead>
             <TableHead>{t("Statut")}</TableHead>
-            <TableHead>{t("Commentaire")}</TableHead>
             <TableHead>{t("Décision")}</TableHead>
             {canEdit && <TableHead />}
           </TableRow>
@@ -41,7 +54,7 @@ export async function LeaveRequestsTable({ requests, canEdit, showEmployee = tru
         <TableBody>
           {requests.length === 0 && (
             <TableRow>
-              <TableCell colSpan={9} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 {t("Aucune demande.")}
               </TableCell>
             </TableRow>
@@ -56,9 +69,15 @@ export async function LeaveRequestsTable({ requests, canEdit, showEmployee = tru
                   <div className="text-xs text-muted-foreground">{r.matricule}</div>
                 </TableCell>
               )}
-              <TableCell>{formatDateFr(r.request_date)}</TableCell>
-              <TableCell>{formatDateFr(r.start_date)}</TableCell>
-              <TableCell>{formatDateFr(r.end_date)}</TableCell>
+              <TableCell className="tabular-nums">{formatDateFr(r.request_date)}</TableCell>
+              <TableCell className="leading-tight tabular-nums">
+                <div>
+                  <span className="text-muted-foreground">{t("Du")}</span> {formatDateFr(r.start_date)}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">{t("Au")}</span> {formatDateFr(r.end_date)}
+                </div>
+              </TableCell>
               <TableCell className="text-end">
                 {r.requested_days}
                 {!!r.rest_days_excluded && (
@@ -71,18 +90,17 @@ export async function LeaveRequestsTable({ requests, canEdit, showEmployee = tru
               <TableCell>
                 <StatusBadge status={r.status} source={r.source} />
                 {r.source === "pointage" && (
-                  <Link href={`/pointage/historique?date=${r.start_date}`} className="mt-0.5 block text-[11px] text-primary hover:underline">
+                  <Link href={`/pointage/historique?date=${r.start_date}`} className="mt-0.5 block text-[11px] text-muted-foreground hover:underline">
                     {t("Source : Pointage")}
                   </Link>
                 )}
               </TableCell>
-              <TableCell className="max-w-48 truncate">{r.reason}</TableCell>
               <TableCell>
-                <Decision at={r.decided_at} by={r.decided_by_name} note={r.decision_note} />
+                <Decision at={r.decided_at} by={r.decided_by_name} note={r.decision_note} status={r.status} t={t} />
               </TableCell>
               {canEdit && (
                 <TableCell>
-                  <div className="flex flex-wrap items-center justify-end gap-1">
+                  <div className="flex w-52 flex-wrap items-center justify-end gap-1">
                     <EditLeaveRequestButton employees={employeeOptions} request={{ id: r.id, employee_id: r.employee_id, request_date: r.request_date, start_date: r.start_date, end_date: r.end_date, requested_days: r.requested_days, reason: r.reason }} />
                     <DeleteLeaveRequestButton request={{ id: r.id, name: r.name, start_date: r.start_date, end_date: r.end_date, status: r.status, source: r.source }} />
                     <DecisionButtons id={r.id} status={r.status} kind="conge" canEdit />
@@ -142,7 +160,7 @@ export async function RecoveryRequestsTable({ requests, canEdit, showEmployee = 
               </TableCell>
               <TableCell className="max-w-48 truncate">{r.comment}</TableCell>
               <TableCell>
-                <Decision at={r.decided_at} by={r.decided_by_name} note={r.decision_note} />
+                <Decision at={r.decided_at} by={r.decided_by_name} note={r.decision_note} status={r.status} t={t} />
               </TableCell>
               {canEdit && (
                 <TableCell>

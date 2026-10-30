@@ -2567,4 +2567,9 @@ export const en: Messages = {
   "Garder « Congé » au pointage (le jour reste déduit du solde)": "Keep “Leave” in attendance (the day remains deducted)",
   "Motif (facultatif)": "Reason (optional)",
   "Confirmer la suppression": "Confirm deletion",
+  "Approuvée": "Approved",
+  "Acceptée par :": "Accepted by:",
+  "Refusée par :": "Refused by:",
+  "Annulée par :": "Cancelled by:",
+  "Décidé par :": "Decided by:",
 };

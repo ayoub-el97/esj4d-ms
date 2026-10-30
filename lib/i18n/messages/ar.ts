@@ -2567,4 +2567,9 @@ export const ar: Messages = {
   "Garder « Congé » au pointage (le jour reste déduit du solde)": "الإبقاء على « عطلة » في الحضور (يظل اليوم مخصومًا)",
   "Motif (facultatif)": "السبب (اختياري)",
   "Confirmer la suppression": "تأكيد الحذف",
+  "Approuvée": "مقبول",
+  "Acceptée par :": "قبلها:",
+  "Refusée par :": "رفضها:",
+  "Annulée par :": "ألغاها:",
+  "Décidé par :": "قرر:",
 };
