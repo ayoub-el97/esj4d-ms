@@ -40,7 +40,7 @@ export function PdfTable({ columns, rows }: { columns: Column[]; rows: (Record<s
       </View>
       {rows.map((r, idx) =>
         r._group ? (
-          <View key={idx} style={[styles.tr, styles.groupRow]} wrap={false}>
+          <View key={idx} style={[styles.tr, styles.groupRow]} wrap={false} minPresenceAhead={18}>
             <View style={[styles.td, styles.tdLast, { width: "100%" }]}>
               <Text>{r._group}</Text>
             </View>

@@ -7,17 +7,18 @@ import { ATTENDANCE_STATUS_LABELS, POSITION_LABELS, TEAM_LABELS, WEEKDAY_SHORT, 
 import { PdfDocument, PdfHeader, PdfTable, styles, type Column } from "./components";
 import { usePdf } from "./context";
 
+// A4 portrait ; la suite passe aux pages suivantes (en-têtes répétés, ligne jamais coupée).
 // Pas de colonne « Statut / motif » : un jour non travaillé est écrit dans les colonnes d'heures
 // (Repos, Congé payé, Absent…). HS = total (automatiques + manuelles).
 const COLUMNS: Column[] = [
   { key: "nb", label: "N°", width: 5, align: "center" },
-  { key: "poste", label: "Poste", width: 12 },
-  { key: "nom", label: "Nom et prénom", width: 27 },
+  { key: "poste", label: "Poste", width: 13 },
+  { key: "nom", label: "Nom et prénom", width: 24 },
   { key: "repos", label: "Repos", width: 7, align: "center" },
-  { key: "entree", label: "Heure d'entrée", width: 10, align: "center" },
-  { key: "sortie", label: "Heure de sortie", width: 10, align: "center" },
+  { key: "entree", label: "Heure d'entrée", width: 13, align: "center" },
+  { key: "sortie", label: "Heure de sortie", width: 13, align: "center" },
   { key: "hs", label: "HS", width: 6, align: "center" },
-  { key: "obs", label: "Observation", width: 23 },
+  { key: "obs", label: "Observation", width: 19 },
 ];
 
 export function AttendanceSheetPdf({
@@ -101,28 +102,30 @@ export function AttendanceSheetPdf({
   }
 
   return (
-    <PdfDocument title={`${title} — ${formatDateFr(date)}`} company={company} generatedBy={generatedBy} orientation="landscape">
+    <PdfDocument title={`${title} — ${formatDateFr(date)}`} company={company} generatedBy={generatedBy}>
       <PdfHeader company={company} title={title} />
-      <View style={styles.metaRow}>
-        <View style={styles.metaBox}>
+      <View style={[styles.metaRow, { gap: 6 }]}>
+        <View style={[styles.metaBox, { minWidth: 0 }]}>
           <Text>
             {t("Agence")} : {agency}
           </Text>
         </View>
-        <View style={styles.metaBox}>
+        <View style={[styles.metaBox, { flex: 1 }]}>
           <Text>
             {t("Chef d'équipe")} : {teamLead || "—"}
             {team === "collecte" ? ` · ${t("Superviseur")} : ${Array.from(new Set(supervisors.map((r) => r.name))).join(", ") || "—"}` : ""}
           </Text>
         </View>
-        <View style={styles.metaBox}>
+        <View style={[styles.metaBox, { minWidth: 0 }]}>
           <Text>
             {t("Date")} : {formatDateFr(date)}
           </Text>
         </View>
       </View>
-      <PdfTable columns={COLUMNS} rows={tableRows} />
-      <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "space-between" }}>
+      <View style={{ fontSize: 8.5 }}>
+        <PdfTable columns={COLUMNS} rows={tableRows} />
+      </View>
+      <View wrap={false} style={{ marginTop: 18, flexDirection: "row", justifyContent: "space-between" }}>
         <Text>{t("Signature du chef d'équipe")} : ______________________</Text>
         <Text>{t("Visa de la direction")} : ______________________</Text>
       </View>
@@ -146,21 +149,22 @@ export function MonthlyAttendancePdf({
   const { t, locale, projectStart } = usePdf();
   const columns: Column[] = [
     { key: "nb", label: "NB", width: 5, align: "center" },
-    { key: "nom", label: "Nom et prénom", width: 22 },
-    { key: "poste", label: "Poste", width: 9 },
-    { key: "trav", label: "Jours travaillés", width: 9, align: "center" },
+    { key: "nom", label: "Nom et prénom", width: 21 },
+    { key: "poste", label: "Poste", width: 10 },
+    { key: "trav", label: "Jours travaillés", width: 8, align: "center" },
     { key: "rt", label: "Repos travaillés", width: 8, align: "center" },
-    { key: "abs", label: "Absences", width: 9, align: "center" },
+    { key: "abs", label: "Absences", width: 8, align: "center" },
     { key: "mal", label: "Maladie", width: 8, align: "center" },
     { key: "conge", label: "Congés", width: 8, align: "center" },
-    { key: "ferie", label: "Fériés travaillés", width: 9, align: "center" },
+    { key: "ferie", label: "Fériés travaillés", width: 8, align: "center" },
     { key: "double", label: "Jours doublés", width: 8, align: "center" },
     { key: "hs", label: "Total HS", width: 8, align: "center" },
   ];
   const title = team ? `${t("Rapport mensuel de pointage")} — ${t(TEAM_LABELS[team])}` : t("Rapport mensuel de pointage");
   return (
-    <PdfDocument title={`${title} — ${formatWorkMonth(month, projectStart, locale)}`} company={company} generatedBy={generatedBy} orientation="landscape">
+    <PdfDocument title={`${title} — ${formatWorkMonth(month, projectStart, locale)}`} company={company} generatedBy={generatedBy}>
       <PdfHeader company={company} title={title} subtitle={formatWorkMonth(month, projectStart, locale)} />
+      <View style={{ fontSize: 7.5 }}>
       <PdfTable
         columns={columns}
         rows={rows.map((r, i) => ({
@@ -177,6 +181,7 @@ export function MonthlyAttendancePdf({
           hs: String(r.overtime_total),
         }))}
       />
+      </View>
       <Text style={[styles.small, { marginTop: 6 }]}>{t("Jours travaillés = Présent + Jour de repos travaillé. Jour doublé : jour de repos travaillé ou deux services le même jour.")}</Text>
     </PdfDocument>
   );
@@ -186,20 +191,21 @@ export function MonthlyAttendancePdf({
 export function AttendanceHistoryPdf({ company, subtitle, rows, generatedBy }: { company: string; subtitle: string; rows: { activity_date: string; team_type: string; name: string; position: string; status: string; time_in: string | null; time_out: string | null; overtime_hours: number; observation: string; updated_by_email: string }[]; generatedBy: string }) {
   const { t } = usePdf();
   return (
-    <PdfDocument title={`${t("Historique du pointage")} ${subtitle}`} company={company} generatedBy={generatedBy} orientation="landscape">
+    <PdfDocument title={`${t("Historique du pointage")} ${subtitle}`} company={company} generatedBy={generatedBy}>
       <PdfHeader company={company} title={t("Historique du pointage")} subtitle={subtitle} />
+      <View style={{ fontSize: 7 }}>
       <PdfTable
         columns={[
           { key: "d", label: "Date", width: 9 },
-          { key: "eq", label: "Équipe", width: 9 },
-          { key: "nom", label: "Nom et prénom", width: 19 },
-          { key: "poste", label: "Poste", width: 11 },
-          { key: "st", label: "Statut", width: 11 },
+          { key: "eq", label: "Équipe", width: 10 },
+          { key: "nom", label: "Nom et prénom", width: 17 },
+          { key: "poste", label: "Poste", width: 10 },
+          { key: "st", label: "Statut", width: 12 },
           { key: "in", label: "Heure d'entrée", width: 7, align: "center" },
           { key: "out", label: "Heure de sortie", width: 7, align: "center" },
           { key: "hs", label: "HS", width: 5, align: "center" },
-          { key: "obs", label: "Observation", width: 14 },
-          { key: "by", label: "Saisi par", width: 8 },
+          { key: "obs", label: "Observation", width: 13 },
+          { key: "by", label: "Saisi par", width: 10 },
         ]}
         rows={rows.map((r) => {
           const worked = WORKED_STATUSES.includes(r.status as never);
@@ -217,6 +223,7 @@ export function AttendanceHistoryPdf({ company, subtitle, rows, generatedBy }: {
           };
         })}
       />
+      </View>
       <Text style={[styles.small, { marginTop: 4 }]}>{t("{count} ligne(s). (+1) : sortie le lendemain.", { count: rows.length })}</Text>
     </PdfDocument>
   );
